@@ -1,6 +1,5 @@
 #![feature(proc_macro)]
 extern crate proc_macro;
-#[macro_use] 
 extern crate proc_macro2;
 extern crate syn;
 #[macro_use]
@@ -20,16 +19,15 @@ struct AttrsResult {
 fn parse_attr_tag(attrs:&Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsResult {
     let mut field_from_version=0;
     let mut field_to_version=std::u32::MAX;
-    let mut default_trait = None;
+    let default_trait = None;
     let mut default_val = None;
-    let span = proc_macro2::Span::call_site();
     for attr in attrs.iter() {
         if let Some(ref meta) = attr.interpret_meta() {
             match meta {
-                &syn::Meta::Word(ref x) => {
+                &syn::Meta::Word(ref _x) => {
                     panic!("Unexpected savegame attribute, word.");
                 },
-                &syn::Meta::List(ref x) => {
+                &syn::Meta::List(ref _x) => {
                     panic!("Unexpected savegame attribute, list.");
                 },
                 &syn::Meta::NameValue(ref x) => {
@@ -60,7 +58,7 @@ fn parse_attr_tag(attrs:&Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsRe
                         match &x.lit {
                             &syn::Lit::Str(ref litstr) => {
                                 //println!("Literal value: {:?}",litstr.value());
-                                let output:Vec<String>=litstr.value().split("..").map(|x|x.to_string()).collect();
+                                let output:Vec<String> = litstr.value().split("..").map(|x|x.to_string()).collect();
                                 if output.len()!=2 {
                                     panic!("Versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the versions-attribute)");
                                 }
@@ -147,7 +145,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                         output.push(quote!(#variant_name_spanned{#(#fields_names,)*} => { serializer.write_u8(#var_idx); #(#fields_serialized)* } ) );
                     },
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|
+                        let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,_x)|
                             {
                                 let fieldname=syn::Ident::from("x".to_string()+&idx.to_string());
                                 quote! { ref #fieldname }
@@ -160,11 +158,12 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                     &syn::Fields::Unit => {
                         output.push(quote!( #variant_name_spanned => { serializer.write_u8(#var_idx) } ) );
                     },
-        			_ => panic!("Unnamed fields not supported")
         		}
         	}
         	quote! {
 			    	impl #impl_generics #serialize for #name #ty_generics #where_clause {
+
+                        #[allow(unused_comparisons)]                         
 				    	fn serialize(&self, serializer: &mut #serializer) {
 			            	//println!("Serializer running on {} : {:?}", stringify!(#name), self);
 			            	match self {
@@ -183,22 +182,30 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                         
                         {
                             let verinfo=parse_attr_tag(&field.attrs, &field.ty);
-                            let (field_from_version,field_to_version,default_trait,default_val) = 
-                                (verinfo.version_from,verinfo.version_to,verinfo.default_trait,verinfo.default_val);
+                            let (field_from_version,field_to_version) = 
+                                (verinfo.version_from,verinfo.version_to);
                                 
                             let id=field.ident.unwrap();
-                            output.push(quote!(
-                                if server >= #field_from_version && server <= #field_to_version {
+                            if field_from_version==0 && field_to_version==std::u32::MAX {
+                                output.push(quote!(
                                     self.#id.serialize(serializer);
-                                }                            ));
+                                    ));
+    
+                            } else {
+                                output.push(quote!(
+                                    if serializer.version >= #field_from_version && serializer.version <= #field_to_version {
+                                        self.#id.serialize(serializer);
+                                    }));
+                            }
                         }
 
         			}
         			quote! {
 				    	impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                            #[allow(unused_comparisons)]                         
 					    	fn serialize(&self, serializer: &mut #serializer) {
 				            	//println!("Serializer running on {}", stringify!(#name));
-                                let server=serializer.version;
+                                
 				            	#(#output)*
 					    	}
 				        }
@@ -275,11 +282,11 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                     &syn::Fields::Unit => {
                         output.push(quote!( #var_idx => #variant_name_spanned ) );
                     },
-                    _ => panic!("Unnamed fields not supported")
                 }
             }
             quote! {
                 impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                    #[allow(unused_comparisons)]                         
                     fn deserialize(deserializer: &mut #deserializer) -> Self {
                         //println!("Deserializer running on {}", stringify!(#name));
                         match deserializer.read_u8() {
@@ -296,9 +303,22 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         			for ref field in &namedfields.named {
 ;        				let id = field.ident.unwrap();
     					let field_type = &field.ty;
+                        /*
+                        let mut tokens = quote::Tokens::new();
+                        field_type.to_tokens(&mut tokens);
+                        let mut field_type_fixedup=quote::Tokens::new();
+                        let mut first_angle=true;
+                        for tok in tokens.into_iter() {
+                            if first_angle && tok.to_string()=="<" {
+                                first_angle=false;
+                                field_type_fixedup.append_all(quote!{::});
+                            }
+                            field_type_fixedup.append(tok);
+                        }
+                        */
     					let id_spanned=quote_spanned! { span => #id};
     					let local_deserializer = quote_spanned! { defspan => local_deserializer};
-                                
+
 
                         let verinfo=parse_attr_tag(&field.attrs, &field.ty);
                         let (field_from_version,field_to_version,default_trait,default_val) = 
@@ -314,16 +334,15 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
 
     					let src = 
-
                             if field_from_version==0 && field_to_version==std::u32::MAX {
                                 quote_spanned! { span => 
-                                        #field_type::deserialize(#local_deserializer)
+                                        <#field_type>::deserialize(#local_deserializer)
                                     }
                             } else {
 
                                 quote_spanned! { span => 
                                 if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                                    #field_type::deserialize(#local_deserializer)
+                                    <#field_type>::deserialize(#local_deserializer)
                                 } else { 
                                     #effective_default_val                                
                                 }}
@@ -339,6 +358,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                     quote! {
 
                             impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                            #[allow(unused_comparisons)]                         
                             fn deserialize(deserializer: &mut #deserializer) -> Self {
                                 let local_deserializer = deserializer;
                                 //println!("Deserializer running on {}", stringify!(#name));

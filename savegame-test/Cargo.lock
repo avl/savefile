@@ -1,4 +1,9 @@
 [[package]]
+name = "byteorder"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "proc-macro2"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15,12 +20,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "savegame"
+version = "0.0.1"
+dependencies = [
+ "byteorder 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "savegame-derive 0.0.1",
+]
+
+[[package]]
 name = "savegame-derive"
 version = "0.0.1"
 dependencies = [
  "proc-macro2 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 0.12.13 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "savegame-test"
+version = "0.0.1"
+dependencies = [
+ "savegame 0.0.1",
+ "savegame-derive 0.0.1",
 ]
 
 [[package]]
@@ -39,6 +60,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum byteorder 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "652805b7e73fada9d85e9a6682a4abd490cb52d96aeecc12e33a0de34dfd0d23"
 "checksum proc-macro2 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "cd07deb3c6d1d9ff827999c7f9b04cdfd66b1b17ae508e14fe47b620f2282ae0"
 "checksum quote 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1eca14c727ad12702eb4b6bfb5a232287dcf8385cb8ca83a3eeaf6519c44c408"
 "checksum syn 0.12.13 (registry+https://github.com/rust-lang/crates.io-index)" = "517f6da31bc53bf080b9a77b29fbd0ff8da2f5a2ebd24c73c2238274a94ac7cb"
