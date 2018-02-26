@@ -1,1 +1,1 @@
-pub use ::savegame::{Serialize,Deserialize,Serializer,Deserializer,Removed};
+pub use savegame::{Deserialize, Deserializer, Removed, Serialize, Serializer};
