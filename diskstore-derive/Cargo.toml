@@ -1,0 +1,12 @@
+[package]
+name = "diskstore-derive"
+version = "0.1.0"
+authors = ["Anders Musikka <anders@andersmusikka.se>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "0.4"
+syn = "0.12"
+proc-macro2 = { version = "0.2", features = ["nightly"] }
