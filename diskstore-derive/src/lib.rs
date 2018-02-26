@@ -186,13 +186,13 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         	match &struc.fields {
         		&syn::Fields::Named(ref namedfields) => {
         			for ref field in &namedfields.named {
-        				if let Some(ref id) = field.ident {
-        					let field_type = &field.ty;
-        					let id_spanned=quote_spanned! { span => #id};
-        					let local_deserializer = quote_spanned! { defspan => local_deserializer};
-        					let src = quote_spanned! { span => #field_type::deserialize(#local_deserializer)};
-        					output.push(quote!(#id_spanned : #src));
-        				}
+;        				let id = field.ident.unwrap();
+    					let field_type = &field.ty;
+    					let id_spanned=quote_spanned! { span => #id};
+    					let local_deserializer = quote_spanned! { defspan => local_deserializer};
+    					let src = quote_spanned! { span => #field_type::deserialize(#local_deserializer)};
+    					output.push(quote!(#id_spanned : #src));
+        				
 
         			};
                     quote! {
