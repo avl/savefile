@@ -22,7 +22,7 @@ pub unsafe trait ReprC: Copy {}
 
 impl<'a> Serializer<'a> {
     pub fn write_u8(&mut self, v: u8) {
-        self.writer.write(&[v]).unwrap();
+        self.writer.write_all(&[v]).unwrap();
     }
     pub fn write_i8(&mut self, v: i8) {
         self.writer.write_i8(v).unwrap();
@@ -64,11 +64,11 @@ impl<'a> Serializer<'a> {
         self.writer.write_all(asb).unwrap();
     }
 
-    pub fn new<'b>(writer: &'b mut Write, version: u32) -> Serializer<'b> {
+    pub fn new(writer: &mut Write, version: u32) -> Serializer {
         writer.write_u32::<LittleEndian>(version).unwrap();
         Serializer {
-            writer: writer,
-            version: version,
+            writer,
+            version,
         }
     }
 }
@@ -114,7 +114,7 @@ impl<'a> Deserializer<'a> {
         self.reader.read_exact(&mut v).unwrap();
         String::from_utf8(v).unwrap()
     }
-    pub fn new<'b>(reader: &'b mut Read, version: u32) -> Deserializer<'b> {
+    pub fn new(reader: &mut Read, version: u32) -> Deserializer {
         let file_ver = reader.read_u32::<LittleEndian>().unwrap();
         if file_ver > version {
             panic!(
@@ -123,7 +123,7 @@ impl<'a> Deserializer<'a> {
             );
         }
         Deserializer {
-            reader: reader,
+            reader,
             file_version: file_ver,
             memory_version: version,
         }
@@ -150,7 +150,7 @@ impl Deserialize for String {
     }
 }
 
-impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V> {
+impl<K: Serialize + Eq + Hash, V: Serialize, S : ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer) {
         serializer.write_usize(self.len());
         for (k, v) in self.iter() {
