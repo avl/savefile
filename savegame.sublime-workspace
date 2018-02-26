@@ -4,6 +4,26 @@
 		"selected_items":
 		[
 			[
+				"default",
+				"default_val_str  Let (lib.rs) : let default_val_str:String=match &x.lit {            "
+			],
+			[
+				"version",
+				"version_number1"
+			],
+			[
+				"def",
+				"default_val   StructField (lib.rs) : Option<syn::Lit>"
+			],
+			[
+				"vers",
+				"version_to   StructField (lib.rs) : u32                  "
+			],
+			[
+				"Bench",
+				"BenchStruct    Struct (lib.rs) : pub struct BenchStruct               "
+			],
+			[
 				"Tets",
 				"TestEnum     Enum (lib.rs) : enum TestEnum {   "
 			],
@@ -494,43 +514,11 @@
 			[
 				"agent",
 				"agent_type"
-			],
-			[
-				"pos",
-				"position"
-			],
-			[
-				"Support",
-				"SupportSource"
-			],
-			[
-				"sup",
-				"support"
-			],
-			[
-				"UnitBu",
-				"UnitButtonId"
 			]
 		]
 	},
 	"buffers":
 	[
-		{
-			"file": "Cargo.toml",
-			"settings":
-			{
-				"buffer_size": 233,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/lib.rs",
-			"settings":
-			{
-				"buffer_size": 3099,
-				"line_ending": "Unix"
-			}
-		}
 	],
 	"build_system": "Packages/Rust Enhanced/RustEnhanced.sublime-build",
 	"build_system_choices":
@@ -718,8 +706,14 @@
 		"side_bar_visible": false,
 		"status_bar_visible": false
 	},
+	"expanded_folders":
+	[
+		"/home/anders/savegame"
+	],
 	"file_history":
 	[
+		"/home/anders/savegame/src/lib.rs",
+		"/home/anders/diskstore/Cargo.toml",
 		"/home/anders/octosim/diskstore/src/lib.rs",
 		"/home/anders/octosim/diskstore/Cargo.toml",
 		"/home/anders/octosim/diskstore/diskstore-derive/src/lib.rs",
@@ -832,6 +826,43 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"reprc",
+			"default",
+			"default_val",
+			"parse(",
+			"default_val",
+			"parse_attr_tag",
+			".to_string",
+			"default_val",
+			"smallstr",
+			"default=",
+			"deafult=",
+			"internal error",
+			"deserializer::new",
+			"version",
+			"impl Deserializer",
+			"struct Removed",
+			"struct Remove",
+			"println",
+			"parse_attr",
+			"test_struct",
+			"Default",
+			"::deserialize(",
+			"Serializer::new",
+			"parse",
+			"versions",
+			"attr name",
+			"version",
+			"deserialize8",
+			"struct Seriali",
+			"ReprC",
+			"serialize",
+			"copy",
+			"test_vec",
+			"assert_roundtrip",
+			"test_vec",
+			"for ve",
+			"hashmap",
 			"println",
 			"println§",
 			"println",
@@ -922,44 +953,7 @@
 			"asdf",
 			"get_Flow_at",
 			"vel=",
-			"advect_Comp",
-			"advec",
-			"advect(",
-			"advect_",
-			"actual water",
-			"Altitude:",
-			"max_water",
-			"convec",
-			"Cell {",
-			"sealevel",
-			"pressure",
-			"== 1",
-			"==1",
-			"asdf",
-			"pos:",
-			"condensation",
-			"pressure",
-			"square",
-			"advec",
-			"precipitation_vel",
-			"key",
-			"\"Flow",
-			"Flow",
-			"windowevent",
-			"glutin",
-			"glium",
-			"event",
-			"sleep",
-			"dt",
-			"advect",
-			"dt=",
-			"advec",
-			"dt=",
-			"vapor_conte",
-			"moisture",
-			"advec",
-			"dt",
-			"advect"
+			"advect_Comp"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -978,65 +972,8 @@
 	"groups":
 	[
 		{
-			"selected": 1,
 			"sheets":
 			[
-				{
-					"buffer": 0,
-					"file": "Cargo.toml",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 233,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								233,
-								233
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Text/Plain text.tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"type": "text"
-				},
-				{
-					"buffer": 1,
-					"file": "src/lib.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 3099,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								44,
-								44
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Rust/Rust.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 0,
-					"type": "text"
-				}
 			]
 		}
 	],
@@ -1073,14 +1010,14 @@
 	"menu_visible": true,
 	"output.exec":
 	{
-		"height": 445.0
+		"height": 178.0
 	},
 	"output.find_results":
 	{
 		"height": 0.0
 	},
 	"pinned_build_system": "Packages/Rust Enhanced/RustEnhanced.sublime-build",
-	"project": "diskstore.sublime-project",
+	"project": "savegame.sublime-project",
 	"replace":
 	{
 		"height": 64.0

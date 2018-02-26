@@ -1,0 +1,9 @@
+[package]
+name = "savegame"
+version = "0.0.1"
+authors = ["Anders Musikka <anders@andersmusikka.se>"]
+
+[dependencies]
+savegame-derive = { path = "../savegame-derive" }
+byteorder="*"
+

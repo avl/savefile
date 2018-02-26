@@ -1,6 +1,6 @@
 [package]
-name = "diskstore-derive"
-version = "0.1.0"
+name = "savegame-derive"
+version = "0.0.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 [lib]
