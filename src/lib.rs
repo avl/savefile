@@ -1,4 +1,8 @@
+#![recursion_limit="256"]
 #![feature(test)]
+#![feature(specialization)]
+#![feature(attr_literals)]
+
 extern crate byteorder;
 use std::io::Write;
 use std::io::Read;
@@ -14,11 +18,16 @@ extern crate diskstore_derive;
 
 pub struct Serializer<'a> {
 	writer: &'a mut Write,
+	pub version: u32,
 }
 
 pub struct Deserializer<'a> {
 	reader: &'a mut Read,
+	pub file_version: u32,
+	pub memory_version: u32,
 }
+
+pub unsafe trait ReprC : Copy {}
 
 impl<'a> Serializer<'a> {
 	pub fn write_u8(&mut self, v : u8) {
@@ -64,9 +73,11 @@ impl<'a> Serializer<'a> {
 		self.writer.write_all(asb).unwrap();
 	}
 	
-	pub fn new<'b>(writer:&'b mut Write) -> Serializer<'b> {
+	pub fn new<'b>(writer:&'b mut Write,version:u32) -> Serializer<'b> {
+		writer.write_u32::<LittleEndian>(version);
 		Serializer {
-			writer: writer
+			writer: writer,
+			version:version
 		}
 	}
 }
@@ -112,9 +123,15 @@ impl<'a> Deserializer<'a> {
 		self.reader.read_exact(&mut v).unwrap();
 		String::from_utf8(v).unwrap()
 	}
-	pub fn new<'b>(reader:&'b mut Read) -> Deserializer<'b> {
+	pub fn new<'b>(reader:&'b mut Read, version:u32) -> Deserializer<'b> {
+		let file_ver=reader.read_u32::<LittleEndian>().unwrap();
+		if file_ver>version {
+			panic!("File has later version ({}) than structs in memory ({}).",file_ver,version);
+		}
 		Deserializer {
-			reader : reader
+			reader : reader,
+			file_version : file_ver,
+			memory_version : version,
 		}
 	}
 }
@@ -162,17 +179,32 @@ impl<K:Deserialize+Eq+Hash,V:Deserialize> Deserialize for HashMap<K,V> {
     }	
 }
 
-/*
-impl<T:Serialize+!Copy> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut Serializer) {
-    	serializer.write_usize(self.len());
+pub struct Removed<T> {		
+	phantom : std::marker::PhantomData<T>
+}
+
+impl<T> Removed<T> {
+	pub fn new() -> Removed<T> {
+		Removed {
+			phantom : std::marker::PhantomData
+
+		}
+
+	}
+}
+
+impl<T:Serialize> Serialize for Vec<T> {
+    default fn serialize(&self, serializer: &mut Serializer) {
+    	let l=self.len();
+    	serializer.write_usize(l);
     	for item in self.iter() {
     		item.serialize(serializer)
     	}
     }	
 }
-*/
-impl<T:Serialize+Copy> Serialize for Vec<T> {
+
+
+impl<T:Serialize+ReprC> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer) {
     	let l=self.len();
     	serializer.write_usize(l);
@@ -182,9 +214,6 @@ impl<T:Serialize+Copy> Serialize for Vec<T> {
     				self.as_ptr() as *const u8,
     				std::mem::size_of::<T>()*l));
     	}
-    	/*for item in self.iter() {
-    		item.serialize(serializer)
-    	}*/
     }	
 }
 
@@ -313,19 +342,6 @@ struct NonCopy {
 	ncfield:u8
 }
 
-/*
-#[derive(Debug, Serialize, Deserialize, PartialEq )]
-struct SubTest {
-	field:u8,
-	en:TestEnum
-}
-#[derive(Debug, Serialize, Deserialize, PartialEq )]
-struct Test {
-	field : u8,
-	sub:SubTest
-}
-
-*/
 
 use std::io::{Cursor, Seek, SeekFrom};
 use std::io::BufWriter;
@@ -335,14 +351,14 @@ pub fn assert_roundtrip<E:Serialize+Deserialize+Debug+PartialEq>(sample:E) {
     {
     	let mut bufw=BufWriter::new(&mut f);
     	{
-	        let mut serializer = Serializer::new(&mut bufw);
+	        let mut serializer = Serializer::new(&mut bufw,0);
 	        sample.serialize(&mut serializer);     
     	}
     	bufw.flush();
         println!("Serialized data: {:?}",bufw);
     }
 	f.set_position(0);
-    let mut deserializer = Deserializer::new(&mut f);
+    let mut deserializer = Deserializer::new(&mut f,0);
     let roundtrip_result=E::deserialize(&mut deserializer);		
     assert_eq!(sample,roundtrip_result);
     println!("Roundtrip result: {:?}",roundtrip_result);
@@ -398,7 +414,7 @@ pub struct TestStruct {
 }
 
 #[test]
-pub fn test_struct() {
+pub fn test_struct_reg() {
 
 	assert_roundtrip(TestStruct {
 		x1: 1,
@@ -424,6 +440,15 @@ pub fn test_vec() {
 
 }
 
+#[test]
+pub fn test_vec_of_string() {
+	let mut v=Vec::new();
+	v.push("hejsan".to_string());
+
+	assert_roundtrip(v);
+
+}
+
 
 #[test]
 pub fn test_hashmap() {
@@ -443,24 +468,26 @@ pub fn test_string() {
 }
 
 
-use test::{Bencher, black_box};
 
 #[derive(Clone,Copy,Debug, Serialize, Deserialize, PartialEq )]
-pub struct BenchStruct {
+pub struct BenchStruct{
 	x:usize,
 	y:usize,
 	z:u8
 }
+//unsafe impl ReprC for BenchStruct {} 
+
+use test::{Bencher, black_box};
 
 #[bench]
 fn bench_serialize(b: &mut Bencher) {
 
     let mut f = Cursor::new(Vec::with_capacity(100));
 	let mut bufw=BufWriter::new(&mut f);
-	let mut serializer = Serializer::new(&mut bufw);
+	let mut serializer = Serializer::new(&mut bufw,0);
 
     let mut test=Vec::new();
-    for i in 0..1000000 {
+    for i in 0..1000 {
     	test.push(BenchStruct {
     		x:i,
     		y:i,
@@ -472,17 +499,91 @@ fn bench_serialize(b: &mut Bencher) {
     });
 }
 
-
-
-/*
-#[cfg(test)]
-mod tests {
-	use super::run_test1;
-    #[test]
-    fn diskstore_test1() {
-    	run_test1();
-
-        
-    }
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
+struct SmallStruct {
+	x1: u32,
+	x2: i32
 }
-*/
+
+#[test]
+pub fn test_small_struct() {
+	assert_roundtrip(SmallStruct {x1:123,x2:321});
+}
+
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
+struct SmallStruct2 {
+	x1: u32,
+	x2: i32,
+	#[default_val="100"]
+	#[versions="1..1000"]
+	x3: String,
+	#[default_val="123"]
+	#[versions="1.."]
+	x4: u64,
+}
+
+
+
+
+
+pub fn assert_roundtrip_to_new_version<E1:Serialize+Deserialize+Debug+PartialEq,E2:Serialize+Deserialize+Debug+PartialEq>(
+	sample_v1:E1,
+	version_number1:u32,
+	expected_v2:E2,
+	version_number2:u32) {
+    let mut f = Cursor::new(Vec::new());
+    {
+    	let mut bufw=BufWriter::new(&mut f);
+    	{
+	        let mut serializer = Serializer::new(&mut bufw, version_number1);
+	        sample_v1.serialize(&mut serializer);     
+    	}
+    	bufw.flush();
+        println!("Serialized data: {:?}",bufw);
+    }
+	f.set_position(0);
+    let mut deserializer = Deserializer::new(&mut f, version_number2);
+    let roundtrip_result=E2::deserialize(&mut deserializer);		
+    println!("Roundtrip result: {:?}",roundtrip_result);
+    assert_eq!(expected_v2,roundtrip_result);
+}
+
+
+#[test]
+pub fn test_small_struct_upgrade() {
+	assert_roundtrip_to_new_version(
+		SmallStruct {x1:123,x2:321},
+		0,
+		SmallStruct2 {x1:123, x2:321, x3:"100".to_string(),x4:123},
+		1,
+		);
+}
+
+
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
+struct SmallStructRem1 {
+	x1: u32,
+	x2: i32,
+	x3: String,
+}
+
+#[derive(Debug,PartialEq,Serialize,Deserialize)]
+struct SmallStructRem2 {
+	#[versions="..0"]	
+	x1: Removed<u32>,
+	x2: i32,
+	x3: String,
+}
+
+#[test]
+pub fn test_small_struct_remove() {
+	assert_roundtrip_to_new_version(
+		SmallStructRem1 {x1:123,x2:321,x3:"hello".to_string()},
+		0,
+		SmallStructRem2 {x1:Removed::new(), x2:321, x3:"100".to_string(),x4:123},
+		1,
+		);
+}
+
+
+

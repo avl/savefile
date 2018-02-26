@@ -1,0 +1,1133 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"Tets",
+				"TestEnum     Enum (lib.rs) : enum TestEnum {   "
+			],
+			[
+				"cur",
+				"curspan"
+			],
+			[
+				"water",
+				"water_vapor_content"
+			],
+			[
+				"inspe",
+				"inspect_level Let (meteo3.rs) : let mut inspect_level=0\\                                                              "
+			],
+			[
+				"all_",
+				"all_empty                    Let (meteo3.rs) : let mut all_empty=true\\                                                                 "
+			],
+			[
+				"CL",
+				"CLOUD_DENSITY_LIMIT Const (meteo3.rs) : const CLOUD_DENSITY_LIMIT:f32=0.01\\                   "
+			],
+			[
+				"prec",
+				"precipitation"
+			],
+			[
+				"air",
+				"air_temperature"
+			],
+			[
+				"GRID_",
+				"GRID_CELL_SIZE_M                       Const (meteo3.rs) : const GRID_CELL_SIZE_M:f32=1000.0\\             "
+			],
+			[
+				"wat",
+				"water_vapor_content"
+			],
+			[
+				"advect_",
+				"advect_vertical_component! Macro (meteo3.rs) : macro_rules! advect_vertical_component {                                                "
+			],
+			[
+				"precip",
+				"precipitation"
+			],
+			[
+				"LEVEL",
+				"LEVEL_SPACING     Const (meteo3.rs) : const LEVEL_SPACING:f32=500.0\\                                                  "
+			],
+			[
+				"advect",
+				"advect_component_impl"
+			],
+			[
+				"GRIDS",
+				"GRID_SIZE_X                            Const (meteo3.rs) : const GRID_SIZE_X:i32=10\\                      "
+			],
+			[
+				"particle",
+				"particle_identity For (meteo2.rs) : for (particle_identity,particle) in self.particles.iter_mut().enumerate()"
+			],
+			[
+				"get_cel",
+				"get_cell_idx Function (meteo2.rs) : fn get_cell_idx(&self,x:f64,z:f64) -> usize"
+			],
+			[
+				"total_",
+				"total_mass_temperature_product Let (meteo2.rs) : let mut total_mass_temperature_product:f64=0.0\\                                                                                                 "
+			],
+			[
+				"total_mas",
+				"total_mass_temperature_product"
+			],
+			[
+				"last",
+				"last_acceleration_mass_product"
+			],
+			[
+				"last_",
+				"last_acceleration"
+			],
+			[
+				"last_ac",
+				"last_acceleration_mass_product"
+			],
+			[
+				"acc",
+				"acceleration_y      Let (meteo.rs) : let acceleration_y=f_south/(0.5*(cell.mass+south_buddy_mass))\\                          "
+			],
+			[
+				"at",
+				"at_mut                           Function (meteo.rs) : fn at_mut(&mut self,x:usize,y:usize,z:usize) -> &mut AtmoCell                                                        "
+			],
+			[
+				"acce",
+				"acceleration_y Let (meteo.rs) : let acceleration_y=f_south/(0.5*(cell.mass+south_buddy_mass))\\"
+			],
+			[
+				"west_",
+				"west_neighbor_and_cell Function (meteo.rs) : fn west_neighbor_and_cell(&mut self,x:usize,y:usize,z:usize) -> (&mut AtmoCell,&mut AtmoCell)"
+			],
+			[
+				"get_tile",
+				"get_def_tile"
+			],
+			[
+				"get_",
+				"get_def_tile"
+			],
+			[
+				"have_",
+				"have_low_neighbor  Let (lib.rs) : let mut have_low_neighbor\\                                            "
+			],
+			[
+				"he",
+				"height"
+			],
+			[
+				"seen_age",
+				"seen_agents"
+			],
+			[
+				"seen_",
+				"seen_agent_idx"
+			],
+			[
+				"Relat",
+				"RelativeScreenRect Struct (geometry.rs) : pub struct RelativeScreenRect"
+			],
+			[
+				"Global",
+				"GlobalUiVec2     Struct (geometry.rs) : pub struct GlobalUiVec2    "
+			],
+			[
+				"Rela",
+				"RelativeScreenRect Struct (geometry.rs) : pub struct RelativeScreenRect"
+			],
+			[
+				"anim",
+				"animation_state"
+			],
+			[
+				"cur_vehi",
+				"cur_vehicle_model  For (generic_toolkit.rs) : for cur_vehicle_model in cur_vehicle_models.iter()                                          "
+			],
+			[
+				"rotation",
+				"rotation_speed"
+			],
+			[
+				"cur_",
+				"cur_vehicle_model  For (generic_toolkit.rs) : for cur_vehicle_model in cur_vehicle_models.iter()                                          "
+			],
+			[
+				"mat",
+				"transforms         StructField (vehicle_model.rs) : Vec<self::nalgebra::Matrix4<f32>>                       "
+			],
+			[
+				"tu",
+				"turbine_blades    StructField (vehicle_model.rs) : u8                                                                                                 "
+			],
+			[
+				"vehicle_ver",
+				"vehicle_vertex_buffer"
+			],
+			[
+				"turbin",
+				"turbine_blades StructField (vehicle_model.rs) : u8"
+			],
+			[
+				"compre",
+				"compressor_blades StructField (vehicle_model.rs) : u8"
+			],
+			[
+				"Vehile",
+				"VehicleModelProperties Enum (vehicle_model.rs) : pub enum VehicleModelProperties  "
+			],
+			[
+				"Vehicl",
+				"VehicleModel"
+			],
+			[
+				"JEtE",
+				"JetEngineViewModel"
+			],
+			[
+				"super",
+				"supersonic_intake_factor"
+			],
+			[
+				"by",
+				"bypass_ratio"
+			],
+			[
+				"Veti",
+				"VerticalStrategy"
+			],
+			[
+				"JetEn",
+				"JetEngineMaterial"
+			],
+			[
+				"Text",
+				"TextBoxReadonlyness Enum (textbox.rs) : pub enum TextBoxReadonlyness"
+			],
+			[
+				"Vertical",
+				"VerticalStrategy"
+			],
+			[
+				"toolkit",
+				"toolkit_helpers"
+			],
+			[
+				"sub",
+				"Sub"
+			],
+			[
+				"maybe",
+				"maybe_control_points"
+			],
+			[
+				"Triangles",
+				"TrianglesList          EnumVariant (mod.rs) : TrianglesList,         "
+			],
+			[
+				"Alig",
+				"VerticalAlignment"
+			],
+			[
+				"allo",
+				"allowed_vertical_space FnArg (graphhelpers.rs) : allowed_vertical_space                              "
+			],
+			[
+				"Size",
+				"SizeUiVec2         Struct (generic_toolkit.rs) : pub struct SizeUiVec2                                 "
+			],
+			[
+				"Siez",
+				"SizeUiVec2"
+			],
+			[
+				"bottom",
+				"bottom_right"
+			],
+			[
+				"Rel",
+				"RelativeUiVec2     Struct (generic_toolkit.rs) : pub struct RelativeUiVec2    "
+			],
+			[
+				"horiz",
+				"horizontal_alignment"
+			],
+			[
+				"ver",
+				"vertical_alignment"
+			],
+			[
+				"Globa",
+				"GlobalUiVec2      Struct (generic_toolkit.rs) : pub struct GlobalUiVec2     "
+			],
+			[
+				"Aircraft",
+				"AircraftViewModel Struct (aircraft_editor.rs) : pub struct AircraftViewModel"
+			],
+			[
+				"Sip",
+				"SimpleTextLayout"
+			],
+			[
+				"foc",
+				"focus"
+			],
+			[
+				"Mouse",
+				"MouseEventType   Enum (generic_toolkit.rs) : enum MouseEventType  "
+			],
+			[
+				"Rhy",
+				"RhythmIdeaBeat Struct (newmelody.rs) : pub struct RhythmIdeaBeat        "
+			],
+			[
+				"beat",
+				"beat_length"
+			],
+			[
+				"rhy",
+				"rhythm_index Let (lib.rs) : let mut rhythm_index=0\\"
+			],
+			[
+				"rh",
+				"rhythm_index                 Let (lib.rs) : let mut rhythm_index=0\\                                                                                 "
+			],
+			[
+				"ex",
+				"expression_freqs"
+			],
+			[
+				"cutoff",
+				"cutoff_freq"
+			],
+			[
+				"Filter",
+				"FilterType"
+			],
+			[
+				"in",
+				"window   StructField (lib.rs) : Vec<f32>                                     "
+			],
+			[
+				"Rhyth",
+				"RhythmBar        Struct (lib.rs) : struct RhythmBar             "
+			],
+			[
+				"Rhythm",
+				"RhythmicBeat     Struct (lib.rs) : struct RhythmicBeat          "
+			],
+			[
+				"rela",
+				"RelativeNoteTime"
+			],
+			[
+				"R",
+				"Rhythm           Struct (lib.rs) : struct Rhythm                "
+			],
+			[
+				"Rhyt",
+				"RhythmicBeat     Struct (lib.rs) : struct RhythmicBeat          "
+			],
+			[
+				"Ral",
+				"RelativeNoteTime"
+			],
+			[
+				"Relative",
+				"RelativeNoteTime"
+			],
+			[
+				"Air",
+				"AircraftBlueprint  Struct (lib.rs) : pub struct AircraftBlueprint "
+			],
+			[
+				"source",
+				"source_node_index"
+			],
+			[
+				"pickup",
+				"pickup_quantity"
+			],
+			[
+				"M",
+				"MaterialType    Enum (lib.rs) : pub enum MaterialType              "
+			],
+			[
+				"is",
+				"is_ok             Function (result.rs) : pub fn is_ok(&self) -> bool                                                  "
+			],
+			[
+				"debu",
+				"dump_debug_case FnArg (lib.rs) : dump_debug_case                                                                                                    "
+			],
+			[
+				"uwnra",
+				"unwrap_or"
+			],
+			[
+				"Portal",
+				"PortalDirection  Enum (lib.rs) : enum PortalDirection                                    "
+			],
+			[
+				"por",
+				"portals            StructField (lib.rs) : HashMap<Vector2d, Vec<PortalId>>                                                                                                                  "
+			],
+			[
+				"sta",
+				"startarea"
+			],
+			[
+				"num",
+				"num_cells"
+			],
+			[
+				"Porta",
+				"PortalDirection  Enum (lib.rs) : enum PortalDirection                                    "
+			],
+			[
+				"incoming",
+				"incoming_obj Let (transport.rs) : let incoming_obj = self.roads.get(incoming).unwrap()\\                "
+			],
+			[
+				"incom",
+				"incoming_trucks"
+			],
+			[
+				"Truck",
+				"TruckAvailability"
+			],
+			[
+				"stock",
+				"stockholm_index    Let (transport.rs) : let stockholm_index=nodes.push(stockholm)\\                                                             "
+			],
+			[
+				"availab",
+				"availability_time"
+			],
+			[
+				"truc",
+				"incoming_trucks"
+			],
+			[
+				"out",
+				"outgoing"
+			],
+			[
+				"Log",
+				"LogSupportSelect2 EnumVariant (menu.rs) : LogSupportSelect2{source_house:StoreIndex<House>},"
+			],
+			[
+				"material",
+				"material_type"
+			],
+			[
+				"Materia",
+				"MaterialType"
+			],
+			[
+				"prov",
+				"resupply_provider_index"
+			],
+			[
+				"ai",
+				"ai_state"
+			],
+			[
+				"Agent",
+				"AgentOrder                 Enum (lib.rs) : pub enum AgentOrder                "
+			],
+			[
+				"order",
+				"order_queue"
+			],
+			[
+				"phan",
+				"phantom"
+			],
+			[
+				"h",
+				"have_unready_agent"
+			],
+			[
+				"ord",
+				"order_queue"
+			],
+			[
+				"Form",
+				"Formation               Struct (lib.rs) : pub struct Formation                "
+			],
+			[
+				"chil",
+				"children"
+			],
+			[
+				"Format",
+				"FormationAtom      Trait (formation.rs) : pub trait FormationAtom             "
+			],
+			[
+				"cm",
+				"component"
+			],
+			[
+				"comp",
+				"component"
+			],
+			[
+				"format",
+				"formation Module (formation.rs) : /home/anders/octosim/simlib/src/simlib/formation.rs"
+			],
+			[
+				"agents",
+				"agents_to_resupply Let (simlib.rs) : let mut agents_to_resupply=Vec::<&mut Agent>::new()\\                                           "
+			],
+			[
+				"gui",
+				"run_gui_command             Function (menu.rs) : pub fn run_gui_command(&mut self, command : Command)                                "
+			],
+			[
+				"agent",
+				"agent_type"
+			],
+			[
+				"pos",
+				"position"
+			],
+			[
+				"Support",
+				"SupportSource"
+			],
+			[
+				"sup",
+				"support"
+			],
+			[
+				"UnitBu",
+				"UnitButtonId"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "Cargo.toml",
+			"settings":
+			{
+				"buffer_size": 233,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "src/lib.rs",
+			"settings":
+			{
+				"buffer_size": 3099,
+				"line_ending": "Unix"
+			}
+		}
+	],
+	"build_system": "Packages/Rust Enhanced/RustEnhanced.sublime-build",
+	"build_system_choices":
+	[
+		[
+			[
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					""
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Run"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Run Release"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Test"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Bench"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Clean"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Release"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Document"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Clippy"
+				],
+				[
+					"Packages/Rust Enhanced/Cargo.sublime-build",
+					"Script"
+				]
+			],
+			[
+				"Packages/Rust Enhanced/Cargo.sublime-build",
+				""
+			]
+		],
+		[
+			[
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					""
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Automatic"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Run"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Run (with args)..."
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Check"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Test"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Test (with args)..."
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Bench"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Clean"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Document"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Clippy"
+				],
+				[
+					"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+					"Script"
+				]
+			],
+			[
+				"Packages/Rust Enhanced/RustEnhanced.sublime-build",
+				"Check"
+			]
+		],
+		[
+			[
+				[
+					"Packages/Rust/Cargo.sublime-build",
+					""
+				],
+				[
+					"Packages/Rust/Cargo.sublime-build",
+					"Run"
+				],
+				[
+					"Packages/Rust/Cargo.sublime-build",
+					"Test"
+				],
+				[
+					"Packages/Rust/Cargo.sublime-build",
+					"Bench"
+				],
+				[
+					"Packages/Rust/Cargo.sublime-build",
+					"Clean"
+				],
+				[
+					"Packages/Rust/Rust.sublime-build",
+					""
+				],
+				[
+					"Packages/Rust/Rust.sublime-build",
+					"Run"
+				]
+			],
+			[
+				"Packages/Rust/Cargo.sublime-build",
+				""
+			]
+		]
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 92.0,
+		"last_filter": "install",
+		"selected_items":
+		[
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"rust configu",
+				"Rust: Configure Cargo Build"
+			],
+			[
+				"rempve",
+				"Package Control: Remove Package"
+			],
+			[
+				"Package Control: remove",
+				"Package Control: Remove Package"
+			]
+		],
+		"width": 485.0
+	},
+	"console":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"file_history":
+	[
+		"/home/anders/octosim/diskstore/src/lib.rs",
+		"/home/anders/octosim/diskstore/Cargo.toml",
+		"/home/anders/octosim/diskstore/diskstore-derive/src/lib.rs",
+		"/home/anders/octosim/simlib/src/simlib/aircraft.rs",
+		"/home/anders/octosim/fractal/src/meteo3.rs",
+		"/home/anders/octosim/music/src/lib.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/scrollview.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/slider.rs",
+		"/home/anders/octosim/fractal/src/lib.rs",
+		"/home/anders/octosim/src/main.rs",
+		"/home/anders/octosim/music/src/noise.rs",
+		"/home/anders/octosim/sight/src/lib.rs",
+		"/home/anders/octosim/fractal/src/vortex.rs",
+		"/home/anders/octosim/graphlib/src/guitk/toolkit_helpers.rs",
+		"/home/anders/octosim/graphlib/src/graphlib.rs",
+		"/home/anders/octosim/graphlib/src/graphhelpers.rs",
+		"/home/anders/octosim/graphlib/src/menu.rs",
+		"/home/anders/octosim/graphlib/src/mainmap.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/land_vehicle_editor.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/vehicle_editor_helpers.rs",
+		"/home/anders/octosim/glsl/sliderball.vertex.glsl",
+		"/home/anders/octosim/glsl/sliderball.geometry.glsl",
+		"/home/anders/octosim/glsl/sliderball.fragment.glsl",
+		"/home/anders/octosim/simlib/src/simlib/simlib.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/aircraft_editor.rs",
+		"/home/anders/octosim/compute_glsl/viewshed.glsl",
+		"/home/anders/octosim/geom/src/lib.rs",
+		"/home/anders/octosim/simlib/src/simlib/damage.rs",
+		"/home/anders/octosim/graphlib/src/guitk/renderjob.rs",
+		"/home/anders/octosim/graphlib/src/guitk/generic_toolkit.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/bitmap.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/button.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/checkbox.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/dropdown.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/listview.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/table_layout.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/textbox.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/vehicle_model.rs",
+		"/home/anders/octosim/fractal/src/vec.rs",
+		"/home/anders/octosim/fractal/src/vec_helper.rs",
+		"/home/anders/octosim/fractal/src/meteo.rs",
+		"/home/anders/octosim/fractal/src/meteo2.rs",
+		"/home/anders/octosim/graphlib/Cargo.toml",
+		"/home/anders/octosim/fractal/Cargo.toml",
+		"/home/anders/octosim/iface/src/vector.rs",
+		"/home/anders/octosim/compute_glsl/erosion.glsl",
+		"/home/anders/octosim/sight/Cargo.toml",
+		"/home/anders/octosim/sight/gpgpu.rs",
+		"/home/anders/glium/src/uniforms/value.rs",
+		"/home/anders/octosim/music/src/newmelody.rs",
+		"/home/anders/octosim/graphlib/src/guitk/geometry.rs",
+		"/home/anders/octosim/glsl/vehicle.geometry.glsl",
+		"/home/anders/octosim/glsl/vehicle.fragment.glsl",
+		"/home/anders/octosim/glsl/vehicle.vertex.glsl",
+		"/home/anders/octosim/glsl/wireframe.vertex.glsl",
+		"/home/anders/octosim/iface/src/lib.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/jet_engine_editor.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/piston_engine_editor.rs",
+		"/home/anders/octosim/graphlib/src/vehicle_editors/mod.rs",
+		"/home/anders/octosim/graphlib/src/guitk/glsl_reloader.rs",
+		"/home/anders/octosim/graphlib/src/guitk/mod.rs",
+		"/home/anders/octosim/graphlib/src/guitk/widgets/mod.rs",
+		"/home/anders/octosim/pangohelper/src/lib.rs",
+		"/home/anders/octosim/iface/src/store.rs",
+		"/home/anders/octosim/simlib/src/simlib/jet.rs",
+		"/home/anders/octosim/pangohelper/pango.c",
+		"/home/anders/octosim/graphlib/src/aircraft_editor.rs",
+		"/home/anders/octosim/graphlib/src/generic_toolkit.rs",
+		"/home/anders/octosim/music/src/fft_fir.rs",
+		"/home/anders/octosim/music/Cargo.toml",
+		"/home/anders/octosim/simlib/src/simlib/landvehicle.rs",
+		"/home/anders/octosim/simlib/src/simlib/ship.rs",
+		"/home/anders/octosim/simlib/src/simlib/transport.rs",
+		"/home/anders/octosim/simlib/src/simlib/engine.rs",
+		"/home/anders/octosim/iface/src/abstract_pather.rs",
+		"/home/anders/octosim/simlib/src/simlib/formation.rs",
+		"/home/anders/octosim/graphlib/src/menu_renderer.rs",
+		"/home/anders/octosim/graphlib/src/graphcommon.rs",
+		"/home/anders/octosim/simlib/src/simlib/lib.rs",
+		"/home/anders/octosim/simlib/Cargo.toml",
+		"/home/anders/octosim/iface/Cargo.toml",
+		"/home/anders/octosim/graphlib/Cargo.lock",
+		"/home/anders/octosim/simlib/src/simlib/cannon.rs",
+		"/home/anders/.config/sublime-text-3/Packages/User/octobuild.sublime-build",
+		"/home/anders/octosim/pangohelper/Cargo.toml",
+		"/home/anders/octosim/octosim.sublime-project",
+		"/home/anders/octosim/iface/src/graphlib/src/menu.rs",
+		"/home/anders/octosim/iface/src/simlib/src/simlib/simlib.rs",
+		"/home/anders/octosim/iface/src/graphlib/src/menu_renderer.rs",
+		"/checkout/src/libcore/result.rs",
+		"/home/anders/.config/sublime-text-3/Packages/Rust Enhanced/RustEnhanced.sublime-settings",
+		"/home/anders/.config/sublime-text-3/Packages/User/RustAutoComplete.sublime-settings",
+		"/home/anders/.config/sublime-text-3/Packages/RustAutoComplete/Preferences.sublime-settings",
+		"/home/anders/.config/sublime-text-3/Packages/anaconda_rust/AnacondaRUST.sublime-settings"
+	],
+	"find":
+	{
+		"height": 35.0
+	},
+	"find_in_files":
+	{
+		"height": 102.0,
+		"where_history":
+		[
+			""
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"println",
+			"println§",
+			"println",
+			"fields_names",
+			"variant_name",
+			"write_u8",
+			"serializ",
+			"testenum",
+			"currentspan",
+			"prevsegs",
+			"\"I:",
+			"some_segment",
+			"detect_water",
+			"gridsize",
+			"GRIDSIZE",
+			"cur_lake_id",
+			"span",
+			"h",
+			"/*",
+			"struct TerrainTile",
+			"heightmap",
+			"asdf",
+			"detect_water",
+			"lake",
+			"println!",
+			"advect(",
+			"advect_hor",
+			"precipi",
+			"agraph",
+			"precipitation",
+			"CLOUD_DENSIT",
+			"lucky",
+			"precip",
+			"need",
+			"water_need",
+			"Sea",
+			"water_vapor_content",
+			"ground_moisture",
+			"evaporation§§",
+			"ground_moisture",
+			"evaporation",
+			"ground_moisture",
+			"precipitation",
+			"1.5",
+			".cos()",
+			"runoff",
+			"precipitation",
+			"scaled_temp",
+			"simplex",
+			"-4500",
+			"-",
+			"scaled_temper",
+			"scaled_land",
+			"println",
+			"step(",
+			"vertical",
+			"dt",
+			"vertical_co",
+			"advect_air",
+			"vertical_",
+			"advect_vertical_component",
+			"ivals",
+			"key",
+			"draw_square",
+			"advect_verti",
+			"delta",
+			"fn adv",
+			"advect_",
+			"thread",
+			"tread",
+			"fn adv",
+			"fn  adv",
+			"step_cells",
+			".step(",
+			"asquare",
+			"temperature",
+			"asquare",
+			"water_vapor",
+			"asdf",
+			"self.sea",
+			"self.seas",
+			"sea",
+			"condensation",
+			"println!",
+			"precipitation_velocity",
+			"repvel",
+			"precipi",
+			"asdf",
+			"get_Flow_at",
+			"vel=",
+			"advect_Comp",
+			"advec",
+			"advect(",
+			"advect_",
+			"actual water",
+			"Altitude:",
+			"max_water",
+			"convec",
+			"Cell {",
+			"sealevel",
+			"pressure",
+			"== 1",
+			"==1",
+			"asdf",
+			"pos:",
+			"condensation",
+			"pressure",
+			"square",
+			"advec",
+			"precipitation_vel",
+			"key",
+			"\"Flow",
+			"Flow",
+			"windowevent",
+			"glutin",
+			"glium",
+			"event",
+			"sleep",
+			"dt",
+			"advect",
+			"dt=",
+			"advec",
+			"dt=",
+			"vapor_conte",
+			"moisture",
+			"advec",
+			"dt",
+			"advect"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+			"f32"
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 1,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "Cargo.toml",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 233,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								233,
+								233
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "src/lib.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 3099,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								44,
+								44
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Rust/Rust.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 27.0
+	},
+	"input":
+	{
+		"height": 35.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.exec":
+	{
+		"height": 445.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "Packages/Rust Enhanced/RustEnhanced.sublime-build",
+	"project": "diskstore.sublime-project",
+	"replace":
+	{
+		"height": 64.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 152.0,
+		"last_filter": "UnitPres",
+		"selected_items":
+		[
+			[
+				"UnitPres",
+				"UnitPresentation"
+			]
+		],
+		"width": 440.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": false,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 282.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
