@@ -1,4 +1,4 @@
-[Build Status]: https://api.travis-ci.org/avl/savefile.svg?branch=master
+[Build Status](https://api.travis-ci.org/avl/savefile.svg?branch=master)
 
 # WARNING
 
