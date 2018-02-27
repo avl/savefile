@@ -14,6 +14,18 @@ struct AttrsResult {
     default_val: Option<quote::Tokens>,
 }
 
+fn check_is_remove(field_type: &syn::Type) -> bool {
+    use quote::ToTokens;
+    let mut is_remove=false;
+    let mut tokens = quote::Tokens::new();
+    field_type.to_tokens(&mut tokens);
+    for tok in tokens.into_iter() {
+        if tok.to_string()=="Removed" {
+            is_remove=true;
+        }
+    }
+    is_remove
+}
 fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsResult {
     let mut field_from_version = 0;
     let mut field_to_version = std::u32::MAX;
@@ -128,11 +140,17 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         let fields_names = fields_named.named.iter().map(|x| {
+                            if check_is_remove(&x.ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            }
                             let fieldname = x.ident.unwrap();
                             quote!{ ref #fieldname }
                         });
                         let fields_serialized = fields_named.named.iter().map(|x| {
                             let field_name = x.ident.unwrap();
+                            if check_is_remove(&x.ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            }
                             quote!{ #field_name.serialize(serializer); }
                         });
                         output.push(
@@ -141,7 +159,10 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         let fields_names =
-                            fields_unnamed.unnamed.iter().enumerate().map(|(idx, _x)| {
+                            fields_unnamed.unnamed.iter().enumerate().map(|(idx, x)| {
+                                if check_is_remove(&x.ty) {
+                                    panic!("The Removed type is not supported for enum types");
+                                }
                                 let fieldname =
                                     syn::Ident::from("x".to_string() + &idx.to_string());
                                 quote! { ref #fieldname }
@@ -176,6 +197,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
+                let mut min_safe_version=0;
                 let mut output = Vec::new();
                 for ref field in &namedfields.named {
                     {
@@ -185,10 +207,16 @@ pub fn serialize(input: TokenStream) -> TokenStream {
 
                         let id = field.ident.unwrap();
                         if field_from_version == 0 && field_to_version == std::u32::MAX {
+                            if check_is_remove(&field.ty) {
+                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+                            }
                             output.push(quote!(
                                     self.#id.serialize(serializer);
                                     ));
                         } else {
+                            if field_to_version < std::u32::MAX {
+                                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+                            }
                             output.push(quote!(
                                     if serializer.version >= #field_from_version && serializer.version <= #field_to_version {
                                         self.#id.serialize(serializer);
@@ -256,6 +284,9 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
                         let fields_deserialized = fields_named.named.iter().map(|f| {
                             let ty = &f.ty;
+                            if check_is_remove(ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            };
                             let ty = quote_spanned! { span => #ty };
                             let field_name = f.ident.unwrap();
                             let field_name = quote_spanned! { span => #field_name};
@@ -269,6 +300,10 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
                         let fields_deserialized = fields_unnamed.unnamed.iter().map(|f| {
                             let ty = &f.ty;
+                            if check_is_remove(ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            };
+
                             quote!{ #ty::deserialize(deserializer) }
                         });
                         output.push(
@@ -290,27 +325,20 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                             _ => panic!("Corrupt file - unknown enum variant detected.")
                         }
                     }
+                    fn repr_c_optimization_safe(deserializer: &mut #deserializer) -> bool {
+                        true
+                    }
                 }
             }
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
+                let mut min_safe_version=0;
                 for ref field in &namedfields.named {
-;                    let id = field.ident.unwrap();
+                    let id = field.ident.unwrap();
                     let field_type = &field.ty;
-                    /*
-                        let mut tokens = quote::Tokens::new();
-                        field_type.to_tokens(&mut tokens);
-                        let mut field_type_fixedup=quote::Tokens::new();
-                        let mut first_angle=true;
-                        for tok in tokens.into_iter() {
-                            if first_angle && tok.to_string()=="<" {
-                                first_angle=false;
-                                field_type_fixedup.append_all(quote!{::});
-                            }
-                            field_type_fixedup.append(tok);
-                        }
-                        */
+
+                    let is_removed=check_is_remove(field_type);
                     let id_spanned = quote_spanned! { span => #id};
                     let local_deserializer = quote_spanned! { defspan => local_deserializer};
 
@@ -330,17 +358,29 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         quote! { panic!("internal error - there was no default value available for field.") }
                     };
 
+                    if field_from_version > field_to_version {
+                        panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
+                    }
+
                     let src = if field_from_version == 0 && field_to_version == std::u32::MAX {
+                        if is_removed {
+                            panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
+                        };
                         quote_spanned! { span =>
                             <#field_type>::deserialize(#local_deserializer)
                         }
-                    } else {
+                    } else {    
+                        if field_to_version < std::u32::MAX {
+                            min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+                        }                    
+
                         quote_spanned! { span =>
-                        if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                            <#field_type>::deserialize(#local_deserializer)
-                        } else {
-                            #effective_default_val
-                        }}
+                            if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
+                                <#field_type>::deserialize(#local_deserializer)
+                            } else {
+                                #effective_default_val
+                            }
+                        }
                     };
 
                     output.push(quote!(#id_spanned : #src ));
@@ -352,9 +392,16 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         fn deserialize(deserializer: &mut #deserializer) -> Self {
                             let local_deserializer = deserializer;
                             //println!("Deserializer running on {}", stringify!(#name));
+                            if #min_safe_version > local_deserializer.memory_version {
+                                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
+                                    #min_safe_version - 1, local_deserializer.memory_version);
+                            }
                             #name {
                                 #(#output,)*
                             }
+                        }
+                        fn repr_c_optimization_safe(deserializer: &mut #deserializer) -> bool {
+                            deserializer.file_version >= #min_safe_version
                         }
                     }
                 }

@@ -27,9 +27,14 @@ pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: 
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    let mut deserializer = Deserializer::new(&mut f, 0);
-    let roundtrip_result = E::deserialize(&mut deserializer);
-    assert_eq!(sample, roundtrip_result);
+    {
+        let mut deserializer = Deserializer::new(&mut f, 0);
+        let roundtrip_result = E::deserialize(&mut deserializer);
+        assert_eq!(sample, roundtrip_result);        
+    }
+
+    let f_internal_size = f.get_ref().len();
+    assert_eq!(f.position() as usize,f_internal_size);
 }
 
 #[test]
@@ -144,19 +149,56 @@ fn bench_serialize(b: &mut Bencher) {
     let mut test=Vec::new();
     for i in 0..1000 {
     	test.push(BenchStruct {
-    		x:i,
-    		y:i,
-    		z:0
+    		x:black_box(i),
+    		y:black_box(i),
+    		z:black_box(0)
     	})
     }
- 	b.iter(|| {
-        let mut bufw=BufWriter::new(&mut f);
-        let mut serializer = Serializer::new(&mut bufw,0);
- 		test.serialize(&mut serializer);
-        
+ 	b.iter(move || {
+        {            
+            let mut serializer = Serializer::new(&mut f,0);
+            test.serialize(&mut serializer);            
+        }
+        black_box(&mut f);
+
+        f.set_position(0);
+        {
+            let mut deserializer = Deserializer::new(&mut f, 0);
+            let r=Vec::<BenchStruct>::deserialize(&mut deserializer);          
+            assert!(r.len()==1000);  
+        }       
+
+        f.set_position(0);
     });
 }
 
+#[test]
+pub fn test_bench_struct() {
+    assert_roundtrip(
+        vec![
+            BenchStruct {
+                x:black_box(1),
+                y:black_box(2),
+                z:black_box(3)
+            },
+            BenchStruct {
+                x:black_box(4),
+                y:black_box(5),
+                z:black_box(6)
+            },
+            BenchStruct {
+                x:black_box(7),
+                y:black_box(8),
+                z:black_box(9)
+            },
+            BenchStruct {
+                x:black_box(1),
+                y:black_box(2),
+                z:black_box(3)
+            }
+            ]
+        );
+}
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct SmallStruct {
@@ -174,7 +216,7 @@ struct SmallStruct2 {
     x1: u32,
     x2: i32,
     #[default_val = "100"]
-    #[versions = "1..1000"]
+    #[versions = "1.."]
     x3: String,
     #[default_val = "123"]
     #[versions = "1.."]
