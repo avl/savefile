@@ -140,8 +140,6 @@ use test::{Bencher, black_box};
 fn bench_serialize(b: &mut Bencher) {
 
     let mut f = Cursor::new(Vec::with_capacity(100));
-	let mut bufw=BufWriter::new(&mut f);
-	let mut serializer = Serializer::new(&mut bufw,0);
 
     let mut test=Vec::new();
     for i in 0..1000 {
@@ -152,7 +150,10 @@ fn bench_serialize(b: &mut Bencher) {
     	})
     }
  	b.iter(|| {
+        let mut bufw=BufWriter::new(&mut f);
+        let mut serializer = Serializer::new(&mut bufw,0);
  		test.serialize(&mut serializer);
+        
     });
 }
 

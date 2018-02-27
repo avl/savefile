@@ -2,6 +2,8 @@
 
 # WARNING
 
+THIS IS STILL UNDOCUMENTED AND PROBABLY IMPOSSIBLE TO LEARN UNTIL IT IS!
+
 This software is very young and possibly NOT ready for use yet :-) .
 You have been warned. If you're looking for a high quality 
 serialization library for rust, you should probably look at serde instead: 
@@ -13,7 +15,7 @@ https://github.com/serde-rs/serde
 Savefile is a library to effortlessly serialize rust structs and enums, in
 an efficient binary format, to anything implementing the Write trait, and 
 then deserializing the same from anything implementing the Read trait. This 
-means that savefile can be used to easily save in memory data structures to 
+means that savefile can be used to easily save in-memory data structures to 
 disk for persistent storage.
 
 You may ask what savefile brings to the table that serde doesn't already do
