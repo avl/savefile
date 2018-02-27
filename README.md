@@ -1,6 +1,11 @@
+[Build Status]: https://api.travis-ci.org/avl/savefile.svg?branch=master
+
 # WARNING
 
-This software is under heavy development right now and NOT ready for use.
+This software is very young and possibly NOT ready for use yet :-) .
+You have been warned. If you're looking for a high quality 
+serialization library for rust, you should probably look at serde instead: 
+https://github.com/serde-rs/serde
 
 
 # Savefile 
