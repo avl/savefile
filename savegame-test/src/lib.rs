@@ -128,8 +128,9 @@ pub struct BenchStruct {
     y: usize,
     z: u8,
 }
-//unsafe impl ReprC for BenchStruct {} 
-/*
+
+unsafe impl savegame::ReprC for BenchStruct {} 
+
 use test::{Bencher, black_box};
 
 #[bench]
@@ -151,7 +152,8 @@ fn bench_serialize(b: &mut Bencher) {
  		test.serialize(&mut serializer);
     });
 }
-*/
+
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct SmallStruct {
     x1: u32,
