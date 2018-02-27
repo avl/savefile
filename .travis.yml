@@ -1,7 +1,5 @@
+before_script: cd savefile-test
 language: rust
 rust:
   - nightly
-matrix:
-  allow_failures:
-    - rust: nightly
 
