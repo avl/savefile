@@ -520,7 +520,7 @@
 	"buffers":
 	[
 		{
-			"file": "savegame/src/lib.rs",
+			"file": "savefile/src/lib.rs",
 			"settings":
 			{
 				"buffer_size": 133,
@@ -528,7 +528,7 @@
 			}
 		},
 		{
-			"file": "savegame-test/Cargo.toml",
+			"file": "savefile-test/Cargo.toml",
 			"settings":
 			{
 				"buffer_size": 208,
@@ -537,7 +537,7 @@
 			}
 		},
 		{
-			"file": "savegame-test/src/lib.rs",
+			"file": "savefile-test/src/lib.rs",
 			"settings":
 			{
 				"buffer_size": 5364,
@@ -546,7 +546,7 @@
 			}
 		},
 		{
-			"file": "savegame/src/savegame.rs",
+			"file": "savefile/src/savefile.rs",
 			"settings":
 			{
 				"buffer_size": 9190,
@@ -555,7 +555,7 @@
 			}
 		},
 		{
-			"file": "savegame-derive/src/lib.rs",
+			"file": "savefile-derive/src/lib.rs",
 			"settings":
 			{
 				"buffer_size": 17008,
@@ -564,7 +564,7 @@
 			}
 		},
 		{
-			"file": "savegame-derive/Cargo.lock",
+			"file": "savefile-derive/Cargo.lock",
 			"settings":
 			{
 				"buffer_size": 1809,
@@ -572,7 +572,7 @@
 			}
 		},
 		{
-			"file": "savegame/src/prelude.rs",
+			"file": "savefile/src/prelude.rs",
 			"settings":
 			{
 				"buffer_size": 86,
@@ -581,7 +581,7 @@
 			}
 		},
 		{
-			"file": "savegame-derive/Cargo.toml",
+			"file": "savefile-derive/Cargo.toml",
 			"settings":
 			{
 				"buffer_size": 234,
@@ -589,7 +589,7 @@
 			}
 		},
 		{
-			"file": "savegame/Cargo.toml",
+			"file": "savefile/Cargo.toml",
 			"settings":
 			{
 				"buffer_size": 182,
@@ -785,20 +785,20 @@
 	},
 	"expanded_folders":
 	[
-		"/home/anders/savegame",
-		"/home/anders/savegame/savegame",
-		"/home/anders/savegame/savegame/src",
-		"/home/anders/savegame/savegame-derive",
-		"/home/anders/savegame/savegame-derive/src",
-		"/home/anders/savegame/savegame-derive/target",
-		"/home/anders/savegame/savegame-test",
-		"/home/anders/savegame/savegame-test/src"
+		"/home/anders/savefile",
+		"/home/anders/savefile/savefile",
+		"/home/anders/savefile/savefile/src",
+		"/home/anders/savefile/savefile-derive",
+		"/home/anders/savefile/savefile-derive/src",
+		"/home/anders/savefile/savefile-derive/target",
+		"/home/anders/savefile/savefile-test",
+		"/home/anders/savefile/savefile-test/src"
 	],
 	"file_history":
 	[
-		"/home/anders/savegame/savegame-derive/src/prelude.rs",
-		"/home/anders/savegame/savegame-derive/src/savegame.rs",
-		"/home/anders/savegame/src/lib.rs",
+		"/home/anders/savefile/savefile-derive/src/prelude.rs",
+		"/home/anders/savefile/savefile-derive/src/savefile.rs",
+		"/home/anders/savefile/src/lib.rs",
 		"/home/anders/diskstore/Cargo.toml",
 		"/home/anders/octosim/diskstore/src/lib.rs",
 		"/home/anders/octosim/diskstore/Cargo.toml",
@@ -1063,7 +1063,7 @@
 			[
 				{
 					"buffer": 0,
-					"file": "savegame/src/lib.rs",
+					"file": "savefile/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1091,7 +1091,7 @@
 				},
 				{
 					"buffer": 1,
-					"file": "savegame-test/Cargo.toml",
+					"file": "savefile-test/Cargo.toml",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1119,7 +1119,7 @@
 				},
 				{
 					"buffer": 2,
-					"file": "savegame-test/src/lib.rs",
+					"file": "savefile-test/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1147,7 +1147,7 @@
 				},
 				{
 					"buffer": 3,
-					"file": "savegame/src/savegame.rs",
+					"file": "savefile/src/savefile.rs",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1177,7 +1177,7 @@
 				},
 				{
 					"buffer": 4,
-					"file": "savegame-derive/src/lib.rs",
+					"file": "savefile-derive/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1207,7 +1207,7 @@
 				},
 				{
 					"buffer": 5,
-					"file": "savegame-derive/Cargo.lock",
+					"file": "savefile-derive/Cargo.lock",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1235,7 +1235,7 @@
 				},
 				{
 					"buffer": 6,
-					"file": "savegame/src/prelude.rs",
+					"file": "savefile/src/prelude.rs",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1263,7 +1263,7 @@
 				},
 				{
 					"buffer": 7,
-					"file": "savegame-derive/Cargo.toml",
+					"file": "savefile-derive/Cargo.toml",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1291,7 +1291,7 @@
 				},
 				{
 					"buffer": 8,
-					"file": "savegame/Cargo.toml",
+					"file": "savefile/Cargo.toml",
 					"semi_transient": false,
 					"settings":
 					{
@@ -1360,7 +1360,7 @@
 		"height": 0.0
 	},
 	"pinned_build_system": "Packages/Rust Enhanced/RustEnhanced.sublime-build",
-	"project": "savegame.sublime-project",
+	"project": "savefile.sublime-project",
 	"replace":
 	{
 		"height": 64.0

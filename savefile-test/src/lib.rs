@@ -1,3 +1,6 @@
+#![feature(test)]
+
+extern crate test;
 extern crate savefile;
 #[macro_use]
 extern crate savefile_derive;
@@ -129,7 +132,7 @@ pub struct BenchStruct {
     z: u8,
 }
 
-unsafe impl savegame::ReprC for BenchStruct {} 
+unsafe impl savefile::prelude::ReprC for BenchStruct {} 
 
 use test::{Bencher, black_box};
 

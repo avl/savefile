@@ -3,7 +3,7 @@
 This software is under heavy development right now and NOT ready for use.
 
 
-# savefile 
+# Savefile 
 
 Savefile is a library to effortlessly serialize rust structs and enums, in
 an efficient binary format, to anything implementing the Write trait, and 
@@ -31,8 +31,32 @@ Features savefile does not have, and will not have:
  xml or any other backends. Savefile uses the savefile format, period.
  * Support for serializing graphs. Savefile can serialize your data if it has a
  tree structure in RAM, _without_ loops.
- * Support for serializing boxed traits. You can hack this in by manually
- implementing the Serialize and Deserialize traits.
- 
- 
+ * Support for serializing boxed traits ("objects"). You can (probably) hack this in by manually
+ implementing the Serialize and Deserialize traits and somehow select concrete types in
+ the deserializer manually.
 
+
+
+# License
+
+Savefile is licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+   http://opensource.org/licenses/MIT)
+
+at your option.
+
+MIT License text:
+
+```
+Copyright 2018 Anders Musikka
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+```
