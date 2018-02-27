@@ -1,0 +1,9 @@
+[package]
+name = "savefile-test"
+version = "0.0.1"
+authors = ["Anders Musikka <anders@andersmusikka.se>"]
+
+[dependencies]
+savefile = { path = "../savefile" }
+savefile-derive = { path = "../savefile-derive" }
+

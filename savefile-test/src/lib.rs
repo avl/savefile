@@ -1,9 +1,9 @@
-extern crate savegame;
+extern crate savefile;
 #[macro_use]
-extern crate savegame_derive;
+extern crate savefile_derive;
 use std::fmt::Debug;
 use std::io::Write;
-use savegame::prelude::*;
+use savefile::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct NonCopy {

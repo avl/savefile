@@ -23,10 +23,10 @@ fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsR
         if let Some(ref meta) = attr.interpret_meta() {
             match meta {
                 &syn::Meta::Word(ref _x) => {
-                    panic!("Unexpected savegame attribute, word.");
+                    panic!("Unexpected savefile attribute, word.");
                 }
                 &syn::Meta::List(ref _x) => {
-                    panic!("Unexpected savegame attribute, list.");
+                    panic!("Unexpected savefile attribute, list.");
                 }
                 &syn::Meta::NameValue(ref x) => {
                     //println!("Attr name value : {:?}",x.ident.to_string());
