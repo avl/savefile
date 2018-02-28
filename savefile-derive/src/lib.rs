@@ -193,6 +193,11 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             #(#output,)*
                         }
                     }
+                    /*
+                    fn repr_c_optimization_safe(_serializer: &mut #serializer) -> bool {
+                        true
+                    }
+                    */
                 }
             }
         }
@@ -215,7 +220,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             if removed {
                                 panic!("The Removed type can only be used for removed fields. Use the version attribute.");
                             }
-                            optsafe_outputs.push(quote_spanned!( span => <#field_type as Serialize>::repr_c_optimization_safe(#local_serializer)));
+                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
                             output.push(quote!(
                                 self.#id.serialize(#local_serializer);
                                 ));
@@ -227,7 +232,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                                 min_safe_version = min_safe_version.max(field_from_version);
                             }                    
                             if !removed {
-                                optsafe_outputs.push(quote_spanned!( span => <#field_type as Serialize>::repr_c_optimization_safe(#local_serializer)));
+                                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
                             }
                             output.push(quote!(
                                     if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
@@ -249,11 +254,14 @@ pub fn serialize(input: TokenStream) -> TokenStream {
         
                             #(#output)*
                         }
+                        /*
+                        #[allow(unused_comparisons)]
                         fn repr_c_optimization_safe(serializer: &mut #serializer) -> bool {
                             let local_serializer = serializer;
                             local_serializer.version >= #min_safe_version
                             #( && #optsafe_outputs)*
                         }
+                        */
                     }
                 }
             }
@@ -348,9 +356,6 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                             _ => panic!("Corrupt file - unknown enum variant detected.")
                         }
                     }
-                    fn repr_c_optimization_safe(deserializer: &mut #deserializer) -> bool {
-                        true
-                    }
                 }
             }
         }
@@ -389,7 +394,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         if is_removed {
                             panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
                         };
-                        optsafe_outputs.push(quote_spanned!( span => <#field_type as Deserialize>::repr_c_optimization_safe(#local_deserializer)));
+                        optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_deserializer)));
                         quote_spanned! { span =>
                             <#field_type>::deserialize(#local_deserializer)
                         }
@@ -401,7 +406,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                             min_safe_version = min_safe_version.max(field_from_version);
                         }                    
                         if !is_removed {
-                            optsafe_outputs.push(quote_spanned!( span => <#field_type as  Deserialize>::repr_c_optimization_safe(#local_deserializer)));
+                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_deserializer)));
                         }
 
                         quote_spanned! { span =>
@@ -415,7 +420,6 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
                     output.push(quote!(#id_spanned : #src ));
                 }
-                use quote::ToTokens;
                 quote! {
 
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause {
@@ -423,18 +427,94 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         fn deserialize(deserializer: &mut #deserializer) -> Self {
                             let local_deserializer = deserializer;
                             //println!("Deserializer running on {}", stringify!(#name));
-                            if #min_safe_version > local_deserializer.memory_version {
-                                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
-                                    #min_safe_version, local_deserializer.memory_version);
-                            }
                             #name {
                                 #(#output,)*
                             }
+                        }                        
+                    }
+                }
+            }
+            _ => panic!("Only regular structs supported, not tuple structs."),
+        },
+        _ => {
+            panic!("Only regular structs are supported");
+        }
+    };
+
+    expanded.into()
+}
+
+
+
+
+#[proc_macro_derive(ReprC)]
+pub fn reprc(input: TokenStream) -> TokenStream {
+    // Construct a string representation of the type definition
+    let input: DeriveInput = syn::parse(input).unwrap();
+
+    let name = input.ident;
+
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let reprc = quote_spanned! {span=>
+        ReprC
+    };
+
+    let expanded = match &input.data {
+        &syn::Data::Enum(ref _enum1) => {
+            quote! {
+                impl #impl_generics #reprc for #name #ty_generics #where_clause {
+
+                    #[allow(unused_comparisons)]
+                    fn repr_c_optimization_safe(file_version:u32) -> bool {
+                        true
+                    }
+                }
+            }
+        }
+        &syn::Data::Struct(ref struc) => match &struc.fields {
+            &syn::Fields::Named(ref namedfields) => {
+                let mut min_safe_version=0;
+                let mut optsafe_outputs = Vec::new();
+                let local_file_version = quote_spanned! { defspan => local_file_version};
+                for ref field in &namedfields.named {
+                    {
+                        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+                        let (field_from_version, field_to_version) =
+                            (verinfo.version_from, verinfo.version_to);
+
+
+                        let removed=check_is_remove(&field.ty);
+                        let field_type = &field.ty;
+                        if field_from_version == 0 && field_to_version == std::u32::MAX {
+                            if removed {
+                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+                            }
+                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
+                            
+                        } else {
+                            if field_to_version < std::u32::MAX {
+                                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+                            }
+                            if field_from_version < std::u32::MAX { // An addition
+                                min_safe_version = min_safe_version.max(field_from_version);
+                            }                    
+                            if !removed {
+                                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
+                            }                            
                         }
-                        fn repr_c_optimization_safe(deserializer: &mut #deserializer) -> bool {
-                            let local_deserializer = deserializer;
-                            local_deserializer.file_version >= #min_safe_version
-                            #(&& #optsafe_outputs)*
+                    }
+                }
+                quote! {
+                    unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        fn repr_c_optimization_safe(file_version:u32) -> bool {
+                            let local_file_version = file_version;
+                            file_version >= #min_safe_version
+                            #( && #optsafe_outputs)*
                         }
                     }
                 }
@@ -446,6 +526,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         }
     };
 
+    //println!("Emitting: {:?}",expanded);
     expanded.into()
 }
 

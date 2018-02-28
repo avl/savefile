@@ -28,7 +28,7 @@ pub struct Deserializer<'a> {
 }
 
 /// This is a marker trait for types which have an in-memory layout that is packed
-/// and therefore identical to the layout that savefile will use on disk. 
+/// and therefore identical to the layout that savefile will use on disk.
 /// This means that types for which this trait is implemented can be serialized
 /// very quickly by just writing their raw bits to disc.
 ///
@@ -38,7 +38,13 @@ pub struct Deserializer<'a> {
 /// * The type must not contain any padding
 /// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
 /// * All the constituent types of the type must also implement ReprC (correctly).
-pub unsafe trait ReprC: Copy {}
+pub unsafe trait ReprC: Copy {
+    /// This method returns true if the optimization is allowed
+    /// for the protocol version given as an argument.
+    /// This may return true if and only if the given protocol version
+    /// has a serialized format identical to the given protocol version.
+    fn repr_c_optimization_safe(version: u32) -> bool;
+}
 
 impl<'a> Serializer<'a> {
     pub fn write_u8(&mut self, v: u8) {
@@ -97,10 +103,7 @@ impl<'a> Serializer<'a> {
     ///   and M is the version in which the field was removed.
     pub fn new(writer: &mut Write, version: u32) -> Serializer {
         writer.write_u32::<LittleEndian>(version).unwrap();
-        Serializer {
-            writer,
-            version,
-        }
+        Serializer { writer, version }
     }
 }
 
@@ -147,7 +150,7 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Create a new deserializer.
-    /// 
+    ///
     /// The arguments should be:
     ///  * `reader` A [std::io::Read] object to read serialized bytes from.
     ///  * `version` The version number of the data structures in memory.
@@ -167,60 +170,32 @@ impl<'a> Deserializer<'a> {
     }
 }
 
-
 /// This trait must be implemented for all data structures you wish to be
 /// able to serialize. To actually serialize data: create a [Serializer],
 /// then call serialize on your data to save, giving the Serializer
 /// as an argument.
-/// 
-/// The most convenient way to implement this is to use 
+///
+/// The most convenient way to implement this is to use
 /// #[macro_use]
 /// extern crate savefile-derive;
-/// 
+///
 /// and the use #[derive(Serialize)]
 pub trait Serialize {
     /// Serialize self into the given serializer.
     fn serialize(&self, serializer: &mut Serializer); //TODO: Do error handling
-
-    /// Determine if memory layout is identical to file with version
-    /// corresponding to serializer.version.
-    /// It is totally optional to implement this!
-    /// Implementations must only return true if
-    /// the version number of the chosen serializer corresponds
-    /// to serializing the entire memory contents of the Self type.
-    ///
-    /// If this is returns true AND the Self type implements the unsafe
-    /// [ReprC] trait, serialization of Vec<Self> objects will be faster.
-    fn repr_c_optimization_safe(_serializer: &mut Serializer) -> bool {
-        false
-    }
-
 }
 
 /// This trait must be implemented for all data structures you wish to
-/// be able to deserialize. 
-/// 
-/// The most convenient way to implement this is to use 
+/// be able to deserialize.
+///
+/// The most convenient way to implement this is to use
 /// #[macro_use]
 /// extern crate savefile-derive;
-/// 
+///
 /// and the use #[derive(Deserialize)]
 pub trait Deserialize {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer) -> Self; //TODO: Do error handling
-
-    /// Determine if memory layout is identical to file with version
-    /// corresponding to serializer.memory_version.
-    /// It is totally optional to implement this!
-    /// Implementations must only return true if
-    /// the version number of the chosen serializer corresponds
-    /// to serializing the entire memory contents of the Self type.
-    ///
-    /// If this is returns true AND the Self type implements the unsafe
-    /// ReprC trait, deserialization of Vec<Self> objects will be faster.
-    fn repr_c_optimization_safe(_deserializer: &mut Deserializer) -> bool {
-        false
-    }
 }
 
 impl Serialize for String {
@@ -235,7 +210,9 @@ impl Deserialize for String {
     }
 }
 
-impl<K: Serialize + Eq + Hash, V: Serialize, S : ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
+    for HashMap<K, V, S>
+{
     fn serialize(&self, serializer: &mut Serializer) {
         serializer.write_usize(self.len());
         for (k, v) in self.iter() {
@@ -282,48 +259,44 @@ impl<T: Deserialize> Deserialize for Removed<T> {
     }
 }
 
-fn regular_serialize_vec<T:Serialize>(item:&Vec<T>,serializer: &mut Serializer) {
+fn regular_serialize_vec<T: Serialize>(item: &Vec<T>, serializer: &mut Serializer) {
     let l = item.len();
     serializer.write_usize(l);
     for item in item.iter() {
         item.serialize(serializer)
     }
-
 }
 
 impl<T: Serialize> Serialize for Vec<T> {
     default fn serialize(&self, serializer: &mut Serializer) {
-        regular_serialize_vec(self,serializer);
+        regular_serialize_vec(self, serializer);
     }
 }
 
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer) {
         unsafe {
-            if !T::repr_c_optimization_safe(serializer) {
-                regular_serialize_vec(self,serializer);
-            } else {                
+            if !T::repr_c_optimization_safe(serializer.version) {
+                regular_serialize_vec(self, serializer);
+            } else {
                 let l = self.len();
                 serializer.write_usize(l);
                 serializer.write_buf(std::slice::from_raw_parts(
                     self.as_ptr() as *const u8,
                     std::mem::size_of::<T>() * l,
                 ));
-            }      
-
+            }
         }
     }
 }
 
-
-fn regular_deserialize_vec<T:Deserialize>(deserializer: &mut Deserializer) -> Vec<T> {
-        let l = deserializer.read_usize();
-        let mut ret = Vec::with_capacity(l);
-        for _ in 0..l {
-            ret.push(T::deserialize(deserializer));
-        }
-        ret
-
+fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Vec<T> {
+    let l = deserializer.read_usize();
+    let mut ret = Vec::with_capacity(l);
+    for _ in 0..l {
+        ret.push(T::deserialize(deserializer));
+    }
+    ret
 }
 
 impl<T: Deserialize> Deserialize for Vec<T> {
@@ -334,7 +307,7 @@ impl<T: Deserialize> Deserialize for Vec<T> {
 
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Self {
-        if !T::repr_c_optimization_safe(deserializer) {
+        if !T::repr_c_optimization_safe(deserializer.file_version) {
             regular_deserialize_vec::<T>(deserializer)
         } else {
             use std::mem;
@@ -343,23 +316,37 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             let elem_size = mem::size_of::<T>();
             let num_elems = deserializer.read_usize();
             let num_bytes = elem_size * num_elems;
-            let layout = alloc::allocator::Layout::from_size_align(num_bytes,align).unwrap();
-            let ptr = unsafe {alloc::heap::Heap.alloc(layout.clone()).unwrap()};        
+            let layout = alloc::allocator::Layout::from_size_align(num_bytes, align).unwrap();
+            let ptr = unsafe { alloc::heap::Heap.alloc(layout.clone()).unwrap() };
 
             {
-                let slice = unsafe {std::slice::from_raw_parts_mut(ptr, num_bytes)};            
+                let slice = unsafe { std::slice::from_raw_parts_mut(ptr, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
-                    Ok(()) => {},
+                    Ok(()) => {}
                     _ => {
-                        unsafe {alloc::heap::Heap.dealloc(ptr, layout);}
+                        unsafe {
+                            alloc::heap::Heap.dealloc(ptr, layout);
+                        }
                         panic!("Failed to read from file");
                     }
                 }
             }
-            unsafe {Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems)}
+            unsafe { Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems) }
         }
     }
 }
+    
+
+unsafe impl ReprC for u8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for i8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for u16 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for i16 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for u32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for i32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for u64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for i64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 
 
 impl Serialize for u8 {

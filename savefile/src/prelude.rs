@@ -1,1 +1,1 @@
-pub use savefile::{Deserialize, Deserializer, Removed, Serialize, Serializer, ReprC};
+pub use savefile::{Deserialize, Deserializer, Removed, ReprC, Serialize, Serializer};

@@ -1,5 +1,4 @@
 #![feature(test)]
-
 extern crate test;
 extern crate savefile;
 #[macro_use]
@@ -7,6 +6,10 @@ extern crate savefile_derive;
 use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
+
+mod test_versioning;
+mod test_nested_non_repr_c;
+mod test_nested_repr_c;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct NonCopy {
@@ -130,14 +133,13 @@ pub fn test_string() {
     assert_roundtrip("test string".to_string());
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ReprC, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct BenchStruct {
     x: usize,
     y: usize,
     z: u8,
 }
 
-unsafe impl savefile::prelude::ReprC for BenchStruct {} 
 
 use test::{Bencher, black_box};
 
