@@ -9,17 +9,35 @@ use std::collections::HashMap;
 use std::hash::Hash;
 extern crate test;
 
+/// Object to which serialized data is to be written.
+/// This is basically just a wrapped [std::io::Write] object
+/// and a file protocol version number.
 pub struct Serializer<'a> {
     writer: &'a mut Write,
     pub version: u32,
 }
 
+/// Object from which bytes to be deserialized are read.
+/// This is basically just a wrapped [std::io::Read] object,
+/// the version number of the file being read, and the
+/// current version number of the data structures in memory.
 pub struct Deserializer<'a> {
     reader: &'a mut Read,
     pub file_version: u32,
     pub memory_version: u32,
 }
 
+/// This is a marker trait for types which have an in-memory layout that is packed
+/// and therefore identical to the layout that savefile will use on disk. 
+/// This means that types for which this trait is implemented can be serialized
+/// very quickly by just writing their raw bits to disc.
+///
+/// Rules to implement this trait:
+///
+/// * The type must be copy
+/// * The type must not contain any padding
+/// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
+/// * All the constituent types of the type must also implement ReprC (correctly).
 pub unsafe trait ReprC: Copy {}
 
 impl<'a> Serializer<'a> {
@@ -66,6 +84,17 @@ impl<'a> Serializer<'a> {
         self.writer.write_all(asb).unwrap();
     }
 
+    /// Creata a new serializer.
+    ///
+    /// * `writer` must be an implementatino of [std::io::Write]
+    /// * version must be the current version number of the data structures in memory.
+    ///   savefile does not support serializing data in any other version number.
+    ///   Whenever a field is removed from the protocol, the version number should
+    ///   be incremented by 1, and the removed field should be marked with
+    ///   a version attribute like:
+    ///   `#[versions = "N..M"]`
+    ///   Where N is the first version in which the field appear (0 if the field has always existed)
+    ///   and M is the version in which the field was removed.
     pub fn new(writer: &mut Write, version: u32) -> Serializer {
         writer.write_u32::<LittleEndian>(version).unwrap();
         Serializer {
@@ -116,6 +145,12 @@ impl<'a> Deserializer<'a> {
         self.reader.read_exact(&mut v).unwrap();
         String::from_utf8(v).unwrap()
     }
+
+    /// Create a new deserializer.
+    /// 
+    /// The arguments should be:
+    ///  * `reader` A [std::io::Read] object to read serialized bytes from.
+    ///  * `version` The version number of the data structures in memory.
     pub fn new(reader: &mut Read, version: u32) -> Deserializer {
         let file_ver = reader.read_u32::<LittleEndian>().unwrap();
         if file_ver > version {
@@ -132,29 +167,58 @@ impl<'a> Deserializer<'a> {
     }
 }
 
+
+/// This trait must be implemented for all data structures you wish to be
+/// able to serialize. To actually serialize data: create a [Serializer],
+/// then call serialize on your data to save, giving the Serializer
+/// as an argument.
+/// 
+/// The most convenient way to implement this is to use 
+/// #[macro_use]
+/// extern crate savefile-derive;
+/// 
+/// and the use #[derive(Serialize)]
 pub trait Serialize {
     /// Serialize self into the given serializer.
     fn serialize(&self, serializer: &mut Serializer); //TODO: Do error handling
 
+    /// Determine if memory layout is identical to file with version
+    /// corresponding to serializer.version.
     /// It is totally optional to implement this!
     /// Implementations must only return true if
     /// the version number of the chosen serializer corresponds
     /// to serializing the entire memory contents of the Self type.
-    fn repr_c_optimization_safe(serializer: &mut Serializer) -> bool {
+    ///
+    /// If this is returns true AND the Self type implements the unsafe
+    /// [ReprC] trait, serialization of Vec<Self> objects will be faster.
+    fn repr_c_optimization_safe(_serializer: &mut Serializer) -> bool {
         false
     }
 
 }
 
+/// This trait must be implemented for all data structures you wish to
+/// be able to deserialize. 
+/// 
+/// The most convenient way to implement this is to use 
+/// #[macro_use]
+/// extern crate savefile-derive;
+/// 
+/// and the use #[derive(Deserialize)]
 pub trait Deserialize {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer) -> Self; //TODO: Do error handling
 
+    /// Determine if memory layout is identical to file with version
+    /// corresponding to serializer.memory_version.
     /// It is totally optional to implement this!
     /// Implementations must only return true if
     /// the version number of the chosen serializer corresponds
     /// to serializing the entire memory contents of the Self type.
-    fn repr_c_optimization_safe(deserializer: &mut Deserializer) -> bool {
+    ///
+    /// If this is returns true AND the Self type implements the unsafe
+    /// ReprC trait, deserialization of Vec<Self> objects will be faster.
+    fn repr_c_optimization_safe(_deserializer: &mut Deserializer) -> bool {
         false
     }
 }
