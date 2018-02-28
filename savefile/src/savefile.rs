@@ -136,17 +136,6 @@ pub trait Serialize {
     /// Serialize self into the given serializer.
     fn serialize(&self, serializer: &mut Serializer); //TODO: Do error handling
 
-
-
-    /// It is totally optional to implement this.
-    /// this function just calls self.serialize. Use
-    /// this if you have a specialization that can be runtime-determined
-    /// to not be valid, in which case calling this method is a simple way
-    /// to  call the default automatically derived implementation (from #[derive(Serialize)])
-    fn serialize_auto(&self, serializer: &mut Serializer) {        
-        self.serialize(serializer);
-    }
-
     /// It is totally optional to implement this!
     /// Implementations must only return true if
     /// the version number of the chosen serializer corresponds
@@ -161,14 +150,6 @@ pub trait Deserialize {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer) -> Self; //TODO: Do error handling
 
-    /// It is totally optional to implement this.
-    /// this function just calls Self::deserialize. Use
-    /// this if you have a specialization that can be runtime-determined
-    /// to not be valid, in which case calling this method is a simple way
-    /// to  call the default automatically derived implementation (from #[derive(Serialize)])
-    fn deserialize_auto(deserializer: &mut Deserializer) -> Self where Self: Sized {        
-        <Self>::deserialize(deserializer)
-    }
     /// It is totally optional to implement this!
     /// Implementations must only return true if
     /// the version number of the chosen serializer corresponds
@@ -237,65 +218,82 @@ impl<T: Deserialize> Deserialize for Removed<T> {
     }
 }
 
+fn regular_serialize_vec<T:Serialize>(item:&Vec<T>,serializer: &mut Serializer) {
+    let l = item.len();
+    serializer.write_usize(l);
+    for item in item.iter() {
+        item.serialize(serializer)
+    }
+
+}
+
 impl<T: Serialize> Serialize for Vec<T> {
     default fn serialize(&self, serializer: &mut Serializer) {
-        let l = self.len();
-        serializer.write_usize(l);
-        for item in self.iter() {
-            item.serialize(serializer)
-        }
+        regular_serialize_vec(self,serializer);
     }
 }
 
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer) {
-        let l = self.len();
-        serializer.write_usize(l);
         unsafe {
-            serializer.write_buf(std::slice::from_raw_parts(
-                self.as_ptr() as *const u8,
-                std::mem::size_of::<T>() * l,
-            ));
+            if !T::repr_c_optimization_safe(serializer) {
+                regular_serialize_vec(self,serializer);
+            } else {                
+                let l = self.len();
+                serializer.write_usize(l);
+                serializer.write_buf(std::slice::from_raw_parts(
+                    self.as_ptr() as *const u8,
+                    std::mem::size_of::<T>() * l,
+                ));
+            }      
+
         }
     }
 }
 
 
-
-
-impl<T: Deserialize> Deserialize for Vec<T> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Self {
+fn regular_deserialize_vec<T:Deserialize>(deserializer: &mut Deserializer) -> Vec<T> {
         let l = deserializer.read_usize();
         let mut ret = Vec::with_capacity(l);
         for _ in 0..l {
             ret.push(T::deserialize(deserializer));
         }
         ret
+
+}
+
+impl<T: Deserialize> Deserialize for Vec<T> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Self {
+        regular_deserialize_vec::<T>(deserializer)
     }
 }
 
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Self {
-        use std::mem;
-        use std::heap::Alloc;
-        let align = mem::align_of::<T>();
-        let elem_size = mem::size_of::<T>();
-        let num_elems = deserializer.read_usize();
-        let num_bytes = elem_size * num_elems;
-        let layout = alloc::allocator::Layout::from_size_align(num_bytes,align).unwrap();
-        let ptr = unsafe {alloc::heap::Heap.alloc(layout.clone()).unwrap()};        
+        if !T::repr_c_optimization_safe(deserializer) {
+            regular_deserialize_vec::<T>(deserializer)
+        } else {
+            use std::mem;
+            use std::heap::Alloc;
+            let align = mem::align_of::<T>();
+            let elem_size = mem::size_of::<T>();
+            let num_elems = deserializer.read_usize();
+            let num_bytes = elem_size * num_elems;
+            let layout = alloc::allocator::Layout::from_size_align(num_bytes,align).unwrap();
+            let ptr = unsafe {alloc::heap::Heap.alloc(layout.clone()).unwrap()};        
 
-        {
-            let slice = unsafe {std::slice::from_raw_parts_mut(ptr, num_bytes)};            
-            match deserializer.reader.read_exact(slice) {
-                Ok(()) => {},
-                _ => {
-                    unsafe {alloc::heap::Heap.dealloc(ptr, layout);}
-                    panic!("Failed to read from file");
+            {
+                let slice = unsafe {std::slice::from_raw_parts_mut(ptr, num_bytes)};            
+                match deserializer.reader.read_exact(slice) {
+                    Ok(()) => {},
+                    _ => {
+                        unsafe {alloc::heap::Heap.dealloc(ptr, layout);}
+                        panic!("Failed to read from file");
+                    }
                 }
             }
+            unsafe {Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems)}
         }
-        unsafe {Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems)}
     }
 }
 
