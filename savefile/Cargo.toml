@@ -16,6 +16,6 @@ license = "MIT/Apache-2.0"
 travis-ci = { repository = "avl/savefile", branch = "master" }
 
 [dependencies]
-savefile-derive = { path = "../savefile" ,version = "0.1.0" }
+savefile-derive = { path = "../savefile-derive" , version = "0.1.0" }
 byteorder="1.2.1"
 
