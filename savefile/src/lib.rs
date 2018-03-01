@@ -37,23 +37,23 @@
 //!     inventory : Vec<String>,
 //! }
 //!
-//! fn save(player:&Player) {
+//! fn save_player(player:&Player) {
 //!     let mut f = File::create("save.bin").unwrap();
-//!     Serializer::store(&mut f, 0, player);
+//!     save(&mut f, 0, player);
 //! }
 //!
-//! fn load() -> Player {
+//! fn load_player() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     Deserializer::fetch(&mut f, 0).unwrap()
+//!     load(&mut f, 0).unwrap()
 //! }
 //!
 //! fn main() {
-//!     save(&Player { name: "Steve".to_string(), strength: 42,
+//!     save_player(&Player { name: "Steve".to_string(), strength: 42,
 //!         inventory: vec!(
 //!             "wallet".to_string(),
 //!             "car keys".to_string(),
 //!             "glasses".to_string())});
-//!     assert_eq!(load().name,"Steve".to_string());
+//!     assert_eq!(load_player().name,"Steve".to_string());
 //!
 //! }
 //!

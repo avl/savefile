@@ -1,4 +1,5 @@
-pub use savefile::{Deserialize, Deserializer, Removed, ReprC, 
-    Serialize, Serializer, WithSchema, 
-    Schema, SchemaStruct, SchemaPrimitive, SchemaEnum,
-    Variant, Field, SavefileError};
+pub use savefile::{Deserialize, Removed, ReprC, 
+    Serialize, WithSchema, Serializer, Deserializer,
+    SavefileError, load, save, load_noschema, save_noschema,
+Schema, SchemaStruct, SchemaPrimitive, SchemaEnum,
+    Variant, Field};

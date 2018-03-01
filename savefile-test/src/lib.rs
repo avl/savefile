@@ -30,23 +30,23 @@
 //!     inventory : Vec<String>,
 //! }
 //!
-//! fn save(player:&Player) {
+//! fn save_player(player:&Player) {
 //!     let mut f = File::create("save.bin").unwrap();
-//!     Serializer::store(&mut f, 0, player);
+//!     save(&mut f, 0, player);
 //! }
 //!
-//! fn load() -> Player {
+//! fn load_player() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     Deserializer::fetch(&mut f, 0).unwrap()
+//!     load(&mut f, 0).unwrap()
 //! }
 //!
 //! fn main() {
-//!     save(&Player { name: "Steve".to_string(), strength: 42,
+//!     save_player(&Player { name: "Steve".to_string(), strength: 42,
 //!         inventory: vec!(
 //!             "wallet".to_string(),
 //!             "car keys".to_string(),
 //!             "glasses".to_string())});
-//!     assert_eq!(load().name,"Steve".to_string());
+//!     assert_eq!(load_player().name,"Steve".to_string());
 //!
 //! }
 //!
@@ -79,13 +79,13 @@ pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: 
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::store(&mut bufw, 0, &sample).unwrap();
+            Serializer::save(&mut bufw, 0, &sample).unwrap();
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
     {
-        let roundtrip_result = Deserializer::fetch::<E>(&mut f, 0).unwrap();
+        let roundtrip_result = Deserializer::load::<E>(&mut f, 0).unwrap();
         assert_eq!(sample, roundtrip_result);        
     }
 
@@ -213,13 +213,13 @@ fn bench_serialize(b: &mut Bencher) {
     }
  	b.iter(move || {
         {            
-            Serializer::store_noschema(&mut f,0,&test).unwrap();
+            save_noschema(&mut f,0,&test).unwrap();
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
-            let r = Deserializer::fetch_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();            
+            let r = load_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();            
             assert!(r.len()==1000);  
         }       
 
@@ -291,12 +291,12 @@ pub fn assert_roundtrip_to_new_version<
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::store(&mut bufw, version_number1, &sample_v1).unwrap();
+            Serializer::save(&mut bufw, version_number1, &sample_v1).unwrap();
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    let roundtrip_result = Deserializer::fetch::<E2>(&mut f, version_number2).unwrap();    
+    let roundtrip_result = Deserializer::load::<E2>(&mut f, version_number2).unwrap();    
     assert_eq!(expected_v2, roundtrip_result);
     roundtrip_result
 }

@@ -145,13 +145,13 @@ impl<'a> Serializer<'a> {
     ///   `#[versions = "N..M"]`
     ///   Where N is the first version in which the field appear (0 if the field has always existed)
     ///   and M is the version in which the field was removed.
-    pub fn store<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
-        Ok(Self::store_impl(writer,version,data,true)?)
+    pub fn save<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+        Ok(Self::save_impl(writer,version,data,true)?)
     }
-    pub fn store_noschema<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
-        Ok(Self::store_impl(writer,version,data,false)?)
+    pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+        Ok(Self::save_impl(writer,version,data,false)?)
     }
-    fn store_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) -> Result<(),SavefileError> {
+    fn save_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) -> Result<(),SavefileError> {
         writer.write_u32::<LittleEndian>(version).unwrap();
 
         if with_schema
@@ -217,13 +217,13 @@ impl<'a> Deserializer<'a> {
     /// The arguments should be:
     ///  * `reader` A [std::io::Read] object to read serialized bytes from.
     ///  * `version` The version number of the data structures in memory.
-    pub fn fetch<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
-        Deserializer::fetch_impl::<T>(reader,version,true)
+    pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+        Deserializer::load_impl::<T>(reader,version,true)
     }
-    pub fn fetch_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
-        Deserializer::fetch_impl::<T>(reader,version,false)
+    pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+        Deserializer::load_impl::<T>(reader,version,false)
     }
-    fn fetch_impl<T:WithSchema+Deserialize>(reader: &mut Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
+    fn load_impl<T:WithSchema+Deserialize>(reader: &mut Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
         let file_ver = reader.read_u32::<LittleEndian>()?;
         if file_ver > version {
             panic!(
@@ -258,7 +258,29 @@ impl<'a> Deserializer<'a> {
     }
 }
 
+pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+    Deserializer::load::<T>(reader,version)
+}
 
+pub fn save<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+    Serializer::save::<T>(writer,version,data)
+}
+
+pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+    Deserializer::load_noschema::<T>(reader,version)
+}
+
+pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+    Serializer::save_noschema::<T>(writer,version,data)
+}
+
+/// This trait must be implemented by all data structures you wish to be able to save.
+/// It must encode the schema for the datastructure when saved using the given version number.
+/// When files are saved, the schema is encoded into the file.
+/// when loading, the schema is inspected to make sure that the load will safely succeed.
+/// This is only for increased safety, the file format does not in fact use the schema for any other
+/// purpose, the design is schema-less at the core, the schema is just an added layer of safety (which
+/// can be disabled).
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
     fn schema(version:u32) -> Schema;    

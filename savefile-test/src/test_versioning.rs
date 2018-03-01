@@ -1,4 +1,5 @@
 use ::savefile::prelude::*;
+
 #[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
 struct Version1 {
 	a: String,
