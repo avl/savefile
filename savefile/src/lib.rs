@@ -32,19 +32,19 @@
 //!
 //! #[derive(Serialize,Deserialize)]
 //! struct Player {
-//!		name : String,
-//! 	strength : u32,
+//!     name : String,
+//!     strength : u32,
 //!     inventory : Vec<String>,
 //! }
 //!
 //! fn save(player:&Player) {
-//! 	let mut f = File::create("save.bin").unwrap();
+//!     let mut f = File::create("save.bin").unwrap();
 //!     let mut serializer = Serializer::new(&mut f, 0);
 //!     player.serialize(&mut serializer);
 //! }
 //!
 //! fn load() -> Player {
-//! 	let mut f = File::open("save.bin").unwrap();
+//!     let mut f = File::open("save.bin").unwrap();
 //!     let mut deserializer = Deserializer::new(&mut f, 0);
 //!     Player::deserialize(&mut deserializer)
 //! }
