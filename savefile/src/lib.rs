@@ -30,7 +30,7 @@
 //! use std::io::prelude::*;
 //!
 //!
-//! #[derive(Serialize,Deserialize)]
+//! #[derive(WithSchema,Serialize,Deserialize)]
 //! struct Player {
 //!     name : String,
 //!     strength : u32,
@@ -39,12 +39,12 @@
 //!
 //! fn save(player:&Player) {
 //!     let mut f = File::create("save.bin").unwrap();
-//!     Serializer::store(&mut f, 0, &player);
+//!     Serializer::store(&mut f, 0, player);
 //! }
 //!
 //! fn load() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     let player = Deserializer::fetch(&mut f, 0);
+//!     Deserializer::fetch(&mut f, 0)
 //! }
 //!
 //! fn main() {
@@ -53,7 +53,7 @@
 //!             "wallet".to_string(),
 //!             "car keys".to_string(),
 //!             "glasses".to_string())});
-//! 	assert_eq!(load().name,"Steve".to_string());
+//!     assert_eq!(load().name,"Steve".to_string());
 //!
 //! }
 //!
