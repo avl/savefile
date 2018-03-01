@@ -37,7 +37,7 @@
 //!
 //! fn load() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     Deserializer::fetch(&mut f, 0)
+//!     Deserializer::fetch(&mut f, 0).unwrap()
 //! }
 //!
 //! fn main() {
@@ -79,13 +79,13 @@ pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: 
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            let mut serializer = Serializer::store(&mut bufw, 0, &sample);
+            Serializer::store(&mut bufw, 0, &sample).unwrap();
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
     {
-        let roundtrip_result = Deserializer::fetch::<E>(&mut f, 0);
+        let roundtrip_result = Deserializer::fetch::<E>(&mut f, 0).unwrap();
         assert_eq!(sample, roundtrip_result);        
     }
 
@@ -105,12 +105,12 @@ pub fn test_struct_enum() {
     assert_roundtrip(TestStructEnum::Variant2 { a: 47 });
 }
 
+#[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
+pub enum TestTupleEnum {
+    Variant1(u8),
+}
 #[test]
 pub fn test_tuple_enum() {
-    #[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
-    pub enum TestTupleEnum {
-        Variant1(u8),
-    }
     assert_roundtrip(TestTupleEnum::Variant1(37));
 }
 
@@ -195,6 +195,7 @@ pub struct BenchStruct {
 }
 
 
+#[allow(unused_imports)]
 use test::{Bencher, black_box};
 
 #[bench]
@@ -212,13 +213,13 @@ fn bench_serialize(b: &mut Bencher) {
     }
  	b.iter(move || {
         {            
-            let mut serializer = Serializer::store_noschema(&mut f,0,&test);
+            Serializer::store_noschema(&mut f,0,&test).unwrap();
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
-            let r = Deserializer::fetch_noschema::<Vec<BenchStruct>>(&mut f, 0);            
+            let r = Deserializer::fetch_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();            
             assert!(r.len()==1000);  
         }       
 
@@ -290,12 +291,12 @@ pub fn assert_roundtrip_to_new_version<
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::store(&mut bufw, version_number1, &sample_v1);
+            Serializer::store(&mut bufw, version_number1, &sample_v1).unwrap();
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    let roundtrip_result = Deserializer::fetch::<E2>(&mut f, version_number2);    
+    let roundtrip_result = Deserializer::fetch::<E2>(&mut f, version_number2).unwrap();    
     assert_eq!(expected_v2, roundtrip_result);
     roundtrip_result
 }

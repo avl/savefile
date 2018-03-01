@@ -1,5 +1,4 @@
 use ::savefile::prelude::*;
-use ::assert_roundtrip_to_new_version;
 #[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
 struct Version1 {
 	a: String,
@@ -34,6 +33,7 @@ struct Version3 {
 
 #[test]
 fn simple_vertest1() {
+    use ::assert_roundtrip_to_new_version;
 	let ver2:Version2 = assert_roundtrip_to_new_version(
 		Version1 {
 			a: "Hello".to_string(),
@@ -81,6 +81,7 @@ enum EnumVer2 {
 
 #[test]
 fn test_versioning_of_enums() {
+    use ::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         EnumVer1::Variant1,
         0,

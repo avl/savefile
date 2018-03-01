@@ -132,6 +132,9 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     let serializer = quote_spanned! {span=>
         Serializer
     };
+    let saveerr = quote_spanned! {span=>
+        Result<(),SavefileError>
+    };
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -160,10 +163,10 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             if check_is_remove(&x.ty) {
                                 panic!("The Removed type is not supported for enum types");
                             }
-                            quote!{ #field_name.serialize(serializer); }
+                            quote!{ #field_name.serialize(serializer)?; }
                         });
                         output.push(
-                            quote!(#variant_name_spanned{#(#fields_names,)*} => { serializer.write_u8(#var_idx); #(#fields_serialized)* } ),
+                            quote!(#variant_name_spanned{#(#fields_names,)*} => { serializer.write_u8(#var_idx)?; #(#fields_serialized)* } ),
                         );
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
@@ -178,15 +181,15 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             });
                         let fields_serialized = (0..fields_unnamed.unnamed.len()).map(|idx| {
                             let nm = syn::Ident::from("x".to_string() + &idx.to_string());
-                            quote!{ #nm.serialize(serializer); }
+                            quote!{ #nm.serialize(serializer)?; }
                         });
                         output.push(
-                            quote!(#variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx); #(#fields_serialized)*  } ),
+                            quote!(#variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #(#fields_serialized)*  } ),
                         );
                     }
                     &syn::Fields::Unit => {
                         output.push(
-                            quote!( #variant_name_spanned => { serializer.write_u8(#var_idx) } ),
+                            quote!( #variant_name_spanned => { serializer.write_u8(#var_idx)? } ),
                         );
                     }
                 }
@@ -195,11 +198,12 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                 impl #impl_generics #serialize for #name #ty_generics #where_clause {
 
                     #[allow(unused_comparisons)]
-                    fn serialize(&self, serializer: &mut #serializer) {
+                    fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
                         //println!("Serializer running on {} : {:?}", stringify!(#name), self);
                         match self {
                             #(#output,)*
                         }
+                        Ok(())
                     }
                     /*
                     fn repr_c_optimization_safe(_serializer: &mut #serializer) -> bool {
@@ -230,7 +234,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             }
                             optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
                             output.push(quote!(
-                                self.#id.serialize(#local_serializer);
+                                self.#id.serialize(#local_serializer)?;
                                 ));
                         } else {
                             if field_to_version < std::u32::MAX {
@@ -244,7 +248,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             }
                             output.push(quote!(
                                     if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
-                                        self.#id.serialize(#local_serializer);
+                                        self.#id.serialize(#local_serializer)?;
                                     }));
                         }
                     }
@@ -252,7 +256,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                 quote! {
                     impl #impl_generics #serialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
-                        fn serialize(&self, serializer: &mut #serializer) {
+                        fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
                             //println!("Serializer running on {}", stringify!(#name));
                             let local_serializer = serializer;
                             if #min_safe_version > local_serializer.version {
@@ -261,6 +265,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                                 }
         
                             #(#output)*
+                            Ok(())
                         }
                         /*
                         #[allow(unused_comparisons)]
@@ -293,6 +298,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
     let defspan = proc_macro2::Span::def_site();
     let name = input.ident;
 
+
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
@@ -301,6 +307,10 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
     };
     let deserializer = quote_spanned! {span=>
         Deserializer
+    };
+
+    let saveerr = quote_spanned! {span=>
+        SavefileError
     };
 
     let removeddef = quote_spanned! { span => Removed };
@@ -331,7 +341,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                             let ty = quote_spanned! { span => #ty };
                             let field_name = f.ident.unwrap();
                             let field_name = quote_spanned! { span => #field_name};
-                            quote!{ #field_name: #ty::deserialize(deserializer) }
+                            quote!{ #field_name: #ty::deserialize(deserializer)? }
                         });
                         output.push(
                             quote!( #var_idx => #variant_name_spanned{ #(#fields_deserialized,)* } ),
@@ -345,7 +355,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                                 panic!("The Removed type is not supported for enum types");
                             };
 
-                            quote!{ #ty::deserialize(deserializer) }
+                            quote!{ #ty::deserialize(deserializer)? }
                         });
                         output.push(
                             quote!( #var_idx => #variant_name_spanned( #(#fields_deserialized,)*) ),
@@ -359,12 +369,12 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
             quote! {
                 impl #impl_generics #deserialize for #name #ty_generics #where_clause {
                     #[allow(unused_comparisons)]
-                    fn deserialize(deserializer: &mut #deserializer) -> Self {
+                    fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                         //println!("Deserializer running on {}", stringify!(#name));
-                        match deserializer.read_u8() {
+                        Ok(match deserializer.read_u8()? {
                             #(#output,)*
                             _ => panic!("Corrupt file - unknown enum variant detected.")
-                        }
+                        })
                     }
                 }
             }
@@ -408,7 +418,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         };
                         optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_deserializer)));
                         quote_spanned! { span =>
-                            <#field_type>::deserialize(#local_deserializer)
+                            <#field_type>::deserialize(#local_deserializer)?
                         }
                     } else {    
                         if field_to_version < std::u32::MAX { // A delete
@@ -423,7 +433,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
                         quote_spanned! { span =>
                             if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                                <#field_type>::deserialize(#local_deserializer)
+                                <#field_type>::deserialize(#local_deserializer)?
                             } else {
                                 #effective_default_val
                             }
@@ -436,12 +446,12 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
-                        fn deserialize(deserializer: &mut #deserializer) -> Self {
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                             let local_deserializer = deserializer;
                             //println!("Deserializer running on {}", stringify!(#name));
-                            #name {
+                            Ok(#name {
                                 #(#output,)*
-                            }
+                            })
                         }                        
                     }
                 }

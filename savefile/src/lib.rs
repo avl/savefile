@@ -44,7 +44,7 @@
 //!
 //! fn load() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     Deserializer::fetch(&mut f, 0)
+//!     Deserializer::fetch(&mut f, 0).unwrap()
 //! }
 //!
 //! fn main() {
@@ -59,6 +59,9 @@
 //!
 //! ```
 //!
+
+#[macro_use] 
+extern crate failure;
 
 pub mod prelude;
 mod savefile;
