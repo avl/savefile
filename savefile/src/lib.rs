@@ -39,14 +39,12 @@
 //!
 //! fn save(player:&Player) {
 //!     let mut f = File::create("save.bin").unwrap();
-//!     let mut serializer = Serializer::new(&mut f, 0);
-//!     player.serialize(&mut serializer);
+//!     Serializer::store(&mut f, 0, &player);
 //! }
 //!
 //! fn load() -> Player {
 //!     let mut f = File::open("save.bin").unwrap();
-//!     let mut deserializer = Deserializer::new(&mut f, 0);
-//!     Player::deserialize(&mut deserializer)
+//!     let player = Deserializer::fetch(&mut f, 0);
 //! }
 //!
 //! fn main() {

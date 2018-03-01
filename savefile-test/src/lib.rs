@@ -157,13 +157,13 @@ fn bench_serialize(b: &mut Bencher) {
     }
  	b.iter(move || {
         {            
-            let mut serializer = Serializer::store(&mut f,0,&test);
+            let mut serializer = Serializer::store_noschema(&mut f,0,&test);
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
-            let r = Deserializer::fetch::<Vec<BenchStruct>>(&mut f, 0);            
+            let r = Deserializer::fetch_noschema::<Vec<BenchStruct>>(&mut f, 0);            
             assert!(r.len()==1000);  
         }       
 

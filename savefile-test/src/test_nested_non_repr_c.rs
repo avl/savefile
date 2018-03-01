@@ -26,7 +26,7 @@ fn test_not_raw_memcpy() {
 
     let mut f = Cursor::new(Vec::new());
     {
-        let mut serializer = Serializer::store_impl(&mut f, 0, &sample, false);
+        let mut serializer = Serializer::store_noschema(&mut f, 0, &sample);
     }
 
     let f_internal_size = f.get_ref().len();

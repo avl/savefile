@@ -107,7 +107,10 @@ impl<'a> Serializer<'a> {
     pub fn store<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) {
         Self::store_impl(writer,version,data,true);
     }
-    pub fn store_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) {
+    pub fn store_noschema<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) {
+        Self::store_impl(writer,version,data,false);
+    }
+    fn store_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) {
         writer.write_u32::<LittleEndian>(version).unwrap();
 
         if with_schema
@@ -168,12 +171,18 @@ impl<'a> Deserializer<'a> {
         String::from_utf8(v).unwrap()
     }
 
-    /// Create a new deserializer.
+    /// Deserialize an object of type T from the given reader.
     ///
     /// The arguments should be:
     ///  * `reader` A [std::io::Read] object to read serialized bytes from.
     ///  * `version` The version number of the data structures in memory.
     pub fn fetch<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> T {
+        Deserializer::fetch_impl::<T>(reader,version,true)
+    }
+    pub fn fetch_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> T {
+        Deserializer::fetch_impl::<T>(reader,version,false)
+    }
+    fn fetch_impl<T:WithSchema+Deserialize>(reader: &mut Read, version: u32, fetch_schema: bool) -> T {
         let file_ver = reader.read_u32::<LittleEndian>().unwrap();
         if file_ver > version {
             panic!(
@@ -182,6 +191,7 @@ impl<'a> Deserializer<'a> {
             );
         }
 
+        if fetch_schema
         {
             let mut schema_deserializer = Deserializer::new_raw(reader);
             let memory_schema = T::schema(file_ver);
