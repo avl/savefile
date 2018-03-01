@@ -104,9 +104,25 @@ impl<'a> Serializer<'a> {
     ///   `#[versions = "N..M"]`
     ///   Where N is the first version in which the field appear (0 if the field has always existed)
     ///   and M is the version in which the field was removed.
-    pub fn new(writer: &mut Write, version: u32) -> Serializer {
+    pub fn store<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) {
+        Self::store_impl(writer,version,data,true);
+    }
+    pub fn store_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) {
         writer.write_u32::<LittleEndian>(version).unwrap();
-        Serializer { writer, version }
+
+        if with_schema
+        {
+            let schema = T::schema(version);
+            let mut schema_serializer=Serializer::new_raw(writer);
+            schema.serialize(&mut schema_serializer);            
+        }
+
+        let mut serializer=Serializer { writer, version };
+        data.serialize(&mut serializer);
+    }
+
+    pub fn new_raw(writer: &mut Write) -> Serializer {
+        Serializer { writer, version:0 }
     }
 }
 
@@ -157,7 +173,7 @@ impl<'a> Deserializer<'a> {
     /// The arguments should be:
     ///  * `reader` A [std::io::Read] object to read serialized bytes from.
     ///  * `version` The version number of the data structures in memory.
-    pub fn new(reader: &mut Read, version: u32) -> Deserializer {
+    pub fn fetch<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> T {
         let file_ver = reader.read_u32::<LittleEndian>().unwrap();
         if file_ver > version {
             panic!(
@@ -165,10 +181,28 @@ impl<'a> Deserializer<'a> {
                 file_ver, version
             );
         }
-        Deserializer {
+
+        {
+            let mut schema_deserializer = Deserializer::new_raw(reader);
+            let memory_schema = T::schema(file_ver);
+            let file_schema = Schema::deserialize(&mut schema_deserializer);
+            if file_schema != memory_schema {
+                panic!("Saved schema differs from in-memory schema for version {}. File:\n{:?}\nMemory:\n{:?}",file_ver,
+                    file_schema,memory_schema);
+            }
+        }
+        let mut deserializer=Deserializer {
             reader,
             file_version: file_ver,
             memory_version: version,
+        };
+        T::deserialize(&mut deserializer)
+    }
+    pub fn new_raw(reader: &mut Read) -> Deserializer {
+        Deserializer {
+            reader,
+            file_version: 0,
+            memory_version: 0,
         }
     }
 }
@@ -209,26 +243,31 @@ pub trait Deserialize : WithSchema {
 }
 
 
+#[derive(Debug,PartialEq)]
 pub struct Field {
     pub name : String,
     pub value : Box<Schema>
 }
 
+#[derive(Debug,PartialEq)]
 pub struct SchemaStruct {
     pub fields : Vec<Field>
 }
 
+#[derive(Debug,PartialEq)]
 pub struct Variant {
     pub name : String,
     pub discriminator : u16,
     pub fields : Vec<Box<Schema>>
 }
 
+#[derive(Debug,PartialEq)]
 pub struct SchemaEnum {
     pub variants : Vec<Variant>
 }
 
 #[allow(non_camel_case_types)]
+#[derive(Debug,PartialEq)]
 pub enum SchemaPrimitive {
     schema_i8,
     schema_u8,
@@ -246,6 +285,7 @@ pub enum SchemaPrimitive {
 
 /// The schema represents the save file format
 /// of your data. 
+#[derive(Debug,PartialEq)]
 pub enum Schema {
     Struct(SchemaStruct),
     Enum(SchemaEnum),
@@ -522,17 +562,17 @@ impl<T> Removed<T> {
     }
 }
 
-impl<T> WithSchema for Removed<T> {
-    fn schema(_version:u32) -> Schema {
-        panic!("Something went wrong, removed fields should never be serialized");
+impl<T:WithSchema> WithSchema for Removed<T> {
+    fn schema(version:u32) -> Schema {
+        <T>::schema(version)
     }    
 }
-impl<T> Serialize for Removed<T> {
+impl<T:WithSchema> Serialize for Removed<T> {
     fn serialize(&self, _serializer: &mut Serializer) {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
     }
 }
-impl<T: Deserialize> Deserialize for Removed<T> {
+impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Self {
         T::deserialize(deserializer);
         Removed {

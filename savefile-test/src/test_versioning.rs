@@ -10,10 +10,10 @@ struct Version1 {
 struct Version2 {
 	a: String,		
     #[versions = "0..0"]
-	oldb: Removed<Vec<String>>,
+	b: Removed<Vec<String>>,
     #[default_val = "123"]
     #[versions = "1.."]
-	b: u32,
+	newb: u32,
 	c: usize
 }
 
@@ -21,9 +21,9 @@ struct Version2 {
 struct Version3 {
 	a: String,		
     #[versions = "0..0"]
-	oldb: Removed<Vec<String>>,
+	b: Removed<Vec<String>>,
     #[versions = "1..1"]
-	b: u32,
+	newb: u32,
 	c: usize,
 	#[default_val = "37"]
     #[versions = "2.."]
@@ -43,8 +43,8 @@ fn simple_vertest1() {
 		0,
 		Version2 {
 			a: "Hello".to_string(),
-			oldb: Removed::new(),
-			b: 123,
+			b: Removed::new(),
+			newb: 123,
 			c: 412
 		},
 		1
@@ -55,8 +55,8 @@ fn simple_vertest1() {
 		1,
 		Version3 {
 			a: "Hello".to_string(),
-			oldb: Removed::new(),
-			b: 123,
+			b: Removed::new(),
+			newb: 123,
 			c: 412,
 			d: 37
 		},

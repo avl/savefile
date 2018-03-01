@@ -24,15 +24,13 @@ pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: 
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            let mut serializer = Serializer::new(&mut bufw, 0);
-            sample.serialize(&mut serializer);
+            let mut serializer = Serializer::store(&mut bufw, 0, &sample);
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
     {
-        let mut deserializer = Deserializer::new(&mut f, 0);
-        let roundtrip_result = E::deserialize(&mut deserializer);
+        let roundtrip_result = Deserializer::fetch::<E>(&mut f, 0);
         assert_eq!(sample, roundtrip_result);        
     }
 
@@ -159,15 +157,13 @@ fn bench_serialize(b: &mut Bencher) {
     }
  	b.iter(move || {
         {            
-            let mut serializer = Serializer::new(&mut f,0);
-            test.serialize(&mut serializer);            
+            let mut serializer = Serializer::store(&mut f,0,&test);
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
-            let mut deserializer = Deserializer::new(&mut f, 0);
-            let r=Vec::<BenchStruct>::deserialize(&mut deserializer);          
+            let r = Deserializer::fetch::<Vec<BenchStruct>>(&mut f, 0);            
             assert!(r.len()==1000);  
         }       
 
@@ -239,14 +235,12 @@ pub fn assert_roundtrip_to_new_version<
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            let mut serializer = Serializer::new(&mut bufw, version_number1);
-            sample_v1.serialize(&mut serializer);
+            Serializer::store(&mut bufw, version_number1, &sample_v1);
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    let mut deserializer = Deserializer::new(&mut f, version_number2);
-    let roundtrip_result = E2::deserialize(&mut deserializer);
+    let roundtrip_result = Deserializer::fetch::<E2>(&mut f, version_number2);    
     assert_eq!(expected_v2, roundtrip_result);
     roundtrip_result
 }
@@ -277,8 +271,6 @@ struct SmallStructRem2 {
     #[versions = "..0"]
     x1: Removed<u32>,
     x2: i32,
-    #[default_val = "xyz"]
-    #[versions = "1.."]
     x3: String,
     #[default_val = "123"]
     #[versions = "1.."]
@@ -297,7 +289,7 @@ pub fn test_small_struct_remove() {
         SmallStructRem2 {
             x1: Removed::new(),
             x2: 321,
-            x3: "xyz".to_string(),
+            x3: "hello".to_string(),
             x4: 123,
         },
         1,
