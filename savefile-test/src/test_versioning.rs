@@ -63,6 +63,35 @@ fn simple_vertest1() {
 		2
 		);
 
+}
 
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+enum EnumVer1 {
+    Variant1,
+    Variant2,
+}
+
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+enum EnumVer2 {
+    Variant1,
+    Variant2,
+    #[versions = "1.."]
+    Variant3,
+}
+
+#[test]
+fn test_versioning_of_enums() {
+    assert_roundtrip_to_new_version(
+        EnumVer1::Variant1,
+        0,
+        EnumVer2::Variant1,
+        1
+        );
+    assert_roundtrip_to_new_version(
+        EnumVer1::Variant2,
+        0,
+        EnumVer2::Variant2,
+        1
+        );
 
 }

@@ -1,3 +1,4 @@
+#![recursion_limit="128"]
 #![feature(proc_macro)]
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -27,7 +28,18 @@ fn check_is_remove(field_type: &syn::Type) -> bool {
     }
     is_remove
 }
+
 fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsResult {
+    let is_string=match field_type {
+        &syn::Type::Path(ref typepath) => {
+            if &typepath.path.segments[0].ident == "String" { true } else {false}
+        },
+        _ => false
+    };
+    parse_attr_tag2(attrs, is_string)
+
+}
+fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> AttrsResult {
     let mut field_from_version = 0;
     let mut field_to_version = std::u32::MAX;
     let default_trait = None;
@@ -50,18 +62,13 @@ fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsR
                                 panic!("Unexpected attribute value, please specify default values within quotes.");
                             }
                         };
-                        default_val = match field_type {
-                            &syn::Type::Path(ref typepath) => {
-                                if &typepath.path.segments[0].ident == "String" {
+                        default_val = if is_string_default_val {
                                     //let litstr=syn::LitStr::new(&default_val_str,span);
                                     Some(quote! { #default_val_str_lit })
                                 } else {
                                     let default_evaled = default_val_str_lit.value();
                                     Some(quote!{#default_evaled})
-                                }
-                            }
-                            _ => panic!("Field type is not compatible with default_val attribute"),
-                        }
+                                };
                     };
                     if x.ident.to_string() == "versions" {
                         match &x.lit {
@@ -537,6 +544,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 
 
 
+#[allow(non_snake_case)]
 #[proc_macro_derive(WithSchema, attributes(versions, default_val, default_trait))]
 pub fn withschema(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
@@ -567,8 +575,16 @@ pub fn withschema(input: TokenStream) -> TokenStream {
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
                 let var_idx = var_idx as u16;
                 let var_ident = variant.ident;
-                let variant_name = quote!{ #name::#var_ident };
+                let variant_name = quote!{ #var_ident };
                 let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
+
+                let verinfo = parse_attr_tag2(&variant.attrs, false);
+                let (field_from_version, field_to_version) =
+                    (verinfo.version_from, verinfo.version_to);
+
+                if field_to_version != std::u32::MAX {
+                    panic!("Savefile automatic derive does not support removal of enum values.");
+                }
 
                 let mut fields=Vec::new();
 
@@ -599,7 +615,11 @@ pub fn withschema(input: TokenStream) -> TokenStream {
                         //No fields
                     }
                 }
-                variants.push(quote!{#Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![#(#fields),*]}})
+                variants.push(quote!{
+                    (#field_from_version,
+                     #field_to_version,
+                     #Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![#(#fields),*]}
+                    )});
                 //variants.push(quote!{Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![]}})
             }
             quote! {
@@ -610,7 +630,13 @@ pub fn withschema(input: TokenStream) -> TokenStream {
                         let local_version = version;
                         #Schema::Enum (
                             #SchemaEnum {
-                                variants : vec![#(#variants),*]
+                                variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
+                                    if local_version >= fromver && local_version <= tover {
+                                        Some(x)
+                                    } else {
+                                        None
+                                    }
+                                }).collect()
                                 //variants : vec![]
                             }
                         )
