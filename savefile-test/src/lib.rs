@@ -228,12 +228,12 @@ struct SmallStruct2 {
 pub fn assert_roundtrip_to_new_version<
     E1: Serialize + Deserialize + Debug + PartialEq,
     E2: Serialize + Deserialize + Debug + PartialEq,
->(
+> (
     sample_v1: E1,
     version_number1: u32,
     expected_v2: E2,
     version_number2: u32,
-) {
+) -> E2 {
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
@@ -247,6 +247,7 @@ pub fn assert_roundtrip_to_new_version<
     let mut deserializer = Deserializer::new(&mut f, version_number2);
     let roundtrip_result = E2::deserialize(&mut deserializer);
     assert_eq!(expected_v2, roundtrip_result);
+    roundtrip_result
 }
 
 #[test]

@@ -295,6 +295,8 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         Deserializer
     };
 
+    let removeddef = quote_spanned! { span => Removed };
+
     let mut output = Vec::new();
     let mut optsafe_outputs = Vec::<quote::Tokens>::new();
     let expanded = match &input.data {
@@ -377,13 +379,15 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                         verinfo.default_trait,
                         verinfo.default_val,
                     );
-
+                    let fieldname=&id;
                     let effective_default_val = if let Some(defval) = default_val {
                         quote! { str::parse(#defval).unwrap() }
                     } else if let Some(deftrait) = default_trait {
                         quote! { #deftrait::default() }
+                    } else if is_removed {
+                        quote! { #removeddef::new() }
                     } else {
-                        quote! { panic!("internal error - there was no default value available for field.") }
+                        quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
                     };
 
                     if field_from_version > field_to_version {

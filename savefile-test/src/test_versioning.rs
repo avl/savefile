@@ -17,10 +17,24 @@ struct Version2 {
 	c: usize
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Version3 {
+	a: String,		
+    #[versions = "0..0"]
+	oldb: Removed<Vec<String>>,
+    #[versions = "1..1"]
+	b: u32,
+	c: usize,
+	#[default_val = "37"]
+    #[versions = "2.."]
+	d: usize
+}
+
+
 
 #[test]
 fn simple_vertest1() {
-	assert_roundtrip_to_new_version(
+	let ver2:Version2 = assert_roundtrip_to_new_version(
 		Version1 {
 			a: "Hello".to_string(),
 			b: vec!["a".to_string(),"b".to_string()],
@@ -35,4 +49,20 @@ fn simple_vertest1() {
 		},
 		1
 		);
+
+	assert_roundtrip_to_new_version(
+		ver2,
+		1,
+		Version3 {
+			a: "Hello".to_string(),
+			oldb: Removed::new(),
+			b: 123,
+			c: 412,
+			d: 37
+		},
+		2
+		);
+
+
+
 }
