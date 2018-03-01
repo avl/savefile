@@ -20,7 +20,8 @@ fn check_is_remove(field_type: &syn::Type) -> bool {
     let mut tokens = quote::Tokens::new();
     field_type.to_tokens(&mut tokens);
     for tok in tokens.into_iter() {
-        if tok.to_string()=="Removed" {
+        //        if tok.clone().into_tokens()==quote!( savefile::Removed ).clone().into_tokens() {
+        if tok.to_string()=="Removed" { //TODO: This is not robust, since it's based on text matching
             is_remove=true;
         }
     }
@@ -276,7 +277,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-#[proc_macro_derive(Deserialize)]
+#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_trait))]
 pub fn deserialize(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
@@ -450,8 +451,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
 
 
-
-#[proc_macro_derive(ReprC)]
+#[proc_macro_derive(ReprC, attributes(versions, default_val, default_trait))]
 pub fn reprc(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
@@ -533,4 +533,149 @@ pub fn reprc(input: TokenStream) -> TokenStream {
     //println!("Emitting: {:?}",expanded);
     expanded.into()
 }
+
+
+
+
+#[proc_macro_derive(WithSchema, attributes(versions, default_val, default_trait))]
+pub fn withschema(input: TokenStream) -> TokenStream {
+    // Construct a string representation of the type definition
+    let input: DeriveInput = syn::parse(input).unwrap();
+
+    let name = input.ident;
+
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let withschema = quote_spanned! {span=>
+        WithSchema
+    };
+
+    let local_version = quote_spanned! { defspan => local_version};
+    let SchemaStruct = quote_spanned! { span => SchemaStruct };
+    let SchemaEnum = quote_spanned! { span => SchemaEnum };
+    let Schema = quote_spanned! { span => Schema };
+    let Field = quote_spanned! { span => Field };
+    let Variant = quote_spanned! { span => Variant };
+    let WithSchema = quote_spanned! { span => WithSchema };
+
+    let expanded = match &input.data {
+        &syn::Data::Enum(ref enum1) => {
+            let mut variants = Vec::new();
+            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
+                let var_idx = var_idx as u16;
+                let var_ident = variant.ident;
+                let variant_name = quote!{ #name::#var_ident };
+                let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
+
+                let mut fields=Vec::new();
+
+                match &variant.fields {
+                    &syn::Fields::Named(ref fields_named) => {
+                        //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
+                        for f in fields_named.named.iter() {
+                            let ty = &f.ty;
+                            if check_is_remove(ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            };
+                            let ty = quote_spanned! { span => #ty };
+                            fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
+                        };
+                    }
+                    &syn::Fields::Unnamed(ref fields_unnamed) => {
+                        //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
+                        for f in fields_unnamed.unnamed.iter() {
+                            let ty = &f.ty;
+                            if check_is_remove(ty) {
+                                panic!("The Removed type is not supported for enum types");
+                            };
+
+                            fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
+                        };
+                    }
+                    &syn::Fields::Unit => {
+                        //No fields
+                    }
+                }
+                variants.push(quote!{#Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![#(#fields),*]}})
+                //variants.push(quote!{Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![]}})
+            }
+            quote! {
+                impl #impl_generics #withschema for #name #ty_generics #where_clause {
+
+                    #[allow(unused_comparisons)]
+                    fn schema(version:u32) -> #Schema {
+                        let local_version = version;
+                        #Schema::Enum (
+                            #SchemaEnum {
+                                variants : vec![#(#variants),*]
+                                //variants : vec![]
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        &syn::Data::Struct(ref struc) => match &struc.fields {
+            &syn::Fields::Named(ref namedfields) => {
+                let local_version = quote_spanned! { defspan => local_version};
+                let mut fields=Vec::new();
+                let fields1=quote_spanned! { defspan => fields1 };
+                for ref field in &namedfields.named {
+                    {
+                        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+                        let (field_from_version, field_to_version) =
+                            (verinfo.version_from, verinfo.version_to);
+
+                        let name=field.ident.unwrap();
+
+                        let removed=check_is_remove(&field.ty);
+                        let field_type = &field.ty;
+                        if field_from_version == 0 && field_to_version == std::u32::MAX {
+                            if removed {
+                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+                            }                            
+                            fields.push(quote_spanned!( span => #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
+                            
+                        } else {
+                            
+                            fields.push(quote_spanned!( span => 
+                                
+                                if #local_version >= #field_from_version && #local_version <= #field_to_version {
+                                    #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
+                                }
+                                ));
+                                                        
+                        }
+                    }
+                }
+                quote! {
+                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        fn schema(version:u32) -> #Schema {
+                            let local_version = version;
+                            let mut fields1 = Vec::new();
+                            #(#fields;)* ;
+                            #Schema::Struct(#SchemaStruct{
+                                fields: fields1
+                            })
+                            
+                        }
+                    }
+                }
+            }
+            _ => panic!("Only regular structs supported, not tuple structs."),
+        },
+        _ => {
+            panic!("Only regular structs are supported");
+        }
+    };
+
+    //println!("Emitting: {:?}",expanded);
+    expanded.into()
+}
+
+
 

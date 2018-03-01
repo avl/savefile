@@ -27,6 +27,9 @@ pub struct Deserializer<'a> {
     pub memory_version: u32,
 }
 
+
+
+
 /// This is a marker trait for types which have an in-memory layout that is packed
 /// and therefore identical to the layout that savefile will use on disk.
 /// This means that types for which this trait is implemented can be serialized
@@ -170,6 +173,12 @@ impl<'a> Deserializer<'a> {
     }
 }
 
+
+pub trait WithSchema {
+    /// Returns a representation of the schema used by this Serialize implementation for the given version.
+    fn schema(version:u32) -> Schema;    
+}
+
 /// This trait must be implemented for all data structures you wish to be
 /// able to serialize. To actually serialize data: create a [Serializer],
 /// then call serialize on your data to save, giving the Serializer
@@ -180,9 +189,10 @@ impl<'a> Deserializer<'a> {
 /// extern crate savefile-derive;
 ///
 /// and the use #[derive(Serialize)]
-pub trait Serialize {
+pub trait Serialize : WithSchema {
     /// Serialize self into the given serializer.
     fn serialize(&self, serializer: &mut Serializer); //TODO: Do error handling
+
 }
 
 /// This trait must be implemented for all data structures you wish to
@@ -193,9 +203,254 @@ pub trait Serialize {
 /// extern crate savefile-derive;
 ///
 /// and the use #[derive(Deserialize)]
-pub trait Deserialize {
+pub trait Deserialize : WithSchema {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer) -> Self; //TODO: Do error handling
+}
+
+
+pub struct Field {
+    pub name : String,
+    pub value : Box<Schema>
+}
+
+pub struct SchemaStruct {
+    pub fields : Vec<Field>
+}
+
+pub struct Variant {
+    pub name : String,
+    pub discriminator : u16,
+    pub fields : Vec<Box<Schema>>
+}
+
+pub struct SchemaEnum {
+    pub variants : Vec<Variant>
+}
+
+#[allow(non_camel_case_types)]
+pub enum SchemaPrimitive {
+    schema_i8,
+    schema_u8,
+    schema_i16,
+    schema_u16,
+    schema_i32,
+    schema_u32,
+    schema_i64,
+    schema_u64,
+    schema_isize,
+    schema_usize,
+    schema_string
+}
+
+
+/// The schema represents the save file format
+/// of your data. 
+pub enum Schema {
+    Struct(SchemaStruct),
+    Enum(SchemaEnum),
+    Primitive(SchemaPrimitive),
+    Vector(Box<Schema>),
+    Undefined,
+}
+
+impl WithSchema for Field {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }    
+}
+impl Serialize for Field {
+    fn serialize(&self, serializer: &mut Serializer) {
+        serializer.write_string(&self.name);
+        self.value.serialize(serializer);
+    }
+}
+impl Deserialize for Field {
+    fn deserialize(deserializer: &mut Deserializer) -> Self {
+        Field {
+            name : deserializer.read_string(),
+            value : Box::new(Schema::deserialize(deserializer))
+        }
+    }
+}
+impl WithSchema for Variant {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }    
+}
+impl Serialize for Variant {
+    fn serialize(&self, serializer: &mut Serializer) {
+        serializer.write_string(&self.name);
+        serializer.write_u16(self.discriminator);
+        serializer.write_usize(self.fields.len());
+        for field in &self.fields  {
+            field.serialize(serializer);
+        }
+    }    
+}
+impl Deserialize for Variant {
+    fn deserialize(deserializer: &mut Deserializer) -> Self {
+        Variant {
+            name: deserializer.read_string(),
+            discriminator: deserializer.read_u16(),
+            fields : {
+                let l = deserializer.read_usize();
+                let mut ret=Vec::new();
+                for _ in 0..l {
+                    ret.push(Box::new(Schema::deserialize(deserializer)))
+                }
+                ret
+            }
+        }
+    }
+}
+
+impl WithSchema for SchemaStruct {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }
+}
+impl Serialize for SchemaStruct {
+    fn serialize(&self, serializer: &mut Serializer) {
+        serializer.write_usize(self.fields.len());
+        for field in &self.fields {
+            field.serialize(serializer);
+        }
+    }
+}
+impl Deserialize for SchemaStruct {
+    fn deserialize(deserializer: &mut Deserializer) -> Self {
+        let l=deserializer.read_usize();
+        SchemaStruct {
+            fields: {
+                let mut ret=Vec::new();
+                for _ in 0..l {
+                    ret.push(Field::deserialize(deserializer))
+                }
+                ret
+            }        
+        }
+    }
+}
+
+impl WithSchema for SchemaPrimitive {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }    
+}
+impl Serialize for SchemaPrimitive {
+    fn serialize(&self, serializer: &mut Serializer) {
+        let discr=match *self {
+            SchemaPrimitive::schema_i8 => 1,
+            SchemaPrimitive::schema_u8 => 2,
+            SchemaPrimitive::schema_i16 => 3,
+            SchemaPrimitive::schema_u16 => 4,
+            SchemaPrimitive::schema_i32 => 5,
+            SchemaPrimitive::schema_u32 => 6,
+            SchemaPrimitive::schema_i64 => 7,
+            SchemaPrimitive::schema_u64 => 8,
+            SchemaPrimitive::schema_isize => 9,
+            SchemaPrimitive::schema_usize => 10,
+            SchemaPrimitive::schema_string => 11,
+        };
+        serializer.write_u16(discr);
+    }
+}
+impl Deserialize for SchemaPrimitive {
+    fn deserialize(deserializer: &mut Deserializer) -> Self {
+        let var=match deserializer.read_u16() {
+            1 => SchemaPrimitive::schema_i8,
+            2 => SchemaPrimitive::schema_u8,
+            3 => SchemaPrimitive::schema_i16,
+            4 => SchemaPrimitive::schema_u16,
+            5 => SchemaPrimitive::schema_i32,
+            6 => SchemaPrimitive::schema_u32,
+            7 => SchemaPrimitive::schema_i64,
+            8 => SchemaPrimitive::schema_u64,
+            9 => SchemaPrimitive::schema_isize,
+            10 => SchemaPrimitive::schema_usize,
+            11 => SchemaPrimitive::schema_string,
+            c => panic!("Corrupt schema, primitive type #{} encountered",c),
+        };
+        var
+    }
+}
+
+impl WithSchema for SchemaEnum {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }    
+}
+
+impl Serialize for SchemaEnum {
+    fn serialize(&self, serializer: &mut Serializer) {
+        serializer.write_usize(self.variants.len());
+        for var in &self.variants {
+            var.serialize(serializer);
+        }
+    }
+}
+impl Deserialize for SchemaEnum {
+    fn deserialize(deserializer:&mut Deserializer) -> Self {
+        let l = deserializer.read_usize();
+        let mut ret=Vec::new();
+        for _ in 0..l {
+            ret.push(Variant::deserialize(deserializer));
+        }
+        SchemaEnum {
+            variants: ret
+        }
+    }
+}
+
+impl WithSchema for Schema {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
+    }    
+}
+impl Serialize for Schema {
+    fn serialize(&self, serializer: &mut Serializer) {
+        match self {
+            &Schema::Struct(ref schema_struct) => {
+                serializer.write_u16(1);
+                schema_struct.serialize(serializer);
+            },
+            &Schema::Enum(ref schema_enum) => {
+                serializer.write_u16(2);
+                schema_enum.serialize(serializer);
+            },
+            &Schema::Primitive(ref schema_prim) => {
+                serializer.write_u16(3);
+                schema_prim.serialize(serializer);
+            },
+            &Schema::Vector(ref schema_vector) => {
+                serializer.write_u16(4);
+                schema_vector.serialize(serializer);
+            },
+            &Schema::Undefined => {
+                serializer.write_u16(5);
+            },
+        }
+    }    
+}
+
+impl Deserialize for Schema {
+    fn deserialize(deserializer: &mut Deserializer) -> Self {
+        match deserializer.read_u16() {
+            1 => Schema::Struct(SchemaStruct::deserialize(deserializer)),
+            2 => Schema::Enum(SchemaEnum::deserialize(deserializer)),
+            3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)),
+            4 => Schema::Vector(Box::new(Schema::deserialize(deserializer))),
+            5 => Schema::Undefined,
+            c => panic!("Corrupt schema, schema variant had value {}", c),
+        }
+    }
+}
+
+impl WithSchema for String {
+    fn schema(_version:u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string)
+    }    
 }
 
 impl Serialize for String {
@@ -209,6 +464,27 @@ impl Deserialize for String {
         deserializer.read_string()
     }
 }
+
+
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
+    for HashMap<K, V, S> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(
+            Schema::Struct(SchemaStruct{
+                fields: vec![
+                    Field {
+                        name: "key".to_string(),
+                        value: Box::new(K::schema(version)),
+                    },
+                    Field {
+                        name: "value".to_string(),
+                        value: Box::new(V::schema(version)),
+                    },
+                ]
+            })))
+    }        
+}
+
 
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
     for HashMap<K, V, S>
@@ -245,6 +521,12 @@ impl<T> Removed<T> {
         }
     }
 }
+
+impl<T> WithSchema for Removed<T> {
+    fn schema(_version:u32) -> Schema {
+        panic!("Something went wrong, removed fields should never be serialized");
+    }    
+}
 impl<T> Serialize for Removed<T> {
     fn serialize(&self, _serializer: &mut Serializer) {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
@@ -264,6 +546,12 @@ fn regular_serialize_vec<T: Serialize>(item: &Vec<T>, serializer: &mut Serialize
     serializer.write_usize(l);
     for item in item.iter() {
         item.serialize(serializer)
+    }
+}
+
+impl<T: WithSchema> WithSchema for Vec<T> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)))
     }
 }
 
@@ -348,6 +636,17 @@ unsafe impl ReprC for i64 {fn repr_c_optimization_safe(_version:u32) -> bool {tr
 unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 
+
+impl WithSchema for u8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
+impl WithSchema for i8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
+impl WithSchema for u16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u16)}}
+impl WithSchema for i16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i16)}}
+impl WithSchema for u32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u32)}}
+impl WithSchema for i32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i32)}}
+impl WithSchema for u64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u64)}}
+impl WithSchema for i64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i64)}}
+impl WithSchema for usize {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_usize)}}
+impl WithSchema for isize {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_isize)}}
 
 impl Serialize for u8 {
     fn serialize(&self, serializer: &mut Serializer) {

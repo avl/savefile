@@ -1,12 +1,12 @@
 use ::savefile::prelude::*;
 use ::assert_roundtrip_to_new_version;
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
 struct Version1 {
 	a: String,
 	b: Vec<String>,
 	c: usize
 }
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
 struct Version2 {
 	a: String,		
     #[versions = "0..0"]
@@ -17,7 +17,7 @@ struct Version2 {
 	c: usize
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
 struct Version3 {
 	a: String,		
     #[versions = "0..0"]

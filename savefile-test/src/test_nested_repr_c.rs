@@ -5,13 +5,13 @@ use std::io::prelude::*;
 use std::io::Cursor;
 
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(WithSchema, ReprC, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 struct Inner {
 	misaligner : u8, 
 	x: u32
 }
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(WithSchema, ReprC, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 struct Nested {
 	inner : Inner
 }
