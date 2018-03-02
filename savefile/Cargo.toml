@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
@@ -18,9 +18,6 @@ travis-ci = { repository = "avl/savefile", branch = "master" }
 [dependencies]
 byteorder="1.2.1"
 failure="0.1.1"
-
-[dev-dependencies]
-savefile-derive = { path = "../savefile-derive" }
 
 
 
