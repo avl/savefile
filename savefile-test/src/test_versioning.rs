@@ -1,12 +1,12 @@
 use ::savefile::prelude::*;
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct Version1 {
 	a: String,
 	b: Vec<String>,
 	c: usize
 }
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct Version2 {
 	a: String,		
     #[versions = "0..0"]
@@ -17,7 +17,7 @@ struct Version2 {
 	c: usize
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct Version3 {
 	a: String,		
     #[versions = "0..0"]
@@ -66,13 +66,13 @@ fn simple_vertest1() {
 
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 enum EnumVer1 {
     Variant1,
     Variant2,
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 enum EnumVer2 {
     Variant1,
     Variant2,
@@ -98,13 +98,13 @@ fn test_versioning_of_enums() {
 
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile )]
 enum EnumVerA1 {
     Variant1,
     Variant2{x:u32,y:u32},
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile )]
 enum EnumVerA2 {
     Variant1,
     Variant2 {
@@ -127,13 +127,13 @@ fn test_versioning_of_enums2() {
 }
 
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 enum EnumVerB1 {
     Variant1,
     Variant2(u32,u32),
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 enum EnumVerB2 {
     Variant1,
     Variant2(

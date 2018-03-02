@@ -30,7 +30,7 @@
 //! use std::io::prelude::*;
 //!
 //!
-//! #[derive(WithSchema,Serialize,Deserialize)]
+//! #[derive(Savefile)]
 //! struct Player {
 //!     name : String,
 //!     strength : u32,

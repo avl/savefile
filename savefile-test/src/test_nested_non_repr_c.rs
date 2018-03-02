@@ -2,13 +2,13 @@ use ::savefile::prelude::*;
 
 
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Serialize, WithSchema, Deserialize)]
+#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
 struct Inner {
 	misaligner : u8, 
 	x: u32
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, WithSchema, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
 struct Nested {
 	inner : Inner
 }

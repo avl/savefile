@@ -192,8 +192,8 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
 }
 
-#[proc_macro_derive(Serialize, attributes(versions, default_val, default_trait))]
-pub fn serialize(input: TokenStream) -> TokenStream {
+//#[proc_macro_derive(Serialize, attributes(versions, default_val, default_trait))]
+fn serialize(input: TokenStream) -> quote::Tokens {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -321,7 +321,7 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     };
 
     //println!("Emitting: {:?}",expanded);
-    expanded.into()
+    expanded//.into()
 }
 
 fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
@@ -395,8 +395,25 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     output
 }
 
-#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_trait))]
-pub fn deserialize(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Savefile, attributes(versions, default_val, default_trait))]
+pub fn savefile(input: TokenStream) -> TokenStream {
+    let s=serialize(input.clone());
+    let d=deserialize(input.clone());
+    let w=withschema(input);
+
+    let expanded=quote! {
+        #s
+
+        #d
+
+        #w
+    };
+
+    expanded.into()
+}
+//#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_trait))]
+
+fn deserialize(input: TokenStream) -> quote::Tokens {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -521,7 +538,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         }
     };
 
-    expanded.into()
+    expanded//.into()
 }
 
 fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:syn::Ident) -> quote::Tokens {
@@ -689,8 +706,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
 
 #[allow(non_snake_case)]
-#[proc_macro_derive(WithSchema, attributes(versions, default_val, default_trait))]
-pub fn withschema(input: TokenStream) -> TokenStream {
+fn withschema(input: TokenStream) -> quote::Tokens {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -828,7 +844,7 @@ pub fn withschema(input: TokenStream) -> TokenStream {
     };
 
     //println!("Emitting: {:?}",expanded);
-    expanded.into()
+    expanded
 }
 
 

@@ -12,7 +12,7 @@ mod test_versioning;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
 
-#[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Savefile, PartialEq)]
 struct NonCopy {
     ncfield: u8,
 }
@@ -39,7 +39,7 @@ pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: 
     assert_eq!(f.position() as usize,f_internal_size);
 }
 
-#[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Savefile, PartialEq)]
 pub enum TestStructEnum {
     Variant1 { a: u8, b: u8 },
     Variant2 { a: u8 },
@@ -51,7 +51,7 @@ pub fn test_struct_enum() {
     assert_roundtrip(TestStructEnum::Variant2 { a: 47 });
 }
 
-#[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Savefile, PartialEq)]
 pub enum TestTupleEnum {
     Variant1(u8),
 }
@@ -62,7 +62,7 @@ pub fn test_tuple_enum() {
 
 #[test]
 pub fn test_unit_enum() {
-    #[derive(WithSchema, Debug, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, Savefile, PartialEq)]
     pub enum TestUnitEnum {
         Variant1,
         Variant2,
@@ -71,7 +71,7 @@ pub fn test_unit_enum() {
     assert_roundtrip(TestUnitEnum::Variant2);
 }
 
-#[derive(Debug,WithSchema,  Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Savefile, PartialEq)]
 pub struct TestStruct {
     x1: u8,
     x2: u16,
@@ -133,7 +133,7 @@ pub fn test_string() {
     assert_roundtrip("test string".to_string());
 }
 
-#[derive(ReprC, WithSchema, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ReprC, Clone, Copy, Debug, Savefile, PartialEq)]
 pub struct BenchStruct {
     x: usize,
     y: usize,
@@ -201,7 +201,7 @@ pub fn test_bench_struct() {
         );
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct SmallStruct {
     x1: u32,
     x2: i32,
@@ -212,7 +212,7 @@ pub fn test_small_struct() {
     assert_roundtrip(SmallStruct { x1: 123, x2: 321 });
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct SmallStruct2 {
     x1: u32,
     x2: i32,
@@ -262,13 +262,13 @@ pub fn test_small_struct_upgrade() {
     );
 }
 
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile)]
 struct SmallStructRem1 {
     x1: u32,
     x2: i32,
     x3: String,
 }
-#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Savefile )]
 struct SmallStructRem2 {
     #[versions = "..0"]
     x1: Removed<u32>,
