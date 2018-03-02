@@ -97,3 +97,31 @@ fn test_versioning_of_enums() {
         );
 
 }
+
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+enum EnumVerA1 {
+    Variant1,
+    Variant2{x:u32,y:u32},
+}
+
+#[derive(Debug, WithSchema, PartialEq, Serialize, Deserialize)]
+enum EnumVerA2 {
+    Variant1,
+    Variant2 {
+    	x:u32,
+    	#[versions = "0..0"]    	
+    	y:Removed<u32>
+    },
+}
+
+#[test]
+fn test_versioning_of_enums2() {
+    use ::assert_roundtrip_to_new_version;
+    assert_roundtrip_to_new_version(
+        EnumVerA1::Variant2{x:32,y:33},
+        0,
+        EnumVerA2::Variant2{x:32,y:Removed::new()},
+        1
+        );
+
+}

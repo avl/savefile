@@ -767,7 +767,6 @@ pub fn withschema(input: TokenStream) -> TokenStream {
                             fields1
                         }}
                     )});
-                //variants.push(quote!{Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![]}})
             }
             quote! {
                 impl #impl_generics #withschema for #name #ty_generics #where_clause {
