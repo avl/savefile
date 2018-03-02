@@ -14,7 +14,6 @@ struct Nested {
 }
 
 
-
 #[test]
 fn test_not_raw_memcpy() {
     use std::io::Cursor;

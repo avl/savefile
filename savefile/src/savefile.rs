@@ -554,16 +554,19 @@ impl Serialize for Schema {
     }    
 }
 
+
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        Ok(match deserializer.read_u16()? {
+        let schema=match deserializer.read_u16()? {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
             4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?)),
             5 => Schema::Undefined,
             c => panic!("Corrupt schema, schema variant had value {}", c),
-        })
+        };
+        println!("Schema: {:?}",schema);
+        Ok(schema)
 
     }
 }

@@ -29,6 +29,7 @@ fn check_is_remove(field_type: &syn::Type) -> bool {
     is_remove
 }
 
+
 fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsResult {
     let is_string=match field_type {
         &syn::Type::Path(ref typepath) => {
@@ -128,15 +129,6 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
-    let serialize = quote_spanned! {span=>
-        Serialize
-    };
-    let serializer = quote_spanned! {span=>
-        Serializer
-    };
-    let saveerr = quote_spanned! {span=>
-        Result<(),SavefileError>
-    };
 
     for ref field in &field_infos {
         {
@@ -214,7 +206,6 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = gen2.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
     let serialize = quote_spanned! {span=>
         Serialize
     };
@@ -394,8 +385,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             }
         };
 
-        if let Some(id) = field.ident {
-            let id = field.ident.clone();
+        if let Some(id) = field.ident {            
             let id_spanned = quote_spanned! { span => #id};
             output.push(quote!(#id_spanned : #src ));
         } else {
@@ -411,7 +401,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    
     let name = input.ident;
 
 
@@ -429,9 +419,8 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         SavefileError
     };
 
-    let removeddef = quote_spanned! { span => Removed };
-
-    let mut output = Vec::<quote::Tokens>::new();
+    
+    
     
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -592,15 +581,8 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 
     let name = input.ident;
 
-    let generics = input.generics.clone();
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
-    let reprc = quote_spanned! {span=>
-        ReprC
-    };
-
+    
+    
     let expanded = match &input.data {
 
 
@@ -666,11 +648,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
     let local_version = quote_spanned! { defspan => local_version};
-    let SchemaStruct = quote_spanned! { span => SchemaStruct };
-    let SchemaEnum = quote_spanned! { span => SchemaEnum };
-    let Schema = quote_spanned! { span => Schema };
     let Field = quote_spanned! { span => Field };
-    let Variant = quote_spanned! { span => Variant };
     let WithSchema = quote_spanned! { span => WithSchema };
     let fields1=quote_spanned! { defspan => fields1 };
 
@@ -693,14 +671,14 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             if removed {
                 panic!("The Removed type can only be used for removed fields. Use the version attribute.");
             }                            
-            fields.push(quote_spanned!( span => #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
+            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
             
         } else {
             
             fields.push(quote_spanned!( span => 
                 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
+                    #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
                 }
                 ));
                                         
@@ -722,19 +700,15 @@ pub fn withschema(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
     let withschema = quote_spanned! {span=>
         WithSchema
     };
 
-    let local_version = quote_spanned! { defspan => local_version};
     let SchemaStruct = quote_spanned! { span => SchemaStruct };
     let SchemaEnum = quote_spanned! { span => SchemaEnum };
     let Schema = quote_spanned! { span => Schema };
     let Field = quote_spanned! { span => Field };
     let Variant = quote_spanned! { span => Variant };
-    let WithSchema = quote_spanned! { span => WithSchema };
-    let fields1=quote_spanned! { defspan => fields1 };
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -757,9 +731,7 @@ pub fn withschema(input: TokenStream) -> TokenStream {
 
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
-                        //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
                         for f in fields_named.named.iter() {
-                            //fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
                             field_infos.push(FieldInfo {
                                 ident:Some(f.ident.clone().unwrap()),
                                 dbg_name:(&f.ident.clone().unwrap()).to_string(),
@@ -769,7 +741,6 @@ pub fn withschema(input: TokenStream) -> TokenStream {
                         };
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
                         for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident:None,
@@ -801,6 +772,7 @@ pub fn withschema(input: TokenStream) -> TokenStream {
             quote! {
                 impl #impl_generics #withschema for #name #ty_generics #where_clause {
 
+                    #[allow(unused_mut)]
                     #[allow(unused_comparisons)]
                     fn schema(version:u32) -> #Schema {
                         let local_version = version;
@@ -822,9 +794,6 @@ pub fn withschema(input: TokenStream) -> TokenStream {
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
-                let local_version = quote_spanned! { defspan => local_version};
-                //let mut fields=Vec::new();
-                let fields1=quote_spanned! { defspan => fields1 };
 
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
@@ -836,8 +805,10 @@ pub fn withschema(input: TokenStream) -> TokenStream {
 
                 let fields = implement_withschema(field_infos);
                 quote! {
+
                     impl #impl_generics #withschema for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
+                        #[allow(unused_mut)]
                         fn schema(version:u32) -> #Schema {
                             let local_version = version;
                             let mut fields1 = Vec::new();
