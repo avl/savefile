@@ -535,7 +535,55 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:syn::Ident) -> quote::Tokens {
+    let generics = generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let reprc = quote_spanned! {span=>
+        ReprC
+    };    
+    let local_file_version = quote_spanned! { defspan => local_file_version};
+    let mut min_safe_version=0;
+    let mut optsafe_outputs = Vec::new();
+    for ref field in &field_infos {
 
+        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let (field_from_version, field_to_version) =
+            (verinfo.version_from, verinfo.version_to);
+
+        let removed=check_is_remove(&field.ty);
+        let field_type = &field.ty;
+        if field_from_version == 0 && field_to_version == std::u32::MAX {
+            if removed {
+                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+            }
+            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
+            
+        } else {
+            if field_to_version < std::u32::MAX {
+                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+            }
+            if field_from_version < std::u32::MAX { // An addition
+                min_safe_version = min_safe_version.max(field_from_version);
+            }                    
+            if !removed {
+                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
+            }                            
+        }
+
+    }
+    quote! {
+        unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
+            #[allow(unused_comparisons)]
+            fn repr_c_optimization_safe(file_version:u32) -> bool {
+                let local_file_version = file_version;
+                file_version >= #min_safe_version
+                #( && #optsafe_outputs)*
+            }
+        }
+    }    
+}
 
 #[proc_macro_derive(ReprC, attributes(versions, default_val, default_trait))]
 pub fn reprc(input: TokenStream) -> TokenStream {
@@ -544,7 +592,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 
     let name = input.ident;
 
-    let generics = input.generics;
+    let generics = input.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
@@ -554,22 +602,43 @@ pub fn reprc(input: TokenStream) -> TokenStream {
     };
 
     let expanded = match &input.data {
-        &syn::Data::Enum(ref _enum1) => {
-            quote! {
-                impl #impl_generics #reprc for #name #ty_generics #where_clause {
 
-                    #[allow(unused_comparisons)]
-                    fn repr_c_optimization_safe(file_version:u32) -> bool {
-                        true
+
+
+        &syn::Data::Enum(ref enum1) => {
+
+            let mut field_infos = Vec::<FieldInfo>::new();
+            for ref variant in enum1.variants.iter() {
+                match &variant.fields {
+                    &syn::Fields::Named(ref fields_named) => {                        
+                        field_infos.extend(fields_named.named.iter().map(|field|
+                            FieldInfo {
+                                ident:Some(field.ident.clone().unwrap()),
+                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }));
+
+                    }
+                    &syn::Fields::Unnamed(ref fields_unnamed) => {
+                        //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
+                        field_infos.extend(fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                            FieldInfo {
+                                ident:None,
+                                dbg_name:idx.to_string(),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }));
+                    }
+                    &syn::Fields::Unit => {
                     }
                 }
             }
+            implement_reprc(field_infos, input.generics, name)            
+
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
-                let mut min_safe_version=0;
-                let mut optsafe_outputs = Vec::new();
-                let local_file_version = quote_spanned! { defspan => local_file_version};
 
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
@@ -579,44 +648,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                         attrs: &field.attrs
                     }).collect();
 
-                for ref field in &field_infos {
-                    {
-                        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
-                        let (field_from_version, field_to_version) =
-                            (verinfo.version_from, verinfo.version_to);
-
-
-                        let removed=check_is_remove(&field.ty);
-                        let field_type = &field.ty;
-                        if field_from_version == 0 && field_to_version == std::u32::MAX {
-                            if removed {
-                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
-                            }
-                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
-                            
-                        } else {
-                            if field_to_version < std::u32::MAX {
-                                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-                            }
-                            if field_from_version < std::u32::MAX { // An addition
-                                min_safe_version = min_safe_version.max(field_from_version);
-                            }                    
-                            if !removed {
-                                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
-                            }                            
-                        }
-                    }
-                }
-                quote! {
-                    unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
-                        fn repr_c_optimization_safe(file_version:u32) -> bool {
-                            let local_file_version = file_version;
-                            file_version >= #min_safe_version
-                            #( && #optsafe_outputs)*
-                        }
-                    }
-                }
+                implement_reprc(field_infos, input.generics, name)
             }
             _ => panic!("Only regular structs supported, not tuple structs."),
         },
