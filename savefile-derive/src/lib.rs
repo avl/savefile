@@ -115,7 +115,8 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
 }
 
 struct FieldInfo<'a> {
-    ident : syn::Ident,
+    ident : Option<syn::Ident>,
+    dbg_name : String,
     ty : &'a syn::Type,
     attrs: &'a Vec<syn::Attribute>
 }
@@ -144,10 +145,11 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
             let (field_from_version, field_to_version) =
                 (verinfo.version_from, verinfo.version_to);
 
-            let id = field.ident;
+            let id = field.ident.clone().unwrap();
             let removed=check_is_remove(&field.ty);
             let field_type = &field.ty;
-            let objid = if implicit_self {
+            let objid = 
+            if implicit_self {
                 quote!{ self.#id}
             } else {
                 quote!{ #id}
@@ -241,21 +243,15 @@ pub fn serialize(input: TokenStream) -> TokenStream {
 
                         let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
                             FieldInfo {
-                                ident:field.ident.clone().unwrap(),
+                                ident:Some(field.ident.clone().unwrap()),
+                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();
 
-                        let fields_names = fields_named.named.iter().map(|x| {
-                            if check_is_remove(&x.ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            }
-                            let fieldname = x.ident.unwrap();
-                            quote!{ ref #fieldname }
-                        });
-                        let (fields_serialized,field_names) = implement_fields_serialize(field_infos, false);
+                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false);
                         output.push(
-                            quote!(#variant_name_spanned{#(#fields_names,)*} => { 
+                            quote!( #variant_name_spanned{#(#fields_names,)*} => { 
                                 serializer.write_u8(#var_idx)?; 
                                 #fields_serialized 
                             } ),
@@ -265,14 +261,16 @@ pub fn serialize(input: TokenStream) -> TokenStream {
 
                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
                             FieldInfo {
-                                ident:syn::Ident::from("x".to_string() + &idx.to_string()),
+                                ident:Some(syn::Ident::from("x".to_string() + &idx.to_string())),
+                                dbg_name: "x".to_string() + &idx.to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
-                            }).collect();                        
+                            }).collect();               
+
                         let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false);
                         
                         output.push(
-                            quote!(#variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
+                            quote!( #variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
                         );
                     }
                     &syn::Fields::Unit => {
@@ -293,11 +291,6 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                         }
                         Ok(())
                     }
-                    /*
-                    fn repr_c_optimization_safe(_serializer: &mut #serializer) -> bool {
-                        true
-                    }
-                    */
                 }
             }
         }
@@ -307,7 +300,8 @@ pub fn serialize(input: TokenStream) -> TokenStream {
 
                 let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
                     FieldInfo {
-                        ident:field.ident.clone().unwrap(),
+                        ident:Some(field.ident.clone().unwrap()),
+                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
                         ty:&field.ty,
                         attrs:&field.attrs
                     }).collect();
@@ -339,6 +333,78 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
+
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let removeddef = quote_spanned! { span => Removed };
+    let local_deserializer = quote_spanned! { defspan => deserializer};
+
+    let mut output=Vec::new();
+    let mut min_safe_version=0;
+    for ref field in &field_infos {
+        let field_type = &field.ty;
+
+        let is_removed=check_is_remove(field_type);
+        //let local_deserializer = quote_spanned! { defspan => local_deserializer};
+
+        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let (field_from_version, field_to_version, default_trait, default_val) = (
+            verinfo.version_from,
+            verinfo.version_to,
+            verinfo.default_trait,
+            verinfo.default_val,
+        );
+        let fieldname=&field.dbg_name;
+        let effective_default_val = if let Some(defval) = default_val {
+            quote! { str::parse(#defval).unwrap() }
+        } else if let Some(deftrait) = default_trait {
+            quote! { #deftrait::default() }
+        } else if is_removed {
+            quote! { #removeddef::new() }
+        } else {
+            quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
+        };
+
+        if field_from_version > field_to_version {
+            panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
+        }
+
+        let src = if field_from_version == 0 && field_to_version == std::u32::MAX {
+            if is_removed {
+                panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
+            };
+            quote_spanned! { span =>
+                <#field_type>::deserialize(#local_deserializer)?
+            }
+        } else {    
+            if field_to_version < std::u32::MAX { // A delete
+                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+            }                    
+            if field_from_version < std::u32::MAX { // An addition
+                min_safe_version = min_safe_version.max(field_from_version);
+            }                    
+
+            quote_spanned! { span =>
+                if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
+                    <#field_type>::deserialize(#local_deserializer)?
+                } else {
+                    #effective_default_val
+                }
+            }
+        };
+
+        if let Some(id) = field.ident {
+            let id = field.ident.clone();
+            let id_spanned = quote_spanned! { span => #id};
+            output.push(quote!(#id_spanned : #src ));
+        } else {
+            output.push(quote!( #src ));
+        }
+    }
+    output
+}
+
 #[proc_macro_derive(Deserialize, attributes(versions, default_val, default_trait))]
 pub fn deserialize(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
@@ -365,8 +431,8 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
 
     let removeddef = quote_spanned! { span => Removed };
 
-    let mut output = Vec::new();
-    let mut optsafe_outputs = Vec::<quote::Tokens>::new();
+    let mut output = Vec::<quote::Tokens>::new();
+    
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
@@ -383,30 +449,32 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
-                        let fields_deserialized = fields_named.named.iter().map(|f| {
-                            let ty = &f.ty;
-                            if check_is_remove(ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            };
-                            let ty = quote_spanned! { span => #ty };
-                            let field_name = f.ident.unwrap();
-                            let field_name = quote_spanned! { span => #field_name};
-                            quote!{ #field_name: #ty::deserialize(deserializer)? }
-                        });
+                        
+                        let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
+                            FieldInfo {
+                                ident:Some(field.ident.clone().unwrap()),
+                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }).collect();
+
+                        let fields_deserialized=implement_deserialize(field_infos);
+
                         output.push(
                             quote!( #var_idx => #variant_name_spanned{ #(#fields_deserialized,)* } ),
                         );
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
-                        let fields_deserialized = fields_unnamed.unnamed.iter().map(|f| {
-                            let ty = &f.ty;
-                            if check_is_remove(ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            };
-
-                            quote!{ #ty::deserialize(deserializer)? }
-                        });
+                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                            FieldInfo {
+                                ident:None,
+                                dbg_name:idx.to_string(),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }).collect();                                     
+                        let fields_deserialized=implement_deserialize(field_infos);
+                            
                         output.push(
                             quote!( #var_idx => #variant_name_spanned( #(#fields_deserialized,)*) ),
                         );
@@ -421,6 +489,7 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
                     #[allow(unused_comparisons)]
                     fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                         //println!("Deserializer running on {}", stringify!(#name));
+                        
                         Ok(match deserializer.read_u8()? {
                             #(#output,)*
                             _ => panic!("Corrupt file - unknown enum variant detected.")
@@ -431,73 +500,23 @@ pub fn deserialize(input: TokenStream) -> TokenStream {
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
-                let mut min_safe_version=0;
-                for ref field in &namedfields.named {
-                    let id = field.ident.unwrap();
-                    let field_type = &field.ty;
+                //let mut min_safe_version=0;
+                let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                    |field| FieldInfo {
+                        ident : Some(field.ident.unwrap().clone()),
+                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
+                        ty : &field.ty,
+                        attrs: &field.attrs
+                    }).collect();
 
-                    let is_removed=check_is_remove(field_type);
-                    let id_spanned = quote_spanned! { span => #id};
-                    let local_deserializer = quote_spanned! { defspan => local_deserializer};
+                let output = implement_deserialize(field_infos);
 
-                    let verinfo = parse_attr_tag(&field.attrs, &field.ty);
-                    let (field_from_version, field_to_version, default_trait, default_val) = (
-                        verinfo.version_from,
-                        verinfo.version_to,
-                        verinfo.default_trait,
-                        verinfo.default_val,
-                    );
-                    let fieldname=&id;
-                    let effective_default_val = if let Some(defval) = default_val {
-                        quote! { str::parse(#defval).unwrap() }
-                    } else if let Some(deftrait) = default_trait {
-                        quote! { #deftrait::default() }
-                    } else if is_removed {
-                        quote! { #removeddef::new() }
-                    } else {
-                        quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
-                    };
-
-                    if field_from_version > field_to_version {
-                        panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
-                    }
-
-                    let src = if field_from_version == 0 && field_to_version == std::u32::MAX {
-                        if is_removed {
-                            panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
-                        };
-                        optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_deserializer)));
-                        quote_spanned! { span =>
-                            <#field_type>::deserialize(#local_deserializer)?
-                        }
-                    } else {    
-                        if field_to_version < std::u32::MAX { // A delete
-                            min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-                        }                    
-                        if field_from_version < std::u32::MAX { // An addition
-                            min_safe_version = min_safe_version.max(field_from_version);
-                        }                    
-                        if !is_removed {
-                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_deserializer)));
-                        }
-
-                        quote_spanned! { span =>
-                            if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                                <#field_type>::deserialize(#local_deserializer)?
-                            } else {
-                                #effective_default_val
-                            }
-                        }
-                    };
-
-                    output.push(quote!(#id_spanned : #src ));
-                }
                 quote! {
 
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                            let local_deserializer = deserializer;
+                            
                             //println!("Deserializer running on {}", stringify!(#name));
                             Ok(#name {
                                 #(#output,)*
