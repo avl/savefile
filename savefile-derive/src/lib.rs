@@ -829,6 +829,7 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                             let mut fields1 = Vec::new();
                             #(#fields;)* ;
                             #Schema::Struct(#SchemaStruct{
+                                dbg_name: stringify!(#name).to_string(),
                                 fields: fields1
                             })
                             

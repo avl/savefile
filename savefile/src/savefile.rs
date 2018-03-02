@@ -2,6 +2,7 @@ extern crate byteorder;
 extern crate alloc;
 use std::io::Write;
 use std::io::Read;
+use std::fs::File;
 use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -17,12 +18,10 @@ pub enum SavefileError {
     IncompatibleSchema {
         message: String,
     },
-    #[fail(display = "Input stream ended before deserialization was complete.")]
-    UnexpectedEndOfFile {},
     #[fail(display = "IO Error: {}",io_error)]
     IOError{io_error:std::io::Error},
-    #[fail(display = "DataCorruption error {}",msg)]
-    DataCorruption{msg:String},
+    #[fail(display = "Invalid utf8 character {}",msg)]
+    InvalidUtf8{msg:String},
     #[fail(display = "Out of memory: {}",err)]
     OutOfMemory{err:std::heap::AllocErr},
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
@@ -85,9 +84,11 @@ impl From<std::heap::AllocErr> for SavefileError {
 
 impl From<std::string::FromUtf8Error> for SavefileError {
     fn from(s: std::string::FromUtf8Error) -> SavefileError {
-        SavefileError::DataCorruption{msg:s.to_string()}
+        SavefileError::InvalidUtf8{msg:s.to_string()}
     }
 }
+
+
 
 
 impl<'a> Serializer<'a> {
@@ -237,9 +238,11 @@ impl<'a> Deserializer<'a> {
             let mut schema_deserializer = Deserializer::new_raw(reader);
             let memory_schema = T::schema(file_ver);
             let file_schema = Schema::deserialize(&mut schema_deserializer)?;
-            if file_schema != memory_schema {
-                panic!("Saved schema differs from in-memory schema for version {}. File:\n{:?}\nMemory:\n{:?}",file_ver,
-                    file_schema,memory_schema);
+            
+            if let Some(err) = diff_schema(&file_schema, &memory_schema,".".to_string()) {
+                return Err(SavefileError::IncompatibleSchema{
+                    message:format!("Saved schema differs from in-memory schema for version {}. Error: {}",file_ver,
+                    err)});
             }
         }
         let mut deserializer=Deserializer {
@@ -273,6 +276,31 @@ pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) 
 pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save_noschema::<T>(writer,version,data)
 }
+
+pub fn load_file<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
+    let mut f = File::open(filepath)?;
+    Deserializer::load::<T>(&mut f, version)
+}
+
+pub fn save_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
+    let mut f = File::create(filepath)?;
+    Serializer::save::<T>(&mut f,version,data)
+}
+
+pub fn load_file_noschema<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
+    let mut f = File::open(filepath)?;
+    Deserializer::load_noschema::<T>(&mut f,version)
+}
+
+pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
+    let mut f = File::create(filepath)?;
+    Serializer::save_noschema::<T>(&mut f,version,data)
+}
+
+
+
+
+
 
 /// This trait must be implemented by all data structures you wish to be able to save.
 /// It must encode the schema for the datastructure when saved using the given version number.
@@ -324,6 +352,7 @@ pub struct Field {
 
 #[derive(Debug,PartialEq)]
 pub struct SchemaStruct {
+    pub dbg_name : String,
     pub fields : Vec<Field>
 }
 
@@ -340,7 +369,7 @@ pub struct SchemaEnum {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug,PartialEq)]
+#[derive(Copy,Clone,Debug,PartialEq)]
 pub enum SchemaPrimitive {
     schema_i8,
     schema_u8,
@@ -355,6 +384,15 @@ pub enum SchemaPrimitive {
     schema_string
 }
 
+fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:String) -> Option<String> {
+    if a!=b {
+
+        return Some(format!("At location [{}]: Application protocol has datatype {:?}, but disk format has {:?}",
+            path,a,b));
+    }
+    None
+}
+
 
 /// The schema represents the save file format
 /// of your data. 
@@ -365,6 +403,112 @@ pub enum Schema {
     Primitive(SchemaPrimitive),
     Vector(Box<Schema>),
     Undefined,
+}
+
+fn diff_vector(a:&Box<Schema>,b:&Box<Schema>,path:String) -> Option<String> {
+    diff_schema(a,b,
+        path + "/*")
+}
+
+fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
+    if a.variants.len()!=b.variants.len() {
+        return Some(format!("At location [{}]: In memory enum has {} variants, but disk format has {} variants.",
+            path,a.variants.len(),b.variants.len()));
+    }
+    for i in 0..a.variants.len() {
+        if a.variants[i].name!=b.variants[i].name {
+            return Some(format!("At location [{}]: Enum variant #{} in memory is called {}, but in disk format it is called {}",
+                &path,i, a.variants[i].name,b.variants[i].name));
+        }
+        if a.variants[i].discriminator!=b.variants[i].discriminator {
+            return Some(format!("At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
+                &path,i,a.variants[i].discriminator,b.variants[i].discriminator));
+        }
+        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,(path.to_string()+"/"+&a.variants[i].name).to_string(),"enum",
+            "".to_string(),"".to_string());
+        if let Some(err)=r {
+            return Some(err);
+        }
+    }
+    return None;
+}
+fn diff_struct(a:&SchemaStruct,b:&SchemaStruct,path:String) -> Option<String> {
+    diff_fields(&a.fields,&b.fields,path,"struct", 
+        " (struct ".to_string()+&a.dbg_name+")", " (struct ".to_string()+&b.dbg_name+")")
+}
+fn diff_fields(a:&Vec<Field>,b:&Vec<Field>,path:String, structuretype:&str,
+    extra_a:String,extra_b:String) -> Option<String> {
+    if a.len()!=b.len() {
+        return Some(format!("At location [{}]: In memory {}{} has {} fields, disk format{} has {} fields.",
+            path,structuretype,extra_a,a.len(),extra_b,b.len()));
+    }
+    for i in 0..a.len() {
+        if a[i].name!=b[i].name {
+            return Some(format!("At location [{}]: Field #{} in memory{} is called {}, but in disk format{} it is called {}",
+                &path,i,extra_a,a[i].name,extra_b,b[i].name));
+        }
+        let r=diff_schema(&a[i].value,&b[i].value,(path.to_string()+"/"+&a[i].name).to_string());
+        if let Some(err)=r {
+            return Some(err);
+        }
+    }
+    return None;
+}
+
+/// Returns None if both schema are equivalent
+fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
+    let (atype,btype)=match a {
+        &Schema::Struct(ref xa) => {
+            match b {
+                &Schema::Struct(ref xb) => {
+                    return diff_struct(xa,xb,path)
+                },
+                &Schema::Enum(_) => ("struct","enum"),
+                &Schema::Primitive(_) => ("struct","primitive"),
+                &Schema::Vector(_) => ("struct","vector"),
+                &Schema::Undefined => ("struct","undefined"),
+            }
+        }
+        &Schema::Enum(ref xa) => {
+            match b {
+                &Schema::Enum(ref xb) => {
+                    return diff_enum(xa,xb,path)
+                },
+                &Schema::Struct(_) => ("enum","struct"),
+                &Schema::Primitive(_) => ("enum","primitive"),
+                &Schema::Vector(_) => ("enum","vector"),
+                &Schema::Undefined => ("enum","undefined"),
+            }
+        }
+        &Schema::Primitive(ref xa) => {
+            match b {
+                &Schema::Primitive(ref xb) => {
+                    return diff_primitive(*xa,*xb,path);
+                },
+                &Schema::Struct(_) => ("primitive","struct"),
+                &Schema::Enum(_) => ("primitive","enum"),
+                &Schema::Vector(_) => ("primitive","vector"),
+                &Schema::Undefined => ("primitive","undefined"),
+            }
+        }
+        &Schema::Vector(ref xa) => {
+            match b {
+                &Schema::Vector(ref xb) => {
+                    return diff_vector(xa,xb,path);
+                },
+                &Schema::Struct(_) => ("vector","struct"),
+                &Schema::Enum(_) => ("vector","enum"),
+                &Schema::Primitive(_) => ("vector","primitive"),
+                &Schema::Undefined => ("vector","undefined"),
+            }
+        }
+        &Schema::Undefined => {
+            return Some(format!("At location [{}]: Undefined schema encountered.",path));
+        }
+    };
+    return Some(format!("At location [{}]: In memory schema: {}, file schema: {}",
+        path,atype,btype));
+    
 }
 
 impl WithSchema for Field {
@@ -430,8 +574,9 @@ impl WithSchema for SchemaStruct {
 }
 impl Serialize for SchemaStruct {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.fields.len())?;
-        for field in &self.fields {
+        for field in &self.fields {            
             field.serialize(serializer)?;
         }
         Ok(())
@@ -439,8 +584,10 @@ impl Serialize for SchemaStruct {
 }
 impl Deserialize for SchemaStruct {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let dbg_name = deserializer.read_string()?;
         let l=deserializer.read_usize()?;
         Ok(SchemaStruct {
+            dbg_name : dbg_name,
             fields: {
                 let mut ret=Vec::new();
                 for _ in 0..l {
@@ -565,7 +712,7 @@ impl Deserialize for Schema {
             5 => Schema::Undefined,
             c => panic!("Corrupt schema, schema variant had value {}", c),
         };
-        println!("Schema: {:?}",schema);
+
         Ok(schema)
 
     }
@@ -595,6 +742,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
     fn schema(version:u32) -> Schema {
         Schema::Vector(Box::new(
             Schema::Struct(SchemaStruct{
+                dbg_name: "KeyValuePair".to_string(),
                 fields: vec![
                     Field {
                         name: "key".to_string(),
@@ -741,11 +889,11 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                 let slice = unsafe { std::slice::from_raw_parts_mut(ptr, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
                     Ok(()) => {Ok(())}
-                    _ => {
+                    Err(err) => {
                         unsafe {
                             alloc::heap::Heap.dealloc(ptr, layout);
                         }
-                        Err(SavefileError::DataCorruption{msg:"Short read".to_string()})
+                        Err(err)
                     }
                 }?;
             }

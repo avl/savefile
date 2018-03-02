@@ -38,13 +38,11 @@
 //! }
 //!
 //! fn save_player(player:&Player) {
-//!     let mut f = File::create("save.bin").unwrap();
-//!     save(&mut f, 0, player);
+//!     save_file("save.bin", 0, player).unwrap();
 //! }
 //!
 //! fn load_player() -> Player {
-//!     let mut f = File::open("save.bin").unwrap();
-//!     load(&mut f, 0).unwrap()
+//!     load_file("save.bin", 0).unwrap()
 //! }
 //!
 //! fn main() {

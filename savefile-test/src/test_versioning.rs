@@ -154,3 +154,42 @@ fn test_versioning_of_enums3() {
         );
 
 }
+
+
+#[derive(Debug, PartialEq, Savefile)]
+struct SubSubData1 {
+	x:u32
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct SubData1 {
+	some_sub : SubSubData1,
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct ComplexData1 {
+	some_field : SubData1,
+}
+
+#[derive(Debug, PartialEq, Savefile)]
+struct SubSubData2 {
+	y:u32
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct SubData2 {
+	some_sub : SubSubData2,	
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct ComplexData2 {
+	some_field : SubData2,
+}
+
+#[test]
+fn test_versioning_of_enums4() {
+    use ::assert_roundtrip_to_new_version;
+    assert_roundtrip_to_new_version(
+        ComplexData1{some_field:SubData1{some_sub: SubSubData1{x:43}}},
+        0,
+        ComplexData2{some_field:SubData2{some_sub: SubSubData2{y:43}}},
+        1
+        );
+
+}
