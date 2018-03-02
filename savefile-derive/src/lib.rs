@@ -114,6 +114,90 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     }
 }
 
+struct FieldInfo<'a> {
+    ident : syn::Ident,
+    ty : &'a syn::Type,
+    attrs: &'a Vec<syn::Attribute>
+}
+
+fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
+    let mut min_safe_version=0;
+    let mut output = Vec::new();
+    let mut optsafe_outputs = Vec::new();
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let local_serializer = quote_spanned! { defspan => local_serializer};
+    let serialize = quote_spanned! {span=>
+        Serialize
+    };
+    let serializer = quote_spanned! {span=>
+        Serializer
+    };
+    let saveerr = quote_spanned! {span=>
+        Result<(),SavefileError>
+    };
+
+    for ref field in &field_infos {
+        {
+
+            let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+            let (field_from_version, field_to_version) =
+                (verinfo.version_from, verinfo.version_to);
+
+            let id = field.ident;
+            let removed=check_is_remove(&field.ty);
+            let field_type = &field.ty;
+            let objid = if implicit_self {
+                quote!{ self.#id}
+            } else {
+                quote!{ #id}
+            };
+
+            if field_from_version == 0 && field_to_version == std::u32::MAX {
+                if removed {
+                    panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+                }
+                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
+                output.push(quote!(
+                    (#objid).serialize(#local_serializer)?;
+                    ));
+            } else {
+                if field_to_version < std::u32::MAX {
+                    min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
+                }
+                if field_from_version < std::u32::MAX { // An addition
+                    min_safe_version = min_safe_version.max(field_from_version);
+                }                    
+                if !removed {
+                    optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
+                }
+                output.push(quote!(
+                        if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
+                            (#objid).serialize(#local_serializer)?;
+                        }));
+            }
+        }
+    }
+    let serialize2 = quote! {
+        //println!("Serializer running on {}", stringify!(#name));
+        let local_serializer = serializer;
+        if #min_safe_version > local_serializer.version {
+                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
+                    #min_safe_version, local_serializer.version);
+            }
+
+        #(#output)*           
+    };
+
+    let fields_names =
+        field_infos.iter().map(|field| {
+            let fieldname = field.ident;
+            quote! { ref #fieldname }
+        }).collect();
+    (serialize2,fields_names)
+
+}
+
 #[proc_macro_derive(Serialize, attributes(versions, default_val, default_trait))]
 pub fn serialize(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
@@ -122,7 +206,10 @@ pub fn serialize(input: TokenStream) -> TokenStream {
     let name = input.ident;
 
     let generics = input.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+
+    let gen2=generics.clone();
+    let (impl_generics, ty_generics, where_clause) = gen2.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
@@ -151,6 +238,14 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                 let variant_name_spanned = quote_spanned! { span => &#variant_name};
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
+
+                        let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
+                            FieldInfo {
+                                ident:field.ident.clone().unwrap(),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }).collect();
+
                         let fields_names = fields_named.named.iter().map(|x| {
                             if check_is_remove(&x.ty) {
                                 panic!("The Removed type is not supported for enum types");
@@ -158,33 +253,26 @@ pub fn serialize(input: TokenStream) -> TokenStream {
                             let fieldname = x.ident.unwrap();
                             quote!{ ref #fieldname }
                         });
-                        let fields_serialized = fields_named.named.iter().map(|x| {
-                            let field_name = x.ident.unwrap();
-                            if check_is_remove(&x.ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            }
-                            quote!{ #field_name.serialize(serializer)?; }
-                        });
+                        let (fields_serialized,field_names) = implement_fields_serialize(field_infos, false);
                         output.push(
-                            quote!(#variant_name_spanned{#(#fields_names,)*} => { serializer.write_u8(#var_idx)?; #(#fields_serialized)* } ),
+                            quote!(#variant_name_spanned{#(#fields_names,)*} => { 
+                                serializer.write_u8(#var_idx)?; 
+                                #fields_serialized 
+                            } ),
                         );
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        let fields_names =
-                            fields_unnamed.unnamed.iter().enumerate().map(|(idx, x)| {
-                                if check_is_remove(&x.ty) {
-                                    panic!("The Removed type is not supported for enum types");
-                                }
-                                let fieldname =
-                                    syn::Ident::from("x".to_string() + &idx.to_string());
-                                quote! { ref #fieldname }
-                            });
-                        let fields_serialized = (0..fields_unnamed.unnamed.len()).map(|idx| {
-                            let nm = syn::Ident::from("x".to_string() + &idx.to_string());
-                            quote!{ #nm.serialize(serializer)?; }
-                        });
+
+                        let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                            FieldInfo {
+                                ident:syn::Ident::from("x".to_string() + &idx.to_string()),
+                                ty:&field.ty,
+                                attrs:&field.attrs
+                            }).collect();                        
+                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false);
+                        
                         output.push(
-                            quote!(#variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #(#fields_serialized)*  } ),
+                            quote!(#variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
                         );
                     }
                     &syn::Fields::Unit => {
@@ -215,66 +303,28 @@ pub fn serialize(input: TokenStream) -> TokenStream {
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
-                let mut min_safe_version=0;
-                let mut output = Vec::new();
-                let mut optsafe_outputs = Vec::new();
-                let local_serializer = quote_spanned! { defspan => local_serializer};
-                for ref field in &namedfields.named {
-                    {
-                        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
-                        let (field_from_version, field_to_version) =
-                            (verinfo.version_from, verinfo.version_to);
 
-                        let id = field.ident.unwrap();
-                        let removed=check_is_remove(&field.ty);
-                        let field_type = &field.ty;
-                        if field_from_version == 0 && field_to_version == std::u32::MAX {
-                            if removed {
-                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
-                            }
-                            optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
-                            output.push(quote!(
-                                self.#id.serialize(#local_serializer)?;
-                                ));
-                        } else {
-                            if field_to_version < std::u32::MAX {
-                                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-                            }
-                            if field_from_version < std::u32::MAX { // An addition
-                                min_safe_version = min_safe_version.max(field_from_version);
-                            }                    
-                            if !removed {
-                                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
-                            }
-                            output.push(quote!(
-                                    if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
-                                        self.#id.serialize(#local_serializer)?;
-                                    }));
-                        }
-                    }
-                }
+
+                let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
+                    FieldInfo {
+                        ident:field.ident.clone().unwrap(),
+                        ty:&field.ty,
+                        attrs:&field.attrs
+                    }).collect();
+
+
+                //let check:()=fieldInfos;
+
+
+                let (fields_serialize,_field_names) = implement_fields_serialize(field_infos, true);
+
                 quote! {
                     impl #impl_generics #serialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                            //println!("Serializer running on {}", stringify!(#name));
-                            let local_serializer = serializer;
-                            if #min_safe_version > local_serializer.version {
-                                    panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
-                                        #min_safe_version, local_serializer.version);
-                                }
-        
-                            #(#output)*
-                            Ok(())
+                            #(#fields_serialize)*
+                            Ok(())                    
                         }
-                        /*
-                        #[allow(unused_comparisons)]
-                        fn repr_c_optimization_safe(serializer: &mut #serializer) -> bool {
-                            let local_serializer = serializer;
-                            local_serializer.version >= #min_safe_version
-                            #( && #optsafe_outputs)*
-                        }
-                        */
                     }
                 }
             }

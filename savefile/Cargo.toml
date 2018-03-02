@@ -18,3 +18,9 @@ travis-ci = { repository = "avl/savefile", branch = "master" }
 [dependencies]
 byteorder="1.2.1"
 failure="0.1.1"
+
+[dev-dependencies]
+savefile-derive = { path = "../savefile-derive" }
+
+
+

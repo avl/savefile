@@ -523,7 +523,7 @@
 			"file": "savefile-derive/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 25304,
+				"buffer_size": 33447,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -532,7 +532,7 @@
 			"file": "savefile/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 1691,
+				"buffer_size": 1640,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -550,7 +550,7 @@
 			"file": "savefile-test/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 6588,
+				"buffer_size": 6335,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -559,7 +559,7 @@
 			"file": "savefile-test/src/test_versioning.rs",
 			"settings":
 			{
-				"buffer_size": 1087,
+				"buffer_size": 1723,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -568,7 +568,7 @@
 			"file": "savefile-test/src/test_nested_non_repr_c.rs",
 			"settings":
 			{
-				"buffer_size": 787,
+				"buffer_size": 732,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -577,7 +577,7 @@
 			"file": "savefile-test/src/test_nested_repr_c.rs",
 			"settings":
 			{
-				"buffer_size": 746,
+				"buffer_size": 684,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -603,7 +603,7 @@
 			"file": "savefile/src/prelude.rs",
 			"settings":
 			{
-				"buffer_size": 86,
+				"buffer_size": 235,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -612,7 +612,7 @@
 			"file": "savefile-derive/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 234,
+				"buffer_size": 627,
 				"line_ending": "Unix"
 			}
 		},
@@ -620,7 +620,8 @@
 			"file": "savefile/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 182,
+				"buffer_size": 559,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		}
@@ -769,7 +770,7 @@
 			]
 		]
 	],
-	"build_varint": "",
+	"build_varint": "Check",
 	"command_palette":
 	{
 		"height": 92.0,
@@ -927,11 +928,11 @@
 	],
 	"find":
 	{
-		"height": 35.0
+		"height": 54.0
 	},
 	"find_in_files":
 	{
-		"height": 102.0,
+		"height": 146.0,
 		"where_history":
 		[
 			""
@@ -1088,7 +1089,7 @@
 	"groups":
 	[
 		{
-			"selected": 4,
+			"selected": 0,
 			"sheets":
 			[
 				{
@@ -1097,28 +1098,29 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 25304,
+						"buffer_size": 33447,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								18520,
-								18520
+								10060,
+								10060
 							]
 						],
 						"settings":
 						{
+							"show_definitions": false,
 							"syntax": "Packages/Rust/Rust.sublime-syntax",
 							"tab_size": 4,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 6934.0,
+						"translation.y": 8056.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 1,
+					"stack_index": 0,
 					"type": "text"
 				},
 				{
@@ -1127,26 +1129,27 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 1691,
+						"buffer_size": 1640,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								1644,
-								1644
+								0,
+								0
 							]
 						],
 						"settings":
 						{
+							"show_definitions": false,
 							"syntax": "Packages/Rust/Rust.sublime-syntax"
 						},
 						"translation.x": 0.0,
 						"translation.y": 251.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 5,
+					"stack_index": 4,
 					"type": "text"
 				},
 				{
@@ -1174,7 +1177,7 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 8,
+					"stack_index": 3,
 					"type": "text"
 				},
 				{
@@ -1183,105 +1186,20 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 6588,
+						"buffer_size": 6335,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								4781,
-								4781
+								0,
+								0
 							]
 						],
 						"settings":
 						{
-							"syntax": "Packages/Rust/Rust.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 3986.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 2,
-					"type": "text"
-				},
-				{
-					"buffer": 4,
-					"file": "savefile-test/src/test_versioning.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1087,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								744,
-								744
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Rust/Rust.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 694.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 0,
-					"type": "text"
-				},
-				{
-					"buffer": 5,
-					"file": "savefile-test/src/test_nested_non_repr_c.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 787,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								787,
-								787
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Rust/Rust.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 90.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 4,
-					"type": "text"
-				},
-				{
-					"buffer": 6,
-					"file": "savefile-test/src/test_nested_repr_c.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 746,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								746,
-								746
-							]
-						],
-						"settings":
-						{
+							"show_definitions": false,
 							"syntax": "Packages/Rust/Rust.sublime-syntax",
 							"tab_size": 4,
 							"translate_tabs_to_spaces": true
@@ -1290,7 +1208,98 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 3,
+					"stack_index": 1,
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "savefile-test/src/test_versioning.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 1723,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								964,
+								964
+							]
+						],
+						"settings":
+						{
+							"show_definitions": false,
+							"syntax": "Packages/Rust/Rust.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 694.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 5,
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "savefile-test/src/test_nested_non_repr_c.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 732,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"show_definitions": false,
+							"syntax": "Packages/Rust/Rust.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 90.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 7,
+					"type": "text"
+				},
+				{
+					"buffer": 6,
+					"file": "savefile-test/src/test_nested_repr_c.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 684,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"show_definitions": false,
+							"syntax": "Packages/Rust/Rust.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 6,
 					"type": "text"
 				},
 				{
@@ -1346,7 +1355,7 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 7,
+					"stack_index": 8,
 					"type": "text"
 				},
 				{
@@ -1355,19 +1364,20 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 86,
+						"buffer_size": 235,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								83,
-								83
+								0,
+								0
 							]
 						],
 						"settings":
 						{
+							"show_definitions": false,
 							"syntax": "Packages/Rust/Rust.sublime-syntax"
 						},
 						"translation.x": 0.0,
@@ -1383,15 +1393,15 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 234,
+						"buffer_size": 627,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								234,
-								234
+								0,
+								0
 							]
 						],
 						"settings":
@@ -1411,15 +1421,15 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 182,
+						"buffer_size": 559,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								167,
-								167
+								553,
+								553
 							]
 						],
 						"settings":
@@ -1430,7 +1440,7 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 6,
+					"stack_index": 2,
 					"type": "text"
 				}
 			]
@@ -1438,7 +1448,7 @@
 	],
 	"incremental_find":
 	{
-		"height": 27.0
+		"height": 54.0
 	},
 	"input":
 	{
@@ -1467,6 +1477,10 @@
 		]
 	},
 	"menu_visible": true,
+	"output.diagnostics":
+	{
+		"height": 359.0
+	},
 	"output.exec":
 	{
 		"height": 178.0
@@ -1479,7 +1493,7 @@
 	"project": "savefile.sublime-project",
 	"replace":
 	{
-		"height": 64.0
+		"height": 100.0
 	},
 	"save_all_on_build": true,
 	"select_file":
@@ -1521,7 +1535,7 @@
 	"show_open_files": false,
 	"show_tabs": true,
 	"side_bar_visible": true,
-	"side_bar_width": 282.0,
+	"side_bar_width": 1078.0,
 	"status_bar_visible": true,
 	"template_settings":
 	{
