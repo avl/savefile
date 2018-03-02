@@ -171,7 +171,7 @@ struct ComplexData1 {
 
 #[derive(Debug, PartialEq, Savefile)]
 struct SubSubData2 {
-	y:u32
+	x:u32
 }
 #[derive(Debug, PartialEq, Savefile)]
 struct SubData2 {
@@ -188,7 +188,7 @@ fn test_versioning_of_enums4() {
     assert_roundtrip_to_new_version(
         ComplexData1{some_field:SubData1{some_sub: SubSubData1{x:43}}},
         0,
-        ComplexData2{some_field:SubData2{some_sub: SubSubData2{y:43}}},
+        ComplexData2{some_field:SubData2{some_sub: SubSubData2{x:43}}},
         1
         );
 
