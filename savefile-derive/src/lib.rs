@@ -661,7 +661,53 @@ pub fn reprc(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+#[allow(non_snake_case)]
+fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
+    let local_version = quote_spanned! { defspan => local_version};
+    let SchemaStruct = quote_spanned! { span => SchemaStruct };
+    let SchemaEnum = quote_spanned! { span => SchemaEnum };
+    let Schema = quote_spanned! { span => Schema };
+    let Field = quote_spanned! { span => Field };
+    let Variant = quote_spanned! { span => Variant };
+    let WithSchema = quote_spanned! { span => WithSchema };
+    let fields1=quote_spanned! { defspan => fields1 };
 
+    let mut fields = Vec::new();
+    for (idx,ref field) in field_infos.iter().enumerate() {
+        
+        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let (field_from_version, field_to_version) =
+            (verinfo.version_from, verinfo.version_to);
+
+        let name=if let Some(name) = field.ident {
+            (&name).to_string()
+        } else {
+            idx.to_string()
+        };
+
+        let removed=check_is_remove(&field.ty);
+        let field_type = &field.ty;
+        if field_from_version == 0 && field_to_version == std::u32::MAX {
+            if removed {
+                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+            }                            
+            fields.push(quote_spanned!( span => #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
+            
+        } else {
+            
+            fields.push(quote_spanned!( span => 
+                
+                if #local_version >= #field_from_version && #local_version <= #field_to_version {
+                    #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
+                }
+                ));
+                                        
+        }        
+    }
+    fields
+}
 
 
 #[allow(non_snake_case)]
@@ -688,6 +734,7 @@ pub fn withschema(input: TokenStream) -> TokenStream {
     let Field = quote_spanned! { span => Field };
     let Variant = quote_spanned! { span => Variant };
     let WithSchema = quote_spanned! { span => WithSchema };
+    let fields1=quote_spanned! { defspan => fields1 };
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -706,39 +753,48 @@ pub fn withschema(input: TokenStream) -> TokenStream {
                     panic!("Savefile automatic derive does not support removal of enum values.");
                 }
 
-                let mut fields=Vec::new();
+                let mut field_infos=Vec::new();
 
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
                         for f in fields_named.named.iter() {
-                            let ty = &f.ty;
-                            if check_is_remove(ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            };
-                            let ty = quote_spanned! { span => #ty };
-                            fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
+                            //fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
+                            field_infos.push(FieldInfo {
+                                ident:Some(f.ident.clone().unwrap()),
+                                dbg_name:(&f.ident.clone().unwrap()).to_string(),
+                                ty:&f.ty,
+                                attrs:&f.attrs
+                            });
                         };
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
-                        for f in fields_unnamed.unnamed.iter() {
-                            let ty = &f.ty;
-                            if check_is_remove(ty) {
-                                panic!("The Removed type is not supported for enum types");
-                            };
-
-                            fields.push( quote!{ Box::new(<#ty>::schema(#local_version)) } );
+                        for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
+                            field_infos.push(FieldInfo {
+                                ident:None,
+                                dbg_name:idx.to_string(),
+                                ty:&f.ty,
+                                attrs:&f.attrs
+                            });
                         };
                     }
                     &syn::Fields::Unit => {
                         //No fields
                     }
                 }
+
+                let fields=implement_withschema(field_infos);
+
                 variants.push(quote!{
                     (#field_from_version,
                      #field_to_version,
-                     #Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![#(#fields),*]}
+                     #Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: 
+                        {
+                            let mut fields1 = Vec::<#Field>::new();
+                            #(#fields;)* 
+                            fields1
+                        }}
                     )});
                 //variants.push(quote!{Variant { name: #variant_name_spanned, discriminator: #var_idx, fields: vec![]}})
             }
@@ -767,36 +823,18 @@ pub fn withschema(input: TokenStream) -> TokenStream {
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
                 let local_version = quote_spanned! { defspan => local_version};
-                let mut fields=Vec::new();
+                //let mut fields=Vec::new();
                 let fields1=quote_spanned! { defspan => fields1 };
-                for ref field in &namedfields.named {
-                    {
-                        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
-                        let (field_from_version, field_to_version) =
-                            (verinfo.version_from, verinfo.version_to);
 
-                        let name=field.ident.unwrap();
+                let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                    |field| FieldInfo {
+                        ident : Some(field.ident.unwrap().clone()),
+                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
+                        ty : &field.ty,
+                        attrs: &field.attrs
+                    }).collect();
 
-                        let removed=check_is_remove(&field.ty);
-                        let field_type = &field.ty;
-                        if field_from_version == 0 && field_to_version == std::u32::MAX {
-                            if removed {
-                                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
-                            }                            
-                            fields.push(quote_spanned!( span => #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
-                            
-                        } else {
-                            
-                            fields.push(quote_spanned!( span => 
-                                
-                                if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                                    #fields1.push(#Field { name:stringify!(#name).to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
-                                }
-                                ));
-                                                        
-                        }
-                    }
-                }
+                let fields = implement_withschema(field_infos);
                 quote! {
                     impl #impl_generics #withschema for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]

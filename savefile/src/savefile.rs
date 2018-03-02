@@ -331,7 +331,7 @@ pub struct SchemaStruct {
 pub struct Variant {
     pub name : String,
     pub discriminator : u16,
-    pub fields : Vec<Box<Schema>>
+    pub fields : Vec<Field>
 }
 
 #[derive(Debug,PartialEq)]
@@ -411,7 +411,11 @@ impl Deserialize for Variant {
                 let l = deserializer.read_usize()?;
                 let mut ret=Vec::new();
                 for _ in 0..l {
-                    ret.push(Box::new(Schema::deserialize(deserializer)?))
+                    ret.push(
+                        Field {
+                            name: deserializer.read_string()?,
+                            value: Box::new(Schema::deserialize(deserializer)?)
+                        });
                 }
                 ret
             }
