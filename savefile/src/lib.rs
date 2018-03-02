@@ -26,8 +26,6 @@
 //!
 //! #[macro_use]
 //! extern crate savefile_derive;
-//! use std::fs::File;
-//! use std::io::prelude::*;
 //!
 //!
 //! #[derive(Savefile)]
