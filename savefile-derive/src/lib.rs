@@ -570,7 +570,16 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                 let mut min_safe_version=0;
                 let mut optsafe_outputs = Vec::new();
                 let local_file_version = quote_spanned! { defspan => local_file_version};
-                for ref field in &namedfields.named {
+
+                let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                    |field| FieldInfo {
+                        ident : Some(field.ident.unwrap().clone()),
+                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
+                        ty : &field.ty,
+                        attrs: &field.attrs
+                    }).collect();
+
+                for ref field in &field_infos {
                     {
                         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
                         let (field_from_version, field_to_version) =
