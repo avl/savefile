@@ -141,7 +141,7 @@ as low as possible.
 Savefile has an unsafe trait `ReprC` that you can implement for a type T. This instructs
 Savefile to optimize serialization of Vec<T> into being just a very fast memory copy.
 
-This is dangerous. You, as implementor of the ReprR trait take full responsibility
+This is dangerous. You, as implementor of the `ReprR` trait take full responsibility
 that all the following rules are upheld:
 
  * The type T is Copy

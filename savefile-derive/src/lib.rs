@@ -468,7 +468,7 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
-                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|field|
                             FieldInfo {
                                 ident:None,
                                 ty:&field.ty,
@@ -535,6 +535,7 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
     expanded//.into()
 }
 
+#[allow(non_snake_case)]
 fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:syn::Ident) -> quote::Tokens {
     let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -620,7 +621,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
-                        field_infos.extend(fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                        field_infos.extend(fields_unnamed.unnamed.iter().map(|field|
                             FieldInfo {
                                 ident:None,
                                 ty:&field.ty,
@@ -754,7 +755,7 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                         };
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
+                        for f in fields_unnamed.unnamed.iter() {
                             field_infos.push(FieldInfo {
                                 ident:None,
                                 ty:&f.ty,
@@ -779,7 +780,7 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                             fields1
                         }}
                     )});
-            }
+            }            
             quote! {
                 impl #impl_generics #withschema for #name #ty_generics #where_clause {
 
