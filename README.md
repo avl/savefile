@@ -50,8 +50,8 @@ Make sure you read the docs for the correct version.
 
 # Obligatory completely unfair benchmark
 
-It is a long standing tradition that small minimalistic libraries always have to be benchmarked
-against the industry standard, in a way carefully selected to make the new library appears
+It is a long standing tradition that software libraries always have to be benchmarked
+in a way carefully selected to make the new library appear
 in the best possible light.
 
 In this case, I've selected the case of a Vec of 1000 elements of the following small plain data struct, using
