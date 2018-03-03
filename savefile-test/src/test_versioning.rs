@@ -25,7 +25,6 @@ struct Version3 {
     #[versions = "1..1"]
 	newb: u32,
 	c: usize,
-	#[default_val = "37"]
     #[versions = "2.."]
 	d: usize
 }
@@ -59,7 +58,7 @@ fn simple_vertest1() {
 			b: Removed::new(),
 			newb: 123,
 			c: 412,
-			d: 37
+			d: 0
 		},
 		2
 		);
@@ -192,4 +191,32 @@ fn test_versioning_of_enums4() {
         1
         );
 
+}
+
+#[derive(Debug, PartialEq, Savefile)]
+enum DefTraitEnum {
+	VariantA,
+	VariantB,
+	VariantC,
+}
+
+impl Default for DefTraitEnum {
+	fn default() -> DefTraitEnum {
+		DefTraitEnum::VariantA
+	}
+}
+
+#[derive(Debug, PartialEq, Savefile)]
+struct DefTraitTest {
+    #[versions = "0..0"]    		
+    removed_enum:DefTraitEnum
+}
+
+#[test]
+fn test_default_trait1() {
+	use ::assert_roundtrip_version;
+	assert_roundtrip_version::<DefTraitTest>(
+		DefTraitTest {
+			removed_enum : DefTraitEnum::VariantA
+		},1);
 }

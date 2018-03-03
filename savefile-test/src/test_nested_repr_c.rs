@@ -3,22 +3,22 @@ use ::savefile::prelude::*;
 
 #[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
 struct Inner {
-	misaligner : u8, 
 	x: u32
 }
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
+#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
 struct Nested {
+    misaligner : u8, 
 	inner : Inner
 }
 
 
 
 #[test]
-fn test_not_raw_memcpy() {
+fn test_not_raw_memcpy2() {
     use std::io::Cursor;
 	let sample  = vec![	
-		Nested { inner: Inner { misaligner:0, x: 32}}
+		Nested { misaligner:0, inner: Inner { x: 32}}
 	];
 
     let mut f = Cursor::new(Vec::new());
@@ -27,5 +27,10 @@ fn test_not_raw_memcpy() {
     }
 
     let f_internal_size = f.get_ref().len();
-    assert_eq!(f_internal_size, 8 + 4 + 4 + 1 + 3 ); //3 bytes padding also because of ReprC-optimization
+
+    let vec_overhead=8;
+    let version=4;
+    let misaligner=1;
+    let inner=4;
+    assert_eq!(f_internal_size, version + vec_overhead + misaligner + inner ); //3 bytes padding also because of ReprC-optimization
 }

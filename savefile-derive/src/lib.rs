@@ -346,7 +346,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             verinfo.default_trait,
             verinfo.default_val,
         );
-        let fieldname=&field.dbg_name;
+        //let fieldname=&field.dbg_name;
         let effective_default_val = if let Some(defval) = default_val {
             quote! { str::parse(#defval).unwrap() }
         } else if let Some(deftrait) = default_trait {
@@ -354,7 +354,8 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         } else if is_removed {
             quote! { #removeddef::new() }
         } else {
-            quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
+            quote_spanned! { span => Default::default() }
+            //quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
         };
 
         if field_from_version > field_to_version {
@@ -550,6 +551,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
         ReprC
     };    
     let local_file_version = quote_spanned! { defspan => local_file_version};
+    let WithSchema =  quote_spanned! { span => WithSchema};
     let mut min_safe_version=0;
     let mut optsafe_outputs = Vec::new();
     for ref field in &field_infos {
@@ -562,7 +564,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
             if removed {
-                panic!("The Removed type can only be used for removed fields. Use the version attribute.");
+                panic!("The Removed type can only be used for removed fields. Use the version attribute to mark a field as only existing in previous versions.");
             }
             optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
             
@@ -570,9 +572,9 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
             if field_to_version < std::u32::MAX {
                 min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
             }
-            if field_from_version < std::u32::MAX { // An addition
-                min_safe_version = min_safe_version.max(field_from_version);
-            }                    
+            
+            min_safe_version = min_safe_version.max(field_from_version);
+                                
             if !removed {
                 optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
             }                            
@@ -580,9 +582,14 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
 
     }
     quote! {
+        extern crate std;
+        
         unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
             #[allow(unused_comparisons)]
             fn repr_c_optimization_safe(file_version:u32) -> bool {
+                // The following is a debug_assert because it is slightly expensive, and the entire
+                // point of the ReprC trait is to speed things up.
+                debug_assert_eq!(Some(std::mem::size_of::<#name>()) , <#name as #WithSchema>::schema(file_version).serialized_size());
                 let local_file_version = file_version;
                 file_version >= #min_safe_version
                 #( && #optsafe_outputs)*

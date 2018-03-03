@@ -8,24 +8,19 @@ struct Inner {
 	x: u32
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
-struct Nested {
-	inner : Inner
-}
 
 
 #[test]
-fn test_not_raw_memcpy() {
+#[should_panic] //Inner struct is not packed (same in memory as on disk)
+#[cfg(debug_assertions)] //This test only works in debug builds
+fn test_not_raw_memcpy1() {
     use std::io::Cursor;
 	let sample  = vec![	
-        Nested { inner: Inner { misaligner:0, x: 32}}
+        Inner { misaligner:0, x: 32}
 	];
 
     let mut f = Cursor::new(Vec::new());
     {
-        Serializer::save_noschema(&mut f, 0, &sample).unwrap();
+        Serializer::save_noschema(&mut f, 0, &sample).unwrap(); //Should panic here, Inner contains padding.
     }
-
-    let f_internal_size = f.get_ref().len();
-    assert_eq!(f_internal_size, 8 + 4 + 4 + 1); //8 byte header + 5 byte for the serialized data. The actual object is almost certainly larger in memory.
 }

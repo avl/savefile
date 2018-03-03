@@ -355,6 +355,21 @@ pub struct SchemaStruct {
     pub dbg_name : String,
     pub fields : Vec<Field>
 }
+fn maybe_add(a:Option<usize>,b:Option<usize>) -> Option<usize> {
+    if let Some(a) = a {
+        if let Some(b) = b {
+            return Some(a+b);
+        }
+    }
+    return None;
+}
+impl SchemaStruct {
+    fn serialized_size(&self) -> Option<usize> {
+        self.fields.iter().fold(Some(0usize),|prev,x| {
+            maybe_add(prev,x.value.serialized_size())
+        })
+    }
+}
 
 #[derive(Debug,PartialEq)]
 pub struct Variant {
@@ -362,11 +377,33 @@ pub struct Variant {
     pub discriminator : u16,
     pub fields : Vec<Field>
 }
-
+impl Variant {
+    fn serialized_size(&self) -> Option<usize> {
+        self.fields.iter().fold(Some(0usize),|prev,x| {
+            maybe_add(prev,x.value.serialized_size())
+        })
+    }
+}
 #[derive(Debug,PartialEq)]
 pub struct SchemaEnum {
     pub variants : Vec<Variant>
 }
+fn maybe_max(a:Option<usize>,b:Option<usize>) -> Option<usize> {
+    if let Some(a) = a {
+        if let Some(b) = b {
+            return Some(a.max(b));
+        }
+    }
+    return None;
+}
+impl SchemaEnum {
+    fn serialized_size(&self) -> Option<usize> {
+        self.variants.iter().fold(Some(0usize),|prev,x| {
+            maybe_max(prev,x.serialized_size())
+        })
+    }
+}
+
 
 #[allow(non_camel_case_types)]
 #[derive(Copy,Clone,Debug,PartialEq)]
@@ -379,9 +416,23 @@ pub enum SchemaPrimitive {
     schema_u32,
     schema_i64,
     schema_u64,
-    schema_isize,
-    schema_usize,
     schema_string
+}
+
+impl SchemaPrimitive {
+    fn serialized_size(&self) -> Option<usize> {
+        match *self {
+            SchemaPrimitive::schema_i8 => Some(1),
+            SchemaPrimitive::schema_u8 => Some(1),
+            SchemaPrimitive::schema_i16 => Some(2),
+            SchemaPrimitive::schema_u16 => Some(2),
+            SchemaPrimitive::schema_i32 => Some(4),
+            SchemaPrimitive::schema_u32 => Some(4),
+            SchemaPrimitive::schema_i64 => Some(8),
+            SchemaPrimitive::schema_u64 => Some(8),
+            SchemaPrimitive::schema_string => None,       
+        }
+    }
 }
 
 fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:String) -> Option<String> {
@@ -403,6 +454,28 @@ pub enum Schema {
     Primitive(SchemaPrimitive),
     Vector(Box<Schema>),
     Undefined,
+}
+
+impl Schema {
+    pub fn serialized_size(&self) -> Option<usize> {
+        match self {
+            &Schema::Struct(ref schema_struct) => {
+                return schema_struct.serialized_size();
+            }
+            &Schema::Enum(ref schema_enum) => {
+                return schema_enum.serialized_size();
+            }
+            &Schema::Primitive(ref schema_primitive) => {
+                return schema_primitive.serialized_size()
+            }
+            &Schema::Vector(ref _vector) => {
+                return None;
+            }
+            &Schema::Undefined => {
+                return None;
+            }
+        }
+    }
 }
 
 fn diff_vector(a:&Box<Schema>,b:&Box<Schema>,path:String) -> Option<String> {
@@ -615,9 +688,7 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_u32 => 6,
             SchemaPrimitive::schema_i64 => 7,
             SchemaPrimitive::schema_u64 => 8,
-            SchemaPrimitive::schema_isize => 9,
-            SchemaPrimitive::schema_usize => 10,
-            SchemaPrimitive::schema_string => 11,
+            SchemaPrimitive::schema_string => 9,
         };
         serializer.write_u16(discr)
     }
@@ -633,9 +704,7 @@ impl Deserialize for SchemaPrimitive {
             6 => SchemaPrimitive::schema_u32,
             7 => SchemaPrimitive::schema_i64,
             8 => SchemaPrimitive::schema_u64,
-            9 => SchemaPrimitive::schema_isize,
-            10 => SchemaPrimitive::schema_usize,
-            11 => SchemaPrimitive::schema_string,
+            9 => SchemaPrimitive::schema_string,
             c => panic!("Corrupt schema, primitive type #{} encountered",c),
         };
         Ok(var)
@@ -924,8 +993,20 @@ impl WithSchema for u32 {fn schema(_version:u32) -> Schema {Schema::Primitive(Sc
 impl WithSchema for i32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i32)}}
 impl WithSchema for u64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u64)}}
 impl WithSchema for i64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i64)}}
-impl WithSchema for usize {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_usize)}}
-impl WithSchema for isize {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_isize)}}
+impl WithSchema for usize {fn schema(_version:u32) -> Schema {
+        match std::mem::size_of::<usize>() {
+            4 => Schema::Primitive(SchemaPrimitive::schema_u32),
+            8 => Schema::Primitive(SchemaPrimitive::schema_u64),
+            _ => panic!("Size of usize was neither 32 bit or 64 bit. This is not supported by the savefile crate."),
+        }
+}}
+impl WithSchema for isize {fn schema(_version:u32) -> Schema {
+        match std::mem::size_of::<isize>() {
+            4 => Schema::Primitive(SchemaPrimitive::schema_i32),
+            8 => Schema::Primitive(SchemaPrimitive::schema_i64),
+            _ => panic!("Size of isize was neither 32 bit or 64 bit. This is not supported by the savefile crate."),
+        }
+}}
 
 impl Serialize for u8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {

@@ -21,17 +21,20 @@ use std::io::Cursor;
 use std::io::BufWriter;
 
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
+    assert_roundtrip_version(sample, 0)
+}
+pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32) {
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, 0, &sample).unwrap();
+            Serializer::save(&mut bufw, version, &sample).unwrap();
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
     {
-        let roundtrip_result = Deserializer::load::<E>(&mut f, 0).unwrap();
+        let roundtrip_result = Deserializer::load::<E>(&mut f, version).unwrap();
         assert_eq!(sample, roundtrip_result);        
     }
 
@@ -138,6 +141,11 @@ pub struct BenchStruct {
     x: usize,
     y: usize,
     z: u8,
+    pad1:u8,
+    pad2:u8,
+    pad3:u8,
+    pad4:u32,
+
 }
 
 
@@ -154,7 +162,11 @@ fn bench_serialize(b: &mut Bencher) {
     	test.push(BenchStruct {
     		x:black_box(i),
     		y:black_box(i),
-    		z:black_box(0)
+    		z:black_box(0),
+            pad1:0,
+            pad2:0,
+            pad3:0,
+            pad4:0,
     	})
     }
  	b.iter(move || {
@@ -180,22 +192,26 @@ pub fn test_bench_struct() {
             BenchStruct {
                 x:black_box(1),
                 y:black_box(2),
-                z:black_box(3)
+                z:black_box(3),
+                pad1:0,pad2:0,pad3:0,pad4:0,
             },
             BenchStruct {
                 x:black_box(4),
                 y:black_box(5),
-                z:black_box(6)
+                z:black_box(6),
+                pad1:0,pad2:0,pad3:0,pad4:0,
             },
             BenchStruct {
                 x:black_box(7),
                 y:black_box(8),
-                z:black_box(9)
+                z:black_box(9),
+                pad1:0,pad2:0,pad3:0,pad4:0,
             },
             BenchStruct {
                 x:black_box(1),
                 y:black_box(2),
-                z:black_box(3)
+                z:black_box(3),
+                pad1:0,pad2:0,pad3:0,pad4:0,
             }
             ]
         );
