@@ -31,7 +31,7 @@ pub enum SavefileError {
 
 
 /// Object to which serialized data is to be written.
-/// This is basically just a wrapped [std::io::Write] object
+/// This is basically just a wrapped `std::io::Write` object
 /// and a file protocol version number.
 pub struct Serializer<'a> {
     writer: &'a mut Write,
@@ -39,7 +39,7 @@ pub struct Serializer<'a> {
 }
 
 /// Object from which bytes to be deserialized are read.
-/// This is basically just a wrapped [std::io::Read] object,
+/// This is basically just a wrapped `std::io::Read` object,
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
 pub struct Deserializer<'a> {
@@ -61,7 +61,7 @@ pub struct Deserializer<'a> {
 /// * The type must be copy
 /// * The type must not contain any padding
 /// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
-/// * All the constituent types of the type must also implement ReprC (correctly).
+/// * All the constituent types of the type must also implement `ReprC` (correctly).
 pub unsafe trait ReprC: Copy {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
@@ -90,7 +90,7 @@ impl From<std::string::FromUtf8Error> for SavefileError {
 
 
 
-
+#[allow(unit_arg)]
 impl<'a> Serializer<'a> {
     pub fn write_u8(&mut self, v: u8)  -> Result<(),SavefileError> {
         Ok(self.writer.write_all(&[v])?)
@@ -320,8 +320,8 @@ pub trait WithSchema {
 /// as an argument.
 ///
 /// The most convenient way to implement this is to use
-/// #[macro_use]
-/// extern crate savefile-derive;
+/// `#[macro_use]
+/// extern crate savefile-derive;`
 ///
 /// and the use #[derive(Serialize)]
 pub trait Serialize : WithSchema {
@@ -334,8 +334,8 @@ pub trait Serialize : WithSchema {
 /// be able to deserialize.
 ///
 /// The most convenient way to implement this is to use
-/// #[macro_use]
-/// extern crate savefile-derive;
+/// `#[macro_use]
+/// extern crate savefile-derive;`
 ///
 /// and the use #[derive(Deserialize)]
 pub trait Deserialize : WithSchema + Sized {
@@ -360,8 +360,8 @@ fn maybe_add(a:Option<usize>,b:Option<usize>) -> Option<usize> {
         if let Some(b) = b {
             return Some(a+b);
         }
-    }
-    return None;
+    }   
+    None 
 }
 impl SchemaStruct {
     fn serialized_size(&self) -> Option<usize> {
@@ -396,8 +396,8 @@ fn maybe_max(a:Option<usize>,b:Option<usize>) -> Option<usize> {
         if let Some(b) = b {
             return Some(a.max(b));
         }
-    }
-    return None;
+    }   
+    None 
 }
 impl SchemaEnum {
     fn serialized_size(&self) -> Option<usize> {
@@ -439,21 +439,18 @@ impl SchemaPrimitive {
 
 impl SchemaPrimitive {
     fn serialized_size(&self) -> Option<usize> {
+
         match *self {
-            SchemaPrimitive::schema_i8 => Some(1),
-            SchemaPrimitive::schema_u8 => Some(1),
-            SchemaPrimitive::schema_i16 => Some(2),
-            SchemaPrimitive::schema_u16 => Some(2),
-            SchemaPrimitive::schema_i32 => Some(4),
-            SchemaPrimitive::schema_u32 => Some(4),
-            SchemaPrimitive::schema_i64 => Some(8),
-            SchemaPrimitive::schema_u64 => Some(8),
+            SchemaPrimitive::schema_i8 | SchemaPrimitive::schema_u8 => Some(1),
+            SchemaPrimitive::schema_i16 | SchemaPrimitive::schema_u16 => Some(2),
+            SchemaPrimitive::schema_i32 | SchemaPrimitive::schema_u32 => Some(4),
+            SchemaPrimitive::schema_i64 | SchemaPrimitive::schema_u64 => Some(8),
             SchemaPrimitive::schema_string => None,       
         }
     }
 }
 
-fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:String) -> Option<String> {
+fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:&str) -> Option<String> {
     if a!=b {
 
         return Some(format!("At location [{}]: Application protocol has datatype {}, but disk format has {}",
@@ -472,31 +469,66 @@ pub enum Schema {
     Primitive(SchemaPrimitive),
     Vector(Box<Schema>),
     Undefined,
+    ZeroSize,
 }
 
 impl Schema {
+    pub fn new_tuple1<T1:WithSchema>(version:u32) -> Schema {
+        Schema::Struct(
+            SchemaStruct {
+                dbg_name: "1-Tuple".to_string(),
+                fields:vec![
+                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
+                ]
+            })
+    }
+
+    pub fn new_tuple2<T1:WithSchema,T2:WithSchema>(version:u32) -> Schema {
+        Schema::Struct(
+            SchemaStruct {
+                dbg_name: "2-Tuple".to_string(),
+                fields:vec![
+                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
+                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))}
+                ]
+            })
+    }
+    pub fn new_tuple3<T1:WithSchema,T2:WithSchema,T3:WithSchema>(version:u32) -> Schema {
+        Schema::Struct(
+            SchemaStruct {
+                dbg_name: "3-Tuple".to_string(),
+                fields:vec![
+                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
+                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))},
+                    Field {name:"2".to_string(), value: Box::new(T3::schema(version))}
+                ]
+            })
+    }
     pub fn serialized_size(&self) -> Option<usize> {
-        match self {
-            &Schema::Struct(ref schema_struct) => {
-                return schema_struct.serialized_size();
+        match *self {
+            Schema::Struct(ref schema_struct) => {
+                schema_struct.serialized_size()
             }
-            &Schema::Enum(ref schema_enum) => {
-                return schema_enum.serialized_size();
+            Schema::Enum(ref schema_enum) => {
+                schema_enum.serialized_size()
             }
-            &Schema::Primitive(ref schema_primitive) => {
-                return schema_primitive.serialized_size()
+            Schema::Primitive(ref schema_primitive) => {
+                schema_primitive.serialized_size()
             }
-            &Schema::Vector(ref _vector) => {
-                return None;
+            Schema::Vector(ref _vector) => {
+                None
             }
-            &Schema::Undefined => {
-                return None;
+            Schema::Undefined => {
+                None
+            }
+            Schema::ZeroSize => {
+                Some(0)
             }
         }
     }
 }
 
-fn diff_vector(a:&Box<Schema>,b:&Box<Schema>,path:String) -> Option<String> {
+fn diff_vector(a:&Schema,b:&Schema,path:String) -> Option<String> {
     diff_schema(a,b,
         path + "/*")
 }
@@ -517,20 +549,20 @@ fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
             return Some(format!("At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
                 &path,i,a.variants[i].discriminator,b.variants[i].discriminator));
         }
-        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,(path.to_string()+"/"+&b.variants[i].name).to_string(),"enum",
-            "".to_string(),"".to_string());
+        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,&(path.to_string()+"/"+&b.variants[i].name).to_string(),"enum",
+            "","");
         if let Some(err)=r {
             return Some(err);
         }
     }
-    return None;
+    None
 }
 fn diff_struct(a:&SchemaStruct,b:&SchemaStruct,path:String) -> Option<String> {
-    diff_fields(&a.fields,&b.fields,(path+"/"+&b.dbg_name).to_string(),"struct", 
-        " (struct ".to_string()+&a.dbg_name+")", " (struct ".to_string()+&b.dbg_name+")")
+    diff_fields(&a.fields,&b.fields,&(path+"/"+&b.dbg_name).to_string(),"struct", 
+        &(" (struct ".to_string()+&a.dbg_name+")"), &(" (struct ".to_string()+&b.dbg_name+")"))
 }
-fn diff_fields(a:&Vec<Field>,b:&Vec<Field>,path:String, structuretype:&str,
-    extra_a:String,extra_b:String) -> Option<String> {
+fn diff_fields(a:&[Field],b:&[Field],path:&str, structuretype:&str,
+    extra_a:&str,extra_b:&str) -> Option<String> {
     if a.len()!=b.len() {
         return Some(format!("At location [{}]: In memory {}{} has {} fields, disk format{} has {} fields.",
             path,structuretype,extra_a,a.len(),extra_b,b.len()));
@@ -546,64 +578,81 @@ fn diff_fields(a:&Vec<Field>,b:&Vec<Field>,path:String, structuretype:&str,
             return Some(err);
         }
     }
-    return None;
+    None
 }
 
 /// Returns None if both schema are equivalent
 fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
-    let (atype,btype)=match a {
-        &Schema::Struct(ref xa) => {
-            match b {
-                &Schema::Struct(ref xb) => {
+    let (atype,btype)=match *a {
+        Schema::Struct(ref xa) => {
+            match *b {
+                Schema::Struct(ref xb) => {
                     return diff_struct(xa,xb,path)
                 },
-                &Schema::Enum(_) => ("struct","enum"),
-                &Schema::Primitive(_) => ("struct","primitive"),
-                &Schema::Vector(_) => ("struct","vector"),
-                &Schema::Undefined => ("struct","undefined"),
+                Schema::Enum(_) => ("struct","enum"),
+                Schema::Primitive(_) => ("struct","primitive"),
+                Schema::Vector(_) => ("struct","vector"),
+                Schema::Undefined => ("struct","undefined"),
+                Schema::ZeroSize => ("struct","zerosize"),
             }
         }
-        &Schema::Enum(ref xa) => {
-            match b {
-                &Schema::Enum(ref xb) => {
+        Schema::Enum(ref xa) => {
+            match *b {
+                Schema::Enum(ref xb) => {
                     return diff_enum(xa,xb,path)
                 },
-                &Schema::Struct(_) => ("enum","struct"),
-                &Schema::Primitive(_) => ("enum","primitive"),
-                &Schema::Vector(_) => ("enum","vector"),
-                &Schema::Undefined => ("enum","undefined"),
+                Schema::Struct(_) => ("enum","struct"),
+                Schema::Primitive(_) => ("enum","primitive"),
+                Schema::Vector(_) => ("enum","vector"),
+                Schema::Undefined => ("enum","undefined"),
+                Schema::ZeroSize => ("enum","zerosize"),
             }
         }
-        &Schema::Primitive(ref xa) => {
-            match b {
-                &Schema::Primitive(ref xb) => {
-                    return diff_primitive(*xa,*xb,path);
+        Schema::Primitive(ref xa) => {
+            match *b {
+                Schema::Primitive(ref xb) => {
+                    return diff_primitive(*xa,*xb,&path);
                 },
-                &Schema::Struct(_) => ("primitive","struct"),
-                &Schema::Enum(_) => ("primitive","enum"),
-                &Schema::Vector(_) => ("primitive","vector"),
-                &Schema::Undefined => ("primitive","undefined"),
+                Schema::Struct(_) => ("primitive","struct"),
+                Schema::Enum(_) => ("primitive","enum"),
+                Schema::Vector(_) => ("primitive","vector"),
+                Schema::Undefined => ("primitive","undefined"),
+                Schema::ZeroSize => ("primitive","zerosize"),
             }
         }
-        &Schema::Vector(ref xa) => {
-            match b {
-                &Schema::Vector(ref xb) => {
+        Schema::Vector(ref xa) => {
+            match *b {
+                Schema::Vector(ref xb) => {
                     return diff_vector(xa,xb,path);
                 },
-                &Schema::Struct(_) => ("vector","struct"),
-                &Schema::Enum(_) => ("vector","enum"),
-                &Schema::Primitive(_) => ("vector","primitive"),
-                &Schema::Undefined => ("vector","undefined"),
+                Schema::Struct(_) => ("vector","struct"),
+                Schema::Enum(_) => ("vector","enum"),
+                Schema::Primitive(_) => ("vector","primitive"),
+                Schema::Undefined => ("vector","undefined"),
+                Schema::ZeroSize => ("vector","zerosize"),
             }
         }
-        &Schema::Undefined => {
+        Schema::Undefined => {
             return Some(format!("At location [{}]: Undefined schema encountered.",path));
         }
+        Schema::ZeroSize => {
+            match *b {
+                Schema::ZeroSize => {
+                    return None;
+                },
+                Schema::Vector(_) => ("zerosize","vector"),
+                Schema::Struct(_) => ("zerosize","struct"),
+                Schema::Enum(_) => ("zerosize","enum"),
+                Schema::Primitive(_) => ("zerosize","primitive"),
+                Schema::Undefined => ("zerosize","undefined"),
+            }
+        }
     };
-    return Some(format!("At location [{}]: In memory schema: {}, file schema: {}",
-        path,atype,btype));
+    Some(format!("At location [{}]: In memory schema: {}, file schema: {}",
+        path,atype,btype))
     
 }
+
 
 impl WithSchema for Field {
     fn schema(_version:u32) -> Schema {
@@ -613,7 +662,7 @@ impl WithSchema for Field {
 impl Serialize for Field {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError>{
         serializer.write_string(&self.name)?;
-        Ok(self.value.serialize(serializer)?)
+        self.value.serialize(serializer)
     }
 }
 impl Deserialize for Field {
@@ -681,7 +730,7 @@ impl Deserialize for SchemaStruct {
         let dbg_name = deserializer.read_string()?;
         let l=deserializer.read_usize()?;
         Ok(SchemaStruct {
-            dbg_name : dbg_name,
+            dbg_name,
             fields: {
                 let mut ret=Vec::new();
                 for _ in 0..l {
@@ -757,7 +806,7 @@ impl Deserialize for SchemaEnum {
             ret.push(Variant::deserialize(deserializer)?);
         }
         Ok(SchemaEnum {
-            dbg_name : dbg_name,
+            dbg_name,
             variants: ret
         })
     }
@@ -770,25 +819,28 @@ impl WithSchema for Schema {
 }
 impl Serialize for Schema {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        match self {
-            &Schema::Struct(ref schema_struct) => {
+        match *self {
+            Schema::Struct(ref schema_struct) => {
                 serializer.write_u16(1)?;
                 schema_struct.serialize(serializer)
             },
-            &Schema::Enum(ref schema_enum) => {
+            Schema::Enum(ref schema_enum) => {
                 serializer.write_u16(2)?;
                 schema_enum.serialize(serializer)
             },
-            &Schema::Primitive(ref schema_prim) => {
+            Schema::Primitive(ref schema_prim) => {
                 serializer.write_u16(3)?;
                 schema_prim.serialize(serializer)
             },
-            &Schema::Vector(ref schema_vector) => {
+            Schema::Vector(ref schema_vector) => {
                 serializer.write_u16(4)?;
                 schema_vector.serialize(serializer)
             },
-            &Schema::Undefined => {
-                Ok(serializer.write_u16(5)?)
+            Schema::Undefined => {
+                serializer.write_u16(5)
+            },
+            Schema::ZeroSize => {
+                serializer.write_u16(6)
             },
         }
     }    
@@ -803,6 +855,7 @@ impl Deserialize for Schema {
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
             4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?)),
             5 => Schema::Undefined,
+            6 => Schema::ZeroSize,
             c => panic!("Corrupt schema, schema variant had value {}", c),
         };
 
@@ -864,6 +917,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
+
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let l = deserializer.read_usize()?;
@@ -880,6 +934,7 @@ pub struct Removed<T> {
     phantom: std::marker::PhantomData<T>,
 }
 
+#[allow(new_without_default_derive)] //You should never need to instantiate Removed yourself anyway.
 impl<T> Removed<T> {
     pub fn new() -> Removed<T> {
         Removed {
@@ -907,7 +962,7 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
     }
 }
 
-fn regular_serialize_vec<T: Serialize>(item: &Vec<T>, serializer: &mut Serializer) -> Result<(),SavefileError> {
+fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(),SavefileError> {
     let l = item.len();
     serializer.write_usize(l)?;
     for item in item.iter() {
@@ -1007,6 +1062,104 @@ unsafe impl ReprC for u64 {fn repr_c_optimization_safe(_version:u32) -> bool {tr
 unsafe impl ReprC for i64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+
+
+impl<T1:WithSchema,T2:WithSchema,T3:WithSchema> WithSchema for (T1,T2,T3) {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple3::<T1,T2,T3>(version)
+    }
+}
+impl<T1:Serialize,T2:Serialize,T3:Serialize> Serialize for (T1,T2,T3) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self.0.serialize(serializer)?;
+        self.1.serialize(serializer)?;
+        self.2.serialize(serializer)
+    }
+}
+impl<T1:Deserialize,T2:Deserialize,T3:Deserialize> Deserialize for (T1,T2,T3) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            (T1::deserialize(deserializer)?,
+             T2::deserialize(deserializer)?,
+             T3::deserialize(deserializer)?
+             )
+        )
+    }
+}
+
+impl<T1:WithSchema,T2:WithSchema> WithSchema for (T1,T2) {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple2::<T1,T2>(version)
+    }
+}
+impl<T1:Serialize,T2:Serialize> Serialize for (T1,T2) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self.0.serialize(serializer)?;
+        self.1.serialize(serializer)
+    }
+}
+impl<T1:Deserialize,T2:Deserialize> Deserialize for (T1,T2) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            (T1::deserialize(deserializer)?,
+             T2::deserialize(deserializer)?)
+        )
+    }
+}
+
+impl<T1:WithSchema> WithSchema for (T1,) {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple1::<T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for (T1,) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self.0.serialize(serializer)
+    }
+}
+impl<T1:Deserialize> Deserialize for (T1,) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            (T1::deserialize(deserializer)?,)
+        )
+    }
+}
+
+impl<T:WithSchema> WithSchema for [T;1] {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple1::<T>(version)
+    }
+}
+impl<T:Serialize> Serialize for [T;1] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self[0].serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for [T;1] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let ret = [
+            T::deserialize(deserializer)?
+        ];
+        Ok(ret)
+    }
+}
+
+impl WithSchema for () {
+    fn schema(_version:u32) -> Schema {
+        Schema::ZeroSize
+    }
+}
+impl Serialize for () {
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        Ok(())
+    }
+}
+impl Deserialize for () {
+    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(())
+    }
+}
+
 
 
 impl WithSchema for u8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}

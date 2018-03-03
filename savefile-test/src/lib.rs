@@ -313,3 +313,23 @@ pub fn test_small_struct_remove() {
         1,
     );
 }
+
+
+
+#[derive(Debug, PartialEq, Savefile )]
+struct TupleCarrier {
+    t0 : (),
+    t1 : (u32,),
+    t2 : (u32,u32),
+    t3 : (u32,u32,u32),
+}
+
+#[test]
+pub fn test_tuple() {
+     assert_roundtrip(TupleCarrier{
+        t0:(),
+        t1:(42u32,),
+        t2:(42u32,43u32),
+        t3:(42u32,43u32,44u32),
+    });;   
+}

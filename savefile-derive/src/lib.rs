@@ -40,6 +40,7 @@ fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsR
     parse_attr_tag2(attrs, is_string)
 
 }
+
 fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> AttrsResult {
     let mut field_from_version = 0;
     let mut field_to_version = std::u32::MAX;
@@ -117,7 +118,6 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
 
 struct FieldInfo<'a> {
     ident : Option<syn::Ident>,
-    dbg_name : String,
     ty : &'a syn::Type,
     attrs: &'a Vec<syn::Attribute>
 }
@@ -235,7 +235,6 @@ fn serialize(input: TokenStream) -> quote::Tokens {
                         let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
                             FieldInfo {
                                 ident:Some(field.ident.clone().unwrap()),
-                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();
@@ -253,7 +252,6 @@ fn serialize(input: TokenStream) -> quote::Tokens {
                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
                             FieldInfo {
                                 ident:Some(syn::Ident::from("x".to_string() + &idx.to_string())),
-                                dbg_name: "x".to_string() + &idx.to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();               
@@ -292,7 +290,6 @@ fn serialize(input: TokenStream) -> quote::Tokens {
                 let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
                     FieldInfo {
                         ident:Some(field.ident.clone().unwrap()),
-                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
                         ty:&field.ty,
                         attrs:&field.attrs
                     }).collect();
@@ -346,7 +343,6 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             verinfo.default_trait,
             verinfo.default_val,
         );
-        //let fieldname=&field.dbg_name;
         let effective_default_val = if let Some(defval) = default_val {
             quote! { str::parse(#defval).unwrap() }
         } else if let Some(deftrait) = default_trait {
@@ -460,7 +456,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                         let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
                             FieldInfo {
                                 ident:Some(field.ident.clone().unwrap()),
-                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();
@@ -476,7 +471,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                          let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
                             FieldInfo {
                                 ident:None,
-                                dbg_name:idx.to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();                                     
@@ -511,7 +505,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
                         ident : Some(field.ident.unwrap().clone()),
-                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
                         ty : &field.ty,
                         attrs: &field.attrs
                     }).collect();
@@ -620,7 +613,6 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                         field_infos.extend(fields_named.named.iter().map(|field|
                             FieldInfo {
                                 ident:Some(field.ident.clone().unwrap()),
-                                dbg_name:(&field.ident.clone().unwrap()).to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }));
@@ -631,7 +623,6 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                         field_infos.extend(fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
                             FieldInfo {
                                 ident:None,
-                                dbg_name:idx.to_string(),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }));
@@ -649,7 +640,6 @@ pub fn reprc(input: TokenStream) -> TokenStream {
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
                         ident : Some(field.ident.unwrap().clone()),
-                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
                         ty : &field.ty,
                         attrs: &field.attrs
                     }).collect();
@@ -732,9 +722,10 @@ fn withschema(input: TokenStream) -> quote::Tokens {
     let Schema = quote_spanned! { span => Schema };
     let Field = quote_spanned! { span => Field };
     let Variant = quote_spanned! { span => Variant };
-
+    
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
+
             let mut variants = Vec::new();
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
                 let var_idx = var_idx as u16;
@@ -757,7 +748,6 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                         for f in fields_named.named.iter() {
                             field_infos.push(FieldInfo {
                                 ident:Some(f.ident.clone().unwrap()),
-                                dbg_name:(&f.ident.clone().unwrap()).to_string(),
                                 ty:&f.ty,
                                 attrs:&f.attrs
                             });
@@ -767,7 +757,6 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                         for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident:None,
-                                dbg_name:idx.to_string(),
                                 ty:&f.ty,
                                 attrs:&f.attrs
                             });
@@ -813,15 +802,15 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                         )
                     }
                 }
-            }
+            }            
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
+
             &syn::Fields::Named(ref namedfields) => {
 
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
                         ident : Some(field.ident.unwrap().clone()),
-                        dbg_name:(&field.ident.clone().unwrap()).to_string(),
                         ty : &field.ty,
                         attrs: &field.attrs
                     }).collect();
