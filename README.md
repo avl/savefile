@@ -55,7 +55,7 @@ against the industry standard, in a way carefully selected to make the new libra
 in the best possible light.
 
 In this case, I've selected the case of a Vec of 1000 elements of the following small plain data struct, using
-Savefile and Serde Bincode.
+Savefile.
 
 ```rust
 #[derive(ReprC, Clone, Copy, Debug, Savefile)]
@@ -75,7 +75,7 @@ without any processing. That said, running this gives:
 
 ```
 test bench_savefile_serialize ... bench:       1,153 ns/iter (+/- 892)
-test bench_serde_serialize    ... bench:      27,518 ns/iter (+/- 34)
+
 ```
 
 The full source is in the savefile-test crate, in the savefile github repo: https://github.com/avl/savefile
