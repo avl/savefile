@@ -159,7 +159,7 @@ use test::{Bencher, black_box};
 #[bench]
 fn bench_serde_serialize(b: &mut Bencher) {
     use bincode::{serialize, deserialize};
-    let mut f = Cursor::new(Vec::<BenchStruct>::with_capacity(100));
+    
 
     let mut test=Vec::new();
     for i in 0..1000 {
@@ -365,4 +365,18 @@ pub fn test_tuple() {
         t2:(42u32,43u32),
         t3:(42u32,43u32,44u32),
     });;   
+}
+
+
+#[test]
+pub fn test_box() {
+    use std::rc::Rc;
+    use std::sync::Arc;
+    use std::cell::RefCell;
+    use std::cell::Cell;
+    assert_roundtrip(Box::new(37));
+    assert_roundtrip(Rc::new(38));
+    assert_roundtrip(Arc::new(39));
+    assert_roundtrip(RefCell::new(40));
+    assert_roundtrip(Cell::new(40));
 }

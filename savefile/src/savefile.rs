@@ -1144,6 +1144,99 @@ impl<T:Deserialize> Deserialize for [T;1] {
     }
 }
 
+use std::ops::Deref;
+impl<T:WithSchema> WithSchema for Box<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<T:Serialize> Serialize for Box<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        self.deref().serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for Box<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(Box::new(T::deserialize(deserializer)?))
+    }
+}
+
+use std::rc::Rc;
+
+impl<T:WithSchema> WithSchema for Rc<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<T:Serialize> Serialize for Rc<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        self.deref().serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for Rc<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(Rc::new(T::deserialize(deserializer)?))
+    }
+}
+
+
+use std::sync::Arc;
+
+impl<T:WithSchema> WithSchema for Arc<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<T:Serialize> Serialize for Arc<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        self.deref().serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for Arc<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(Arc::new(T::deserialize(deserializer)?))
+    }
+}
+
+use std::cell::RefCell;
+use std::cell::Cell;
+
+impl<T:WithSchema> WithSchema for RefCell<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<T:Serialize> Serialize for RefCell<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        self.borrow().serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for RefCell<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(RefCell::new(T::deserialize(deserializer)?))
+    }
+}
+
+
+impl<T:WithSchema> WithSchema for Cell<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<T:Serialize+Copy> Serialize for Cell<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        let t:T = self.get();
+        t.serialize(serializer)
+    }
+}
+impl<T:Deserialize> Deserialize for Cell<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(Cell::new(T::deserialize(deserializer)?))
+    }
+}
+
+
+
 impl WithSchema for () {
     fn schema(_version:u32) -> Schema {
         Schema::ZeroSize
