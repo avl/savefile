@@ -384,10 +384,13 @@ impl Variant {
         })
     }
 }
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SchemaEnum {
+    pub dbg_name : String,
     pub variants : Vec<Variant>
 }
+
+
 fn maybe_max(a:Option<usize>,b:Option<usize>) -> Option<usize> {
     if let Some(a) = a {
         if let Some(b) = b {
@@ -418,6 +421,21 @@ pub enum SchemaPrimitive {
     schema_u64,
     schema_string
 }
+impl SchemaPrimitive {
+    fn name(&self) -> &'static str {
+        match *self {
+            SchemaPrimitive::schema_i8 => "i8",
+            SchemaPrimitive::schema_u8 => "u8",
+            SchemaPrimitive::schema_i16 => "i16",
+            SchemaPrimitive::schema_u16 => "u16",
+            SchemaPrimitive::schema_i32 => "i32",
+            SchemaPrimitive::schema_u32 => "u32",
+            SchemaPrimitive::schema_i64 => "i64",
+            SchemaPrimitive::schema_u64 => "u64",
+            SchemaPrimitive::schema_string => "String",
+        }
+    }
+}
 
 impl SchemaPrimitive {
     fn serialized_size(&self) -> Option<usize> {
@@ -438,8 +456,8 @@ impl SchemaPrimitive {
 fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:String) -> Option<String> {
     if a!=b {
 
-        return Some(format!("At location [{}]: Application protocol has datatype {:?}, but disk format has {:?}",
-            path,a,b));
+        return Some(format!("At location [{}]: Application protocol has datatype {}, but disk format has {}",
+            path,a.name(),b.name()));
     }
     None
 }
@@ -484,6 +502,8 @@ fn diff_vector(a:&Box<Schema>,b:&Box<Schema>,path:String) -> Option<String> {
 }
 
 fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
+
+    let path = (path + &b.dbg_name).to_string();
     if a.variants.len()!=b.variants.len() {
         return Some(format!("At location [{}]: In memory enum has {} variants, but disk format has {} variants.",
             path,a.variants.len(),b.variants.len()));
@@ -497,7 +517,7 @@ fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
             return Some(format!("At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
                 &path,i,a.variants[i].discriminator,b.variants[i].discriminator));
         }
-        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,(path.to_string()+"/"+&a.variants[i].name).to_string(),"enum",
+        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,(path.to_string()+"/"+&b.variants[i].name).to_string(),"enum",
             "".to_string(),"".to_string());
         if let Some(err)=r {
             return Some(err);
@@ -506,7 +526,7 @@ fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
     return None;
 }
 fn diff_struct(a:&SchemaStruct,b:&SchemaStruct,path:String) -> Option<String> {
-    diff_fields(&a.fields,&b.fields,path,"struct", 
+    diff_fields(&a.fields,&b.fields,(path+"/"+&b.dbg_name).to_string(),"struct", 
         " (struct ".to_string()+&a.dbg_name+")", " (struct ".to_string()+&b.dbg_name+")")
 }
 fn diff_fields(a:&Vec<Field>,b:&Vec<Field>,path:String, structuretype:&str,
@@ -516,11 +536,12 @@ fn diff_fields(a:&Vec<Field>,b:&Vec<Field>,path:String, structuretype:&str,
             path,structuretype,extra_a,a.len(),extra_b,b.len()));
     }
     for i in 0..a.len() {
+        /*
         if a[i].name!=b[i].name {
             return Some(format!("At location [{}]: Field #{} in memory{} is called {}, but in disk format{} it is called {}",
                 &path,i,extra_a,a[i].name,extra_b,b[i].name));
-        }
-        let r=diff_schema(&a[i].value,&b[i].value,(path.to_string()+"/"+&a[i].name).to_string());
+        }*/
+        let r=diff_schema(&a[i].value,&b[i].value,(path.to_string()+"/"+&b[i].name).to_string());
         if let Some(err)=r {
             return Some(err);
         }
@@ -719,8 +740,9 @@ impl WithSchema for SchemaEnum {
 
 impl Serialize for SchemaEnum {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.variants.len())?;
-        for var in &self.variants {
+        for var in &self.variants {            
             var.serialize(serializer)?;
         }
         Ok(())
@@ -728,12 +750,14 @@ impl Serialize for SchemaEnum {
 }
 impl Deserialize for SchemaEnum {
     fn deserialize(deserializer:&mut Deserializer) -> Result<Self,SavefileError> {
+        let dbg_name = deserializer.read_string()?;
         let l = deserializer.read_usize()?;
         let mut ret=Vec::new();
         for _ in 0..l {
             ret.push(Variant::deserialize(deserializer)?);
         }
         Ok(SchemaEnum {
+            dbg_name : dbg_name,
             variants: ret
         })
     }

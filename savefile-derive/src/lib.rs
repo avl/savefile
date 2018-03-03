@@ -800,6 +800,7 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                         let local_version = version;
                         #Schema::Enum (
                             #SchemaEnum {
+                                dbg_name : stringify!(#name).to_string(),
                                 variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
                                     if local_version >= fromver && local_version <= tover {
                                         Some(x)
