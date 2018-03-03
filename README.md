@@ -2,7 +2,7 @@
 
 # WARNING
 
-THIS IS STILL UNDOCUMENTED AND PROBABLY IMPOSSIBLE TO LEARN UNTIL IT IS!
+THIS IS STILL VERY EXPERIMENTAL! THERE WILL BE BUGS.
 
 This software is very young and possibly NOT ready for use yet :-) .
 You have been warned. If you're looking for a high quality 
