@@ -42,6 +42,44 @@ Features savefile does not have, and will not have:
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
 
+# Docs
+
+The savefile docs are available at: https://docs.rs/crate/savefile/
+Make sure you read the docs for the correct version.
+
+
+# Obligatory completely unfair benchmark
+
+It is a long standing tradition that small minimalistic libraries always have to be benchmarked
+against the industry standard, in a way carefully selected to make the new library appears
+in the best possible light.
+
+In this case, I've selected the case of a Vec of 1000 elements of the following small plain data struct, using
+Savefile and Serde Bincode.
+
+```rust
+#[derive(ReprC, Clone, Copy, Debug, Savefile)]
+pub struct BenchStruct {
+    x: usize,
+    y: usize,
+    z: u8,
+    pad1:u8,
+    pad2:u8,
+    pad3:u8,
+    pad4:u32,
+}
+```
+
+This is unfair, since Savefile, given the ReprC marker, will handle this case by writing the raw memory directly to file
+without any processing. That said, running this gives:
+
+```
+test bench_savefile_serialize ... bench:       1,153 ns/iter (+/- 892)
+test bench_serde_serialize    ... bench:      27,518 ns/iter (+/- 34)
+```
+
+The full source is in the savefile-test crate, in the savefile github repo: https://github.com/avl/savefile
+
 
 
 # License

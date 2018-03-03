@@ -7,3 +7,6 @@ authors = ["Anders Musikka <anders@andersmusikka.se>"]
 savefile = { path = "../savefile" }
 savefile-derive = { path = "../savefile-derive" }
 
+serde="*"
+serde_derive="*"
+bincode="*"

@@ -136,7 +136,13 @@ pub fn test_string() {
     assert_roundtrip("test string".to_string());
 }
 
-#[derive(ReprC, Clone, Copy, Debug, Savefile, PartialEq)]
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate bincode;
+
+#[derive(Serialize, Deserialize, ReprC, Clone, Copy, Debug, Savefile, PartialEq)]
 pub struct BenchStruct {
     x: usize,
     y: usize,
@@ -145,15 +151,42 @@ pub struct BenchStruct {
     pad2:u8,
     pad3:u8,
     pad4:u32,
-
 }
-
 
 #[allow(unused_imports)]
 use test::{Bencher, black_box};
 
 #[bench]
-fn bench_serialize(b: &mut Bencher) {
+fn bench_serde_serialize(b: &mut Bencher) {
+    use bincode::{serialize, deserialize};
+    let mut f = Cursor::new(Vec::<BenchStruct>::with_capacity(100));
+
+    let mut test=Vec::new();
+    for i in 0..1000 {
+        test.push(BenchStruct {
+            x:black_box(i),
+            y:black_box(i),
+            z:black_box(0),
+            pad1:0,
+            pad2:0,
+            pad3:0,
+            pad4:0,
+        })
+    }
+    b.iter(move || {
+
+        let encoded: Vec<u8> = serialize(&test).unwrap();
+
+        let encoded = black_box(encoded);
+
+        let r: Vec<BenchStruct> = deserialize(&encoded[..]).unwrap();
+
+        assert!(r.len()==1000);  
+    });
+}
+
+#[bench]
+fn bench_savefile_serialize(b: &mut Bencher) {
 
     let mut f = Cursor::new(Vec::with_capacity(100));
 
