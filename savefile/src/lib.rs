@@ -58,7 +58,7 @@ fn main() {
 # Handling old versions
 
 Let's expand the above example, by creating a 2nd version of the Player struct. Let's say
-you decide that your game mechanics doesn't really need to track the skill of the player. But
+you decide that your game mechanics doesn't really need to track the strength of the player. But
 you do wish to have a set of skills per player as well as the inventory.
 
 Mark the struct like so:
