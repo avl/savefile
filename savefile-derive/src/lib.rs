@@ -135,7 +135,6 @@ struct FieldInfo<'a> {
 fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
     let mut min_safe_version=0;
     let mut output = Vec::new();
-    let mut optsafe_outputs = Vec::new();
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
@@ -161,7 +160,6 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                 if removed {
                     panic!("The Removed type can only be used for removed fields. Use the version attribute.");
                 }
-                optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
                 output.push(quote!(
                     (#objid).serialize(#local_serializer)?;
                     ));
@@ -172,9 +170,6 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                 if field_from_version < std::u32::MAX { // An addition
                     min_safe_version = min_safe_version.max(field_from_version);
                 }                    
-                if !removed {
-                    optsafe_outputs.push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_serializer)));
-                }
                 output.push(quote!(
                         if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
                             (#objid).serialize(#local_serializer)?;
@@ -211,20 +206,28 @@ fn serialize(input: TokenStream) -> quote::Tokens {
 
     let generics = input.generics;
 
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
 
     let gen2=generics.clone();
     let (impl_generics, ty_generics, where_clause) = gen2.split_for_impl();
 
-    let span = proc_macro2::Span::call_site();
-    let serialize = quote_spanned! {span=>
-        Serialize
+    let uses = quote_spanned! { defspan =>
+            extern crate savefile as _savefile;            
+        };
+
+
+    let serialize = quote_spanned! {defspan=>
+        _savefile::prelude::Serialize
     };
-    let serializer = quote_spanned! {span=>
-        Serializer
+    let serializer = quote_spanned! {defspan=>
+        _savefile::prelude::Serializer
     };
-    let saveerr = quote_spanned! {span=>
-        Result<(),SavefileError>
+    let saveerr = quote_spanned! {defspan=>
+        Result<(),_savefile::prelude::SavefileError>
     };
+    let magic=format!("_IMPL_SAVEFILE_SERIALIZE_FOR_{}", &name).to_string();    
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -280,17 +283,22 @@ fn serialize(input: TokenStream) -> quote::Tokens {
                 }
             }
             quote! {
-                impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                    #uses
 
-                    #[allow(unused_comparisons)]
-                    fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
-                        //println!("Serializer running on {} : {:?}", stringify!(#name), self);
-                        match self {
-                            #(#output,)*
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause {
+
+                        #[allow(unused_comparisons)]
+                        fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
+                            //println!("Serializer running on {} : {:?}", stringify!(#name), self);
+                            match self {
+                                #(#output,)*
+                            }
+                            Ok(())
                         }
-                        Ok(())
                     }
-                }
+                };
             }
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
@@ -305,19 +313,21 @@ fn serialize(input: TokenStream) -> quote::Tokens {
                     }).collect();
 
 
-                //let check:()=fieldInfos;
-
-
                 let (fields_serialize,_field_names) = implement_fields_serialize(field_infos, true);
 
                 quote! {
-                    impl #impl_generics #serialize for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
-                        fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                            #(#fields_serialize)*
-                            Ok(())                    
+                    #[allow(non_upper_case_globals)] 
+                    const #dummy_const: () = {
+                        #uses
+
+                        impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                            #[allow(unused_comparisons)]
+                            fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
+                                #(#fields_serialize)*
+                                Ok(())                    
+                            }
                         }
-                    }
+                    };
                 }
             }
             _ => panic!("Only regular structs supported, not tuple structs."),
@@ -335,7 +345,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
-    let removeddef = quote_spanned! { span => Removed };
+    let removeddef = quote_spanned! { defspan => _savefile::prelude::Removed };
     let local_deserializer = quote_spanned! { defspan => deserializer};
 
     let mut output=Vec::new();
@@ -425,6 +435,7 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
     let input: DeriveInput = syn::parse(input).unwrap();
 
     let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::def_site();
     
     let name = input.ident;
 
@@ -432,19 +443,25 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let deserialize = quote_spanned! {span=>
-        Deserialize
-    };
-    let deserializer = quote_spanned! {span=>
-        Deserializer
+    let deserialize = quote_spanned! {defspan=>
+        _savefile::prelude::Deserialize
     };
 
-    let saveerr = quote_spanned! {span=>
-        SavefileError
+    let uses = quote_spanned! { defspan =>
+            extern crate savefile as _savefile;            
+        };
+
+    let deserializer = quote_spanned! {defspan=>
+        _savefile::prelude::Deserializer
+    };
+
+    let saveerr = quote_spanned! {defspan=>
+        _savefile::prelude::SavefileError
     };
 
     
-    
+    let magic=format!("_IMPL_SAVEFILE_DESERIALIZE_FOR_{}", &name).to_string();    
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
     
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -495,18 +512,23 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                     }
                 }
             }
+
             quote! {
-                impl #impl_generics #deserialize for #name #ty_generics #where_clause {
-                    #[allow(unused_comparisons)]
-                    fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                        //println!("Deserializer running on {}", stringify!(#name));
-                        
-                        Ok(match deserializer.read_u8()? {
-                            #(#output,)*
-                            _ => panic!("Corrupt file - unknown enum variant detected.")
-                        })
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                    #uses
+                    impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
+                            //println!("Deserializer running on {}", stringify!(#name));
+                            
+                            Ok(match deserializer.read_u8()? {
+                                #(#output,)*
+                                _ => panic!("Corrupt file - unknown enum variant detected.")
+                            })
+                        }
                     }
-                }
+                };
             }
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
@@ -521,18 +543,22 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
 
                 let output = implement_deserialize(field_infos);
 
-                quote! {
 
-                        impl #impl_generics #deserialize for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
-                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                            
-                            //println!("Deserializer running on {}", stringify!(#name));
-                            Ok(#name {
-                                #(#output,)*
-                            })
-                        }                        
-                    }
+                quote! {
+                    #[allow(non_upper_case_globals)] 
+                    const #dummy_const: () = {
+                            #uses
+                            impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                            #[allow(unused_comparisons)]
+                            fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
+                                
+                                //println!("Deserializer running on {}", stringify!(#name));
+                                Ok(#name {
+                                    #(#output,)*
+                                })
+                            }                        
+                        }
+                    };
                 }
             }
             _ => panic!("Only regular structs supported, not tuple structs."),
@@ -551,13 +577,19 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
-    let reprc = quote_spanned! {span=>
-        ReprC
+    let reprc = quote_spanned! {defspan=>
+        _savefile::prelude::ReprC
     };    
     let local_file_version = quote_spanned! { defspan => local_file_version};
-    let WithSchema =  quote_spanned! { span => WithSchema};
+    let WithSchema =  quote_spanned! { defspan => _savefile::prelude::WithSchema};
     let mut min_safe_version=0;
     let mut optsafe_outputs = Vec::new();
+    let uses = quote_spanned! { defspan =>
+            extern crate savefile as _savefile;            
+        };
+    let magic=format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();    
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+
     for ref field in &field_infos {
 
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
@@ -586,19 +618,23 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
 
     }
     quote! {
-        extern crate std;
         
-        unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
-            #[allow(unused_comparisons)]
-            fn repr_c_optimization_safe(file_version:u32) -> bool {
-                // The following is a debug_assert because it is slightly expensive, and the entire
-                // point of the ReprC trait is to speed things up.
-                debug_assert_eq!(Some(std::mem::size_of::<#name>()) , <#name as #WithSchema>::schema(file_version).serialized_size());
-                let local_file_version = file_version;
-                file_version >= #min_safe_version
-                #( && #optsafe_outputs)*
+        #[allow(non_upper_case_globals)] 
+        const #dummy_const: () = {
+            extern crate std;
+            #uses
+            unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
+                #[allow(unused_comparisons)]
+                fn repr_c_optimization_safe(file_version:u32) -> bool {
+                    // The following is a debug_assert because it is slightly expensive, and the entire
+                    // point of the ReprC trait is to speed things up.
+                    debug_assert_eq!(Some(std::mem::size_of::<#name>()) , <#name as #WithSchema>::schema(file_version).serialized_size());
+                    let local_file_version = file_version;
+                    file_version >= #min_safe_version
+                    #( && #optsafe_outputs)*
+                }
             }
-        }
+        };
     }    
 }
 
@@ -673,8 +709,8 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
     let local_version = quote_spanned! { defspan => local_version};
-    let Field = quote_spanned! { span => Field };
-    let WithSchema = quote_spanned! { span => WithSchema };
+    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema };
     let fields1=quote_spanned! { defspan => fields1 };
 
     let mut fields = Vec::new();
@@ -724,16 +760,23 @@ fn withschema(input: TokenStream) -> quote::Tokens {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
-    let withschema = quote_spanned! {span=>
-        WithSchema
+    let defspan = proc_macro2::Span::def_site();
+    let withschema = quote_spanned! {defspan=>
+        _savefile::prelude::WithSchema
     };
+    let uses = quote_spanned! { defspan =>
+            extern crate savefile as _savefile;            
+        };
 
-    let SchemaStruct = quote_spanned! { span => SchemaStruct };
-    let SchemaEnum = quote_spanned! { span => SchemaEnum };
-    let Schema = quote_spanned! { span => Schema };
-    let Field = quote_spanned! { span => Field };
-    let Variant = quote_spanned! { span => Variant };
+    let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
+    let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
+    let Schema = quote_spanned! { defspan => _savefile::prelude::Schema };
+    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
     
+    let magic=format!("_IMPL_SAVEFILE_WITHSCHEMA_FOR_{}", &name).to_string();    
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
 
@@ -792,27 +835,32 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                     )});
             }            
             quote! {
-                impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                    #uses
 
-                    #[allow(unused_mut)]
-                    #[allow(unused_comparisons)]
-                    fn schema(version:u32) -> #Schema {
-                        let local_version = version;
-                        #Schema::Enum (
-                            #SchemaEnum {
-                                dbg_name : stringify!(#name).to_string(),
-                                variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
-                                    if local_version >= fromver && local_version <= tover {
-                                        Some(x)
-                                    } else {
-                                        None
-                                    }
-                                }).collect()
-                                //variants : vec![]
-                            }
-                        )
+                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
+
+                        #[allow(unused_mut)]
+                        #[allow(unused_comparisons)]
+                        fn schema(version:u32) -> #Schema {
+                            let local_version = version;
+                            #Schema::Enum (
+                                #SchemaEnum {
+                                    dbg_name : stringify!(#name).to_string(),
+                                    variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
+                                        if local_version >= fromver && local_version <= tover {
+                                            Some(x)
+                                        } else {
+                                            None
+                                        }
+                                    }).collect()
+                                    //variants : vec![]
+                                }
+                            )
+                        }
                     }
-                }
+                };
             }            
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
@@ -828,21 +876,25 @@ fn withschema(input: TokenStream) -> quote::Tokens {
 
                 let fields = implement_withschema(field_infos);
                 quote! {
+                    #[allow(non_upper_case_globals)] 
+                    const #dummy_const: () = {
+                        #uses
 
-                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
-                        #[allow(unused_mut)]
-                        fn schema(version:u32) -> #Schema {
-                            let local_version = version;
-                            let mut fields1 = Vec::new();
-                            #(#fields;)* ;
-                            #Schema::Struct(#SchemaStruct{
-                                dbg_name: stringify!(#name).to_string(),
-                                fields: fields1
-                            })
-                            
+                        impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                            #[allow(unused_comparisons)]
+                            #[allow(unused_mut)]
+                            fn schema(version:u32) -> #Schema {
+                                let local_version = version;
+                                let mut fields1 = Vec::new();
+                                #(#fields;)* ;
+                                #Schema::Struct(#SchemaStruct{
+                                    dbg_name: stringify!(#name).to_string(),
+                                    fields: fields1
+                                })
+                                
+                            }
                         }
-                    }
+                    };
                 }
             }
             _ => panic!("Only regular structs supported, not tuple structs."),

@@ -240,8 +240,6 @@ struct VersionB2 {
 	b: String
 }
 
-
-
 #[test]
 fn test_custom_default_fn() {
     use ::assert_roundtrip_to_new_version;
