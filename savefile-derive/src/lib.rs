@@ -11,7 +11,7 @@ use std::iter::IntoIterator;
 struct AttrsResult {
     version_from: u32,
     version_to: u32,
-    default_trait: Option<String>,
+    default_fn: Option<syn::Ident>,
     default_val: Option<quote::Tokens>,
 }
 
@@ -44,7 +44,7 @@ fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsR
 fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> AttrsResult {
     let mut field_from_version = 0;
     let mut field_to_version = std::u32::MAX;
-    let default_trait = None;
+    let mut default_fn = None;
     let mut default_val = None;
     for attr in attrs.iter() {
         if let Some(ref meta) = attr.interpret_meta() {
@@ -71,6 +71,16 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                                     let default_evaled = default_val_str_lit.value();
                                     Some(quote!{#default_evaled})
                                 };
+                    };
+                    if x.ident.to_string() == "default_fn" {
+                        let default_fn_str_lit = match &x.lit {
+                            &syn::Lit::Str(ref litstr) => litstr,
+                            _ => {
+                                panic!("Unexpected attribute value, please specify default_fn method names within quotes.");
+                            }
+                        };
+                        default_fn = Some(syn::Ident::new(&default_fn_str_lit.value(),proc_macro2::Span::call_site()));
+                                
                     };
                     if x.ident.to_string() == "versions" {
                         match &x.lit {
@@ -111,7 +121,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     AttrsResult {
         version_from: field_from_version,
         version_to: field_to_version,
-        default_trait: default_trait,
+        default_fn: default_fn,
         default_val: default_val,
     }
 }
@@ -192,7 +202,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
 }
 
-//#[proc_macro_derive(Serialize, attributes(versions, default_val, default_trait))]
+//#[proc_macro_derive(Serialize, attributes(versions, default_val, default_fn))]
 fn serialize(input: TokenStream) -> quote::Tokens {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
@@ -337,16 +347,16 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         //let local_deserializer = quote_spanned! { defspan => local_deserializer};
 
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
-        let (field_from_version, field_to_version, default_trait, default_val) = (
+        let (field_from_version, field_to_version, default_fn, default_val) = (
             verinfo.version_from,
             verinfo.version_to,
-            verinfo.default_trait,
+            verinfo.default_fn,
             verinfo.default_val,
         );
         let effective_default_val = if let Some(defval) = default_val {
             quote! { str::parse(#defval).unwrap() }
-        } else if let Some(deftrait) = default_trait {
-            quote! { #deftrait::default() }
+        } else if let Some(default_fn) = default_fn {
+            quote_spanned! { span => #default_fn() }
         } else if is_removed {
             quote! { #removeddef::new() }
         } else {
@@ -392,7 +402,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     output
 }
 
-#[proc_macro_derive(Savefile, attributes(versions, default_val, default_trait))]
+#[proc_macro_derive(Savefile, attributes(versions, default_val, default_fn))]
 pub fn savefile(input: TokenStream) -> TokenStream {
     let s=serialize(input.clone());
     let d=deserialize(input.clone());
@@ -408,7 +418,7 @@ pub fn savefile(input: TokenStream) -> TokenStream {
 
     expanded.into()
 }
-//#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_trait))]
+//#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_fn))]
 
 fn deserialize(input: TokenStream) -> quote::Tokens {
     // Construct a string representation of the type definition
@@ -592,7 +602,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
     }    
 }
 
-#[proc_macro_derive(ReprC, attributes(versions, default_val, default_trait))]
+#[proc_macro_derive(ReprC, attributes(versions, default_val, default_fn))]
 pub fn reprc(input: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();

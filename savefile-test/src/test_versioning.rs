@@ -220,3 +220,39 @@ fn test_default_trait1() {
 			removed_enum : DefTraitEnum::VariantA
 		},1);
 }
+
+
+
+
+#[derive(Debug, PartialEq, Savefile)]
+struct VersionB1 {
+	a: String,
+}
+
+fn b_default() -> String {
+	"custom_default_value".to_string()
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct VersionB2 {
+	a: String,		
+    #[default_fn = "b_default"]
+    #[versions = "1.."]
+	b: String
+}
+
+
+
+#[test]
+fn test_custom_default_fn() {
+    use ::assert_roundtrip_to_new_version;
+    assert_roundtrip_to_new_version(
+        VersionB1{a:"test".to_string()},
+        0,
+        VersionB2{a:"test".to_string(),b:"custom_default_value".to_string()},
+        1
+        );
+
+}
+
+
+
