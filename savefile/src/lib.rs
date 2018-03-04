@@ -135,6 +135,45 @@ a `Serializer`.
 The `Deserialize`trait represents a type which knows how to read instances of itself from a `Deserializer`.
 
 
+# Rules for managing versions
+
+The key to supporting multiple versions of your data-structures, is using the #[versions] attribute
+
+The syntax is one of the following:
+
+```
+#[versions = "N.."]  //A field added in version N
+#[versions = "..N"]  //A field removed in version N+1. That is, it existed up to and including version N.
+#[versions = "N..M"] //A field that was added in version N and removed in M+1. That is, a field which existed in versions N .. up to and including M.
+```
+
+Removed fields must keep their deserialization type. This is easiest accomplished by substituting their previous type
+using the `Removed<T>` type. `Removed<T>` uses zero space in RAM, but deserializes equivalently to T. 
+
+Savefile tries to validate that the `Removed<T>` type is used correctly. This validation is based on string
+matching, so it may trigger false positives for other types named Removed. Please avoid using a type with
+such a name. If this becomes a problem, please file an issue on github.
+
+Using the #[versions] tag is critically important. If this is messed up, data corruption is likely.
+
+## Rules
+
+ * You must keep track of what the current version of your data is. Let's call this version N.
+ * You may only save data using version N (supply this number when calling `save`)
+ * When data is loaded, you must supply version N as the memory-version number to `load`. Load will
+   still adapt the deserialization operation to the version of the serialized data.
+ * The version number N is "global". All components of the saved data must have the same version. 
+ * Whenever changes to the data are to be made, the global version number must be increased.
+ * You may add a new field to your structs, iff you also give it a #[versions = "N.."] attribute. N must be the new version of your data.
+ * You may remove a field from your structs. If previously it had no #[versions] attribute, you must
+   add a #[versions = "..N"] attribute. If it already had an attribute #[versions = "M.."], you must close
+   its version interval using the current version of your data: #[versions = "M..N"]. Whenever a field is removed,
+   its type must simply be changed to Removed<T> where T is its previous type. You may never completely remove 
+   items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
+ * You may not change the type of a field in your structs.
+
+
+
 # Speeding things up
 
 Now, let's say we want to add a list of all positions that our player have visited,
@@ -155,11 +194,12 @@ that all the following rules are upheld:
  has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
  that the #[repr(C)] trait does not do this - it will include padding if needed for alignment
  reasons. You should not use #[repr(packed)], since that may lead to unaligned struct fields.
- If you really want the performance boost of the Savefile `ReprC`-trait, you should instead
- add manual padding, if necessary.
+ If you really want the performance boost of the Savefile `ReprC`-trait, you should use #[repr(C)]
+ combined with manual padding, if necessary.
 
 For example, don't do:
 ```
+#[repr(C)]
 struct Bad {
 	f1 : u8,
 	f2 : u32,
@@ -170,6 +210,7 @@ Since the compiler is likely to insert 3 bytes of padding after f1, to ensure th
 Instead, do this:
 
 ```
+#[repr(C)]
 struct Good {
 	f1 : u8,
 	pad1 :u8,
@@ -183,6 +224,7 @@ And simpy don't use the pad1, pad2 and pad3 fields. Note, at time of writing, Sa
 be free of all padding. Even padding at the end is not allowed. This means that the following does not work:
 
 ```
+#[repr(C)]
 struct Bad2 {
 	f1 : u32,
 	f2 : u8,
