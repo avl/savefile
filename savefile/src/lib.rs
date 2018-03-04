@@ -44,13 +44,17 @@ fn load_player() -> Player {
 }
 
 fn main() {
-    save_player(&Player { name: "Steve".to_string(), strength: 42,
+	let player = Player { name: "Steve".to_string(), strength: 42,
         inventory: vec!(
             "wallet".to_string(),
             "car keys".to_string(),
-            "glasses".to_string())});
-    assert_eq!(load_player().name,"Steve".to_string());
+            "glasses".to_string())};
 
+    save_player(&player);
+
+    let reloaded_player = load_player();
+
+    assert_eq!(reloaded_player.name,"Steve".to_string());
 }
 
 ```
