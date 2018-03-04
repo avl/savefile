@@ -3,6 +3,10 @@ name = "savefile"
 version = "0.1.7"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
+exclude = [
+    "*.bin"
+]
+
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
 
 readme = "../README.md"
