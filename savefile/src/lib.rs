@@ -75,7 +75,7 @@ use savefile::prelude::*;
 #[macro_use]
 extern crate savefile_derive;
 
-
+const GLOBAL_VERSION:u32 = 1;
 #[derive(Savefile)]
 struct Player {
     name : String,
@@ -87,14 +87,14 @@ struct Player {
 }
 
 fn save_player(file:&'static str, player:&Player) {
-	// Save version 1 of file.
-    save_file(file, 1, player).unwrap();
+	// Save current version of file.
+    save_file(file, GLOBAL_VERSION, player).unwrap();
 }
 
 fn load_player(file:&'static str) -> Player {
-	// The '1' means we have version 1 in memory,
+	// The GLOBAL_VERSION means we have that version of our data structures,
 	// but we can still load any older version.
-    load_file(file, 1).unwrap()
+    load_file(file, GLOBAL_VERSION).unwrap()
 }
 
 fn main() {
@@ -141,7 +141,7 @@ The key to supporting multiple versions of your data-structures, is using the #[
 
 The syntax is one of the following:
 
-```
+```text
 #[versions = "N.."]  //A field added in version N
 #[versions = "..N"]  //A field removed in version N+1. That is, it existed up to and including version N.
 #[versions = "N..M"] //A field that was added in version N and removed in M+1. That is, a field which existed in versions N .. up to and including M.
@@ -251,6 +251,7 @@ struct Position {
 	y : u32,
 }
 
+const GLOBAL_VERSION:u32 = 2;
 #[derive(Savefile)]
 struct Player {
     name : String,
@@ -264,14 +265,11 @@ struct Player {
 }
 
 fn save_player(file:&'static str, player:&Player) {
-	// Save version 1 of file.
-    save_file(file, 2, player).unwrap();
+    save_file(file, GLOBAL_VERSION, player).unwrap();
 }
 
 fn load_player(file:&'static str) -> Player {
-	// The '1' means we have version 1 in memory,
-	// but we can still load any older version.
-    load_file(file, 2).unwrap()
+    load_file(file, GLOBAL_VERSION).unwrap()
 }
 
 fn main() {
