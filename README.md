@@ -9,8 +9,49 @@ You have been warned. If you're looking for a high quality
 serialization library for rust, you should probably look at serde instead: 
 https://github.com/serde-rs/serde
 
+# Sample 
 
-# Savefile 
+```rust
+extern crate savefile;
+use savefile::prelude::*;
+
+#[macro_use]
+extern crate savefile_derive;
+
+
+#[derive(Savefile)]
+struct Player {
+    name : String,
+    strength : u32,
+    inventory : Vec<String>,
+}
+
+fn save_player(player:&Player) {
+    save_file("save.bin", 0, player).unwrap();
+}
+
+fn load_player() -> Player {
+    load_file("save.bin", 0).unwrap()
+}
+
+fn main() {
+    save_player(&Player { name: "Steve".to_string(), strength: 42,
+        inventory: vec!(
+            "wallet".to_string(),
+            "car keys".to_string(),
+            "glasses".to_string())});
+    assert_eq!(load_player().name,"Steve".to_string());
+
+}
+
+```
+
+# Docs
+
+The savefile docs are available at: https://docs.rs/crate/savefile/
+Make sure you read the docs for the correct version.
+
+# Introduction to Savefile 
 
 Savefile is a library to effortlessly serialize rust structs and enums, in
 an efficient binary format, to anything implementing the Write trait, and 
@@ -41,44 +82,6 @@ Features savefile does not have, and will not have:
  * Support for serializing boxed traits ("objects"). You can (probably) hack this in by manually
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
-
-# Docs
-
-The savefile docs are available at: https://docs.rs/crate/savefile/
-Make sure you read the docs for the correct version.
-
-
-# Obligatory completely unfair benchmark
-
-It is a long standing tradition that software libraries always have to be benchmarked
-in a way carefully selected to make the new library appear
-in the best possible light.
-
-In this case, I've selected the case of a Vec of 1000 elements of the following small plain data struct, using
-Savefile.
-
-```rust
-#[derive(ReprC, Clone, Copy, Debug, Savefile)]
-pub struct BenchStruct {
-    x: usize,
-    y: usize,
-    z: u8,
-    pad1:u8,
-    pad2:u8,
-    pad3:u8,
-    pad4:u32,
-}
-```
-
-This is unfair, since Savefile, given the ReprC marker, will handle this case by writing the raw memory directly to file
-without any processing. That said, running this gives:
-
-```
-test bench_savefile_serialize ... bench:       1,153 ns/iter (+/- 892)
-
-```
-
-The full source is in the savefile-test crate, in the savefile github repo: https://github.com/avl/savefile
 
 
 
