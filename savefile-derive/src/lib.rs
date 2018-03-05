@@ -127,13 +127,13 @@ struct FieldInfo<'a> {
     attrs: &'a Vec<syn::Attribute>
 }
 
-fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
+fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool, index:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
     let mut min_safe_version=0;
     let mut output = Vec::new();
     
     let defspan = proc_macro2::Span::def_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
-
+    let mut index_number = 0;
     for ref field in &field_infos {
         {
 
@@ -141,14 +141,20 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
             let (field_from_version, field_to_version) =
                 (verinfo.version_from, verinfo.version_to);
 
-            let id = field.ident.clone().unwrap();
             let removed=check_is_remove(&field.ty);
-            
-            let objid = 
-            if implicit_self {
+                        
+            let objid = if index {
+                assert!(implicit_self);
+                let id = syn::Index::from(index_number);
+                index_number+=1;
                 quote!{ self.#id}
             } else {
-                quote!{ #id}
+                let id = field.ident.clone().unwrap();
+                if implicit_self {
+                    quote!{ self.#id}
+                } else {
+                    quote!{ #id}
+                }
             };
 
             if field_from_version == 0 && field_to_version == std::u32::MAX {
@@ -243,7 +249,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
                                 attrs:&field.attrs
                             }).collect();
 
-                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false);
+                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false, false);
                         output.push(
                             quote!( #variant_name_spanned{#(#fields_names,)*} => { 
                                 serializer.write_u8(#var_idx)?; 
@@ -260,7 +266,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
                                 attrs:&field.attrs
                             }).collect();               
 
-                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false);
+                        let (fields_serialized,fields_names) = implement_fields_serialize(field_infos, false, false);
                         
                         output.push(
                             quote!( #variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
@@ -304,19 +310,19 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
                         }).collect();
 
 
-                    let t=implement_fields_serialize(field_infos, true);
+                    let t=implement_fields_serialize(field_infos, true, false);
                     fields_serialize = t.0;
                     _field_names = t.1;
                 },
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
-                    let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                    let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|field|
                         FieldInfo {
-                            ident:Some(syn::Ident::from("x".to_string() + &idx.to_string())),
+                            ident:None,
                             ty:&field.ty,
                             attrs:&field.attrs
                         }).collect();               
 
-                    let t = implement_fields_serialize(field_infos, false);
+                    let t = implement_fields_serialize(field_infos, true, true);
                     fields_serialize = t.0;
                     _field_names = t.1;
                 },
@@ -545,7 +551,11 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                             attrs: &field.attrs
                         }).collect();
 
-                    implement_deserialize(field_infos)
+                    let output1=implement_deserialize(field_infos);
+                    quote!{Ok(#name {
+                                #(#output1,)*
+                            })}
+
                 },
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                      let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|field|
@@ -554,7 +564,11 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                             ty:&field.ty,
                             attrs:&field.attrs
                         }).collect();                                     
-                    implement_deserialize(field_infos)
+                    let output1=implement_deserialize(field_infos);
+
+                    quote!{Ok(#name (
+                                #(#output1,)*
+                            ))}
                 },
                 _ => panic!("Only regular structs supported, not tuple structs."),
             };
@@ -564,11 +578,8 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                         #uses
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
-                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                            
-                            Ok(#name {
-                                #(#output,)*
-                            })
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {                            
+                            #output
                         }                        
                     }
                 };
