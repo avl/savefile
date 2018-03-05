@@ -685,17 +685,17 @@ pub fn reprc(input: TokenStream) -> TokenStream {
     
     let name = input.ident;
 
-    let enum_size = get_enum_size(&input.attrs);
-    if let Some(enum_size) = enum_size {
-        if enum_size != 1 {
-            panic!("The ReprC trait assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
-        }
-    }  
     let expanded = match &input.data {
 
 
         &syn::Data::Enum(ref enum1) => {
-
+            let enum_size = get_enum_size(&input.attrs);
+            if let Some(enum_size) = enum_size {
+                if enum_size != 1 {
+                    panic!("The ReprC trait assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
+                }
+            }  
+            
             let mut field_infos = Vec::<FieldInfo>::new();
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
