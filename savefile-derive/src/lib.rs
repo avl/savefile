@@ -21,7 +21,6 @@ fn check_is_remove(field_type: &syn::Type) -> bool {
     let mut tokens = quote::Tokens::new();
     field_type.to_tokens(&mut tokens);
     for tok in tokens.into_iter() {
-        //        if tok.clone().into_tokens()==quote!( savefile::Removed ).clone().into_tokens() {
         if tok.to_string()=="Removed" { //TODO: This is not robust, since it's based on text matching
             is_remove=true;
         }
@@ -56,7 +55,6 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     panic!("Unexpected savefile attribute, list.");
                 }
                 &syn::Meta::NameValue(ref x) => {
-                    //println!("Attr name value : {:?}",x.ident.to_string());
                     if x.ident.to_string() == "default_val" {
                         let default_val_str_lit = match &x.lit {
                             &syn::Lit::Str(ref litstr) => litstr,
@@ -65,7 +63,6 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                             }
                         };
                         default_val = if is_string_default_val {
-                                    //let litstr=syn::LitStr::new(&default_val_str,span);
                                     Some(quote! { #default_val_str_lit })
                                 } else {
                                     let default_evaled = default_val_str_lit.value();
@@ -85,7 +82,6 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     if x.ident.to_string() == "versions" {
                         match &x.lit {
                             &syn::Lit::Str(ref litstr) => {
-                                //println!("Literal value: {:?}",litstr.value());
                                 let output: Vec<String> =
                                     litstr.value().split("..").map(|x| x.to_string()).collect();
                                 if output.len() != 2 {
@@ -109,7 +105,6 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                                     panic!("The to version in the version tag must be an integer. Use #[versions=0..3] for example");
                                 }
 
-                                //scan!("{}..{}",)
                             }
                             _ => panic!("Unexpected datatype for value of attribute versions"),
                         }
@@ -135,7 +130,7 @@ struct FieldInfo<'a> {
 fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
     let mut min_safe_version=0;
     let mut output = Vec::new();
-    let span = proc_macro2::Span::call_site();
+    
     let defspan = proc_macro2::Span::def_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
 
@@ -148,7 +143,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
             let id = field.ident.clone().unwrap();
             let removed=check_is_remove(&field.ty);
-            let field_type = &field.ty;
+            
             let objid = 
             if implicit_self {
                 quote!{ self.#id}
@@ -178,7 +173,6 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
         }
     }
     let serialize2 = quote! {
-        //println!("Serializer running on {}", stringify!(#name));
         let local_serializer = serializer;
         if #min_safe_version > local_serializer.version {
                 panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
@@ -197,10 +191,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
 }
 
-//#[proc_macro_derive(Serialize, attributes(versions, default_val, default_fn))]
-fn serialize(input: TokenStream) -> quote::Tokens {
-    // Construct a string representation of the type definition
-    let input: DeriveInput = syn::parse(input).unwrap();
+fn serialize(input: DeriveInput) -> quote::Tokens {
 
     let name = input.ident;
 
@@ -291,7 +282,6 @@ fn serialize(input: TokenStream) -> quote::Tokens {
 
                         #[allow(unused_comparisons)]
                         fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
-                            //println!("Serializer running on {} : {:?}", stringify!(#name), self);
                             match self {
                                 #(#output,)*
                             }
@@ -337,8 +327,7 @@ fn serialize(input: TokenStream) -> quote::Tokens {
         }
     };
 
-    //println!("Emitting: {:?}",expanded);
-    expanded//.into()
+    expanded
 }
 
 fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
@@ -354,7 +343,6 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         let field_type = &field.ty;
 
         let is_removed=check_is_remove(field_type);
-        //let local_deserializer = quote_spanned! { defspan => local_deserializer};
 
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
         let (field_from_version, field_to_version, default_fn, default_val) = (
@@ -371,7 +359,6 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             quote! { #removeddef::new() }
         } else {
             quote_spanned! { span => Default::default() }
-            //quote! { panic!("internal error - there was no default value available for field: {}", stringify!(#fieldname) ) }
         };
 
         if field_from_version > field_to_version {
@@ -414,6 +401,8 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
 #[proc_macro_derive(Savefile, attributes(versions, default_val, default_fn))]
 pub fn savefile(input: TokenStream) -> TokenStream {
+    let input: DeriveInput = syn::parse(input).unwrap();
+
     let s=serialize(input.clone());
     let d=deserialize(input.clone());
     let w=withschema(input);
@@ -428,11 +417,9 @@ pub fn savefile(input: TokenStream) -> TokenStream {
 
     expanded.into()
 }
-//#[proc_macro_derive(Deserialize, attributes(versions, default_val, default_fn))]
+fn deserialize(input: DeriveInput) -> quote::Tokens {
 
-fn deserialize(input: TokenStream) -> quote::Tokens {
-    // Construct a string representation of the type definition
-    let input: DeriveInput = syn::parse(input).unwrap();
+
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::def_site();
@@ -478,7 +465,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
-                        //let fields_names=fields_named.named.iter().map(|x|x.ident.unwrap());
                         
                         let field_infos : Vec<FieldInfo> = fields_named.named.iter().map(|field|
                             FieldInfo {
@@ -494,7 +480,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                         );
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
                          let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|field|
                             FieldInfo {
                                 ident:None,
@@ -520,7 +505,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                     impl #impl_generics #deserialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                            //println!("Deserializer running on {}", stringify!(#name));
                             
                             Ok(match deserializer.read_u8()? {
                                 #(#output,)*
@@ -533,7 +517,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
-                //let mut min_safe_version=0;
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
                         ident : Some(field.ident.unwrap().clone()),
@@ -552,7 +535,6 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
                             #[allow(unused_comparisons)]
                             fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                                 
-                                //println!("Deserializer running on {}", stringify!(#name));
                                 Ok(#name {
                                     #(#output,)*
                                 })
@@ -568,7 +550,7 @@ fn deserialize(input: TokenStream) -> quote::Tokens {
         }
     };
 
-    expanded//.into()
+    expanded
 }
 
 #[allow(non_snake_case)]
@@ -624,7 +606,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
             extern crate std;
             #uses
             unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
-                #[allow(unused_comparisons)]
+                #[allow(unused_comparisons,unused_variables)]
                 fn repr_c_optimization_safe(file_version:u32) -> bool {
                     // The following is a debug_assert because it is slightly expensive, and the entire
                     // point of the ReprC trait is to speed things up.
@@ -638,17 +620,78 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
     }    
 }
 
+
+fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
+    use quote::ToTokens;
+    let mut size_u32:Option<u32> = None;
+    for attr in attrs.iter() {
+        if let Some(ref meta) = attr.interpret_meta() {
+            match meta {
+                &syn::Meta::NameValue(ref _x) => {
+                }
+                &syn::Meta::Word(ref _x) => {                    
+                }
+                &syn::Meta::List(ref metalist) => {
+
+                    if &metalist.ident.as_ref() == &"repr" {
+                        for x in &metalist.nested {
+                            let size_str : String = match *x {
+                                syn::NestedMeta::Meta(ref inner_x) => {
+                                    match inner_x {
+                                        &syn::Meta::NameValue(ref _x) => {
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                        }
+                                        &syn::Meta::Word(ref lit_word) => {
+                                            lit_word.as_ref().to_string()
+                                        }
+                                        &syn::Meta::List(ref _metalist) => {
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                        }
+                                    }                                    
+                                },
+                                syn::NestedMeta::Literal(ref lit) => {
+                                    match lit {
+                                        &syn::Lit::Str(ref litstr) => litstr.value(),
+                                        _ => {
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                        }
+                                    }
+                                },
+                            };
+                            size_u32=match size_str.as_ref() {
+                                "u8" => Some(1),
+                                "i8" => Some(1),
+                                "u16" => Some(2),
+                                "i16" => Some(2),
+                                "u32" => Some(4),
+                                "i32" => Some(4),
+                                "u64" => Some(8),
+                                "i64" => Some(8),
+                                _ => panic!("Unsupported repr(X) attribute on enum: {}",size_str)
+                            }
+                        }
+
+                    }
+                    
+                }
+            }
+        }
+    }
+    size_u32
+}
 #[proc_macro_derive(ReprC, attributes(versions, default_val, default_fn))]
 pub fn reprc(input: TokenStream) -> TokenStream {
-    // Construct a string representation of the type definition
     let input: DeriveInput = syn::parse(input).unwrap();
-
+    
     let name = input.ident;
 
-    
-    
+    let enum_size = get_enum_size(&input.attrs);
+    if let Some(enum_size) = enum_size {
+        if enum_size != 1 {
+            panic!("The ReprC trait assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
+        }
+    }  
     let expanded = match &input.data {
-
 
 
         &syn::Data::Enum(ref enum1) => {
@@ -656,25 +699,16 @@ pub fn reprc(input: TokenStream) -> TokenStream {
             let mut field_infos = Vec::<FieldInfo>::new();
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
-                    &syn::Fields::Named(ref fields_named) => {                        
-                        field_infos.extend(fields_named.named.iter().map(|field|
-                            FieldInfo {
-                                ident:Some(field.ident.clone().unwrap()),
-                                ty:&field.ty,
-                                attrs:&field.attrs
-                            }));
-
+                    &syn::Fields::Named(ref _fields_named) => {                        
+                        panic!("The ReprC trait cannot be derived for enums with fields.");
                     }
-                    &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        //let fields_names=fields_unnamed.unnamed.iter().enumerate().map(|(idx,x)|"x".to_string()+&idx.to_string());
-                        field_infos.extend(fields_unnamed.unnamed.iter().map(|field|
-                            FieldInfo {
-                                ident:None,
-                                ty:&field.ty,
-                                attrs:&field.attrs
-                            }));
+                    &syn::Fields::Unnamed(ref _fields_unnamed) => {
+                        panic!("The ReprC trait cannot be derived for enums with fields.");
                     }
                     &syn::Fields::Unit => {
+                        if enum_size.is_none() {
+                            panic!("Enums which derive the ReprC trait must specify the enum size using the repr-attribute, like #[repr(u8)].");
+                        }
                     }
                 }
             }
@@ -700,7 +734,6 @@ pub fn reprc(input: TokenStream) -> TokenStream {
         }
     };
 
-    //println!("Emitting: {:?}",expanded);
     expanded.into()
 }
 
@@ -750,9 +783,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
 
 #[allow(non_snake_case)]
-fn withschema(input: TokenStream) -> quote::Tokens {
-    // Construct a string representation of the type definition
-    let input: DeriveInput = syn::parse(input).unwrap();
+fn withschema(input: DeriveInput) -> quote::Tokens {
 
     let name = input.ident;
 
@@ -782,7 +813,10 @@ fn withschema(input: TokenStream) -> quote::Tokens {
 
             let mut variants = Vec::new();
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
-                let var_idx = var_idx as u16;
+                if var_idx > 255 {
+                    panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
+                }
+                let var_idx = var_idx as u8;
                 let var_ident = variant.ident;
                 let variant_name = quote!{ #var_ident };
                 let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
@@ -855,7 +889,6 @@ fn withschema(input: TokenStream) -> quote::Tokens {
                                             None
                                         }
                                     }).collect()
-                                    //variants : vec![]
                                 }
                             )
                         }
@@ -904,7 +937,6 @@ fn withschema(input: TokenStream) -> quote::Tokens {
         }
     };
 
-    //println!("Emitting: {:?}",expanded);
     expanded
 }
 

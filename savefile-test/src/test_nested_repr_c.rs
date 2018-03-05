@@ -13,6 +13,13 @@ struct Nested {
 }
 
 
+#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
+#[repr(u8)]
+pub enum TestReprEnum {
+    A,
+    B,
+    C,
+}
 
 #[test]
 fn test_not_raw_memcpy2() {

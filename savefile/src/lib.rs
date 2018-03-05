@@ -196,6 +196,8 @@ that all the following rules are upheld:
  reasons. You should not use #[repr(packed)], since that may lead to unaligned struct fields.
  If you really want the performance boost of the Savefile `ReprC`-trait, you should use #[repr(C)]
  combined with manual padding, if necessary.
+ * The type is either a struct, or an enum without fields.
+ * If the type is an enum, it must be #[repr(u8)] .
 
 For example, don't do:
 ```

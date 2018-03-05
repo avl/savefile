@@ -374,7 +374,7 @@ impl SchemaStruct {
 #[derive(Debug,PartialEq)]
 pub struct Variant {
     pub name : String,
-    pub discriminator : u16,
+    pub discriminator : u8,
     pub fields : Vec<Field>
 }
 impl Variant {
@@ -681,7 +681,7 @@ impl WithSchema for Variant {
 impl Serialize for Variant {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         serializer.write_string(&self.name)?;
-        serializer.write_u16(self.discriminator)?;
+        serializer.write_u8(self.discriminator)?;
         serializer.write_usize(self.fields.len())?;
         for field in &self.fields  {
             field.serialize(serializer)?;
@@ -693,7 +693,7 @@ impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         Ok(Variant {
             name: deserializer.read_string()?,
-            discriminator: deserializer.read_u16()?,
+            discriminator: deserializer.read_u8()?,
             fields : {
                 let l = deserializer.read_usize()?;
                 let mut ret=Vec::new();
@@ -760,12 +760,12 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_u64 => 8,
             SchemaPrimitive::schema_string => 9,
         };
-        serializer.write_u16(discr)
+        serializer.write_u8(discr)
     }
 }
 impl Deserialize for SchemaPrimitive {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let var=match deserializer.read_u16()? {
+        let var=match deserializer.read_u8()? {
             1 => SchemaPrimitive::schema_i8,
             2 => SchemaPrimitive::schema_u8,
             3 => SchemaPrimitive::schema_i16,
@@ -821,26 +821,26 @@ impl Serialize for Schema {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         match *self {
             Schema::Struct(ref schema_struct) => {
-                serializer.write_u16(1)?;
+                serializer.write_u8(1)?;
                 schema_struct.serialize(serializer)
             },
             Schema::Enum(ref schema_enum) => {
-                serializer.write_u16(2)?;
+                serializer.write_u8(2)?;
                 schema_enum.serialize(serializer)
             },
             Schema::Primitive(ref schema_prim) => {
-                serializer.write_u16(3)?;
+                serializer.write_u8(3)?;
                 schema_prim.serialize(serializer)
             },
             Schema::Vector(ref schema_vector) => {
-                serializer.write_u16(4)?;
+                serializer.write_u8(4)?;
                 schema_vector.serialize(serializer)
             },
             Schema::Undefined => {
-                serializer.write_u16(5)
+                serializer.write_u8(5)
             },
             Schema::ZeroSize => {
-                serializer.write_u16(6)
+                serializer.write_u8(6)
             },
         }
     }    
@@ -849,7 +849,7 @@ impl Serialize for Schema {
 
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let schema=match deserializer.read_u16()? {
+        let schema=match deserializer.read_u8()? {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
