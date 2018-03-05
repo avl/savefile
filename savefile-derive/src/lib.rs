@@ -132,6 +132,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
     let mut output = Vec::new();
     
     let defspan = proc_macro2::Span::def_site();
+    let span = proc_macro2::Span::call_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
     let mut index_number = 0;
     for ref field in &field_infos {
@@ -145,7 +146,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                         
             let objid = if index {
                 assert!(implicit_self);
-                let id = syn::Index::from(index_number);
+                let id = syn::Index { index:index_number, span:span };
                 index_number+=1;
                 quote!{ self.#id}
             } else {
@@ -425,12 +426,10 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 pub fn savefile(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
-    println!("Serialize");
     let s=serialize(input.clone());
-    println!("Deserialize");
 
     let d=deserialize(input.clone());
-    println!("WithSchema");
+
     let w=withschema(input);
 
     let expanded=quote! {

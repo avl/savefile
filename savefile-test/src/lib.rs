@@ -383,12 +383,22 @@ pub fn test_box() {
     assert_roundtrip(Cell::new(40));
 }
 
-#[derive(Savefile)]
+#[derive(Savefile,Debug,PartialEq)]
 struct NewTypeSample(u32);
 
 #[test]
 pub fn test_newtype() {
 
     assert_roundtrip(NewTypeSample(43));
+
+}
+
+#[derive(Savefile,Debug,PartialEq)]
+struct NewTypeSample2(u32,f32);
+
+#[test]
+pub fn test_newtype2() {
+
+    assert_roundtrip(NewTypeSample2(43,42.5));
 
 }
