@@ -113,6 +113,13 @@ impl<'a> Serializer<'a> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
+    pub fn write_f32(&mut self, v: f32) -> Result<(),SavefileError> {
+        Ok(self.writer.write_f32::<LittleEndian>(v)?)
+    }
+    pub fn write_f64(&mut self, v: f64) -> Result<(),SavefileError> {
+        Ok(self.writer.write_f64::<LittleEndian>(v)?)
+    }
+
     pub fn write_u64(&mut self, v: u64) -> Result<(),SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
     }
@@ -198,6 +205,12 @@ impl<'a> Deserializer<'a> {
     }
     pub fn read_i64(&mut self) -> Result<i64,SavefileError> {
         Ok(self.reader.read_i64::<LittleEndian>()?)
+    }
+    pub fn read_f32(&mut self) -> Result<f32,SavefileError> {
+        Ok(self.reader.read_f32::<LittleEndian>()?)
+    }
+    pub fn read_f64(&mut self) -> Result<f64,SavefileError> {
+        Ok(self.reader.read_f64::<LittleEndian>()?)
     }
     pub fn read_isize(&mut self) -> Result<isize,SavefileError> {
         Ok(self.reader.read_i64::<LittleEndian>()? as isize)
@@ -419,7 +432,9 @@ pub enum SchemaPrimitive {
     schema_u32,
     schema_i64,
     schema_u64,
-    schema_string
+    schema_string,
+    schema_f32,
+    schema_f64,
 }
 impl SchemaPrimitive {
     fn name(&self) -> &'static str {
@@ -433,6 +448,8 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_i64 => "i64",
             SchemaPrimitive::schema_u64 => "u64",
             SchemaPrimitive::schema_string => "String",
+            SchemaPrimitive::schema_f32 => "f32",
+            SchemaPrimitive::schema_f64 => "f64",
         }
     }
 }
@@ -446,6 +463,8 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_i32 | SchemaPrimitive::schema_u32 => Some(4),
             SchemaPrimitive::schema_i64 | SchemaPrimitive::schema_u64 => Some(8),
             SchemaPrimitive::schema_string => None,       
+            SchemaPrimitive::schema_f32 => Some(4),
+            SchemaPrimitive::schema_f64 => Some(8),
         }
     }
 }
@@ -759,6 +778,8 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_i64 => 7,
             SchemaPrimitive::schema_u64 => 8,
             SchemaPrimitive::schema_string => 9,
+            SchemaPrimitive::schema_f32 => 10,
+            SchemaPrimitive::schema_f64 => 11,
         };
         serializer.write_u8(discr)
     }
@@ -775,6 +796,8 @@ impl Deserialize for SchemaPrimitive {
             7 => SchemaPrimitive::schema_i64,
             8 => SchemaPrimitive::schema_u64,
             9 => SchemaPrimitive::schema_string,
+            10 => SchemaPrimitive::schema_f32,
+            11 => SchemaPrimitive::schema_f64,
             c => panic!("Corrupt schema, primitive type #{} encountered",c),
         };
         Ok(var)
@@ -1277,6 +1300,8 @@ impl WithSchema for isize {fn schema(_version:u32) -> Schema {
             _ => panic!("Size of isize was neither 32 bit or 64 bit. This is not supported by the savefile crate."),
         }
 }}
+impl WithSchema for f32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f32)}}
+impl WithSchema for f64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f64)}}
 
 impl Serialize for u8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
@@ -1298,6 +1323,30 @@ impl Deserialize for i8 {
         deserializer.read_i8()
     }
 }
+
+
+impl Serialize for f32 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_f32(*self)
+    }
+}
+impl Deserialize for f32 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        deserializer.read_f32()
+    }
+}
+
+impl Serialize for f64 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_f64(*self)
+    }
+}
+impl Deserialize for f64 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        deserializer.read_f64()
+    }
+}
+
 
 impl Serialize for u16 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {

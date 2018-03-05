@@ -291,37 +291,53 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
                 };
             }
         }
-        &syn::Data::Struct(ref struc) => match &struc.fields {
-            &syn::Fields::Named(ref namedfields) => {
+        &syn::Data::Struct(ref struc) => { 
+            let fields_serialize:quote::Tokens;
+            let _field_names:Vec<quote::Tokens>;
+            match &struc.fields {
+                &syn::Fields::Named(ref namedfields) => {
+                    let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
+                        FieldInfo {
+                            ident:Some(field.ident.clone().unwrap()),
+                            ty:&field.ty,
+                            attrs:&field.attrs
+                        }).collect();
 
 
-                let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
-                    FieldInfo {
-                        ident:Some(field.ident.clone().unwrap()),
-                        ty:&field.ty,
-                        attrs:&field.attrs
-                    }).collect();
+                    let t=implement_fields_serialize(field_infos, true);
+                    fields_serialize = t.0;
+                    _field_names = t.1;
+                },
+                &syn::Fields::Unnamed(ref fields_unnamed) => {
+                    let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                        FieldInfo {
+                            ident:Some(syn::Ident::from("x".to_string() + &idx.to_string())),
+                            ty:&field.ty,
+                            attrs:&field.attrs
+                        }).collect();               
 
-
-                let (fields_serialize,_field_names) = implement_fields_serialize(field_infos, true);
-
-                quote! {
-                    #[allow(non_upper_case_globals)] 
-                    const #dummy_const: () = {
-                        #uses
-
-                        impl #impl_generics #serialize for #name #ty_generics #where_clause {
-                            #[allow(unused_comparisons)]
-                            fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                                #(#fields_serialize)*
-                                Ok(())                    
-                            }
-                        }
-                    };
-                }
+                    let t = implement_fields_serialize(field_infos, false);
+                    fields_serialize = t.0;
+                    _field_names = t.1;
+                },
+                _ => panic!("Only regular structs supported, not tuple structs."),
             }
-            _ => panic!("Only regular structs supported, not tuple structs."),
-        },
+            quote! {
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                    #uses
+
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
+                            #(#fields_serialize)*
+                            Ok(())                    
+                        }
+                    }
+                };
+            }            
+        }
+        ,
         _ => {
             panic!("Only regular structs are supported");
         }
@@ -403,8 +419,12 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 pub fn savefile(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
+    println!("Serialize");
     let s=serialize(input.clone());
+    println!("Deserialize");
+
     let d=deserialize(input.clone());
+    println!("WithSchema");
     let w=withschema(input);
 
     let expanded=quote! {
@@ -515,35 +535,44 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                 };
             }
         }
-        &syn::Data::Struct(ref struc) => match &struc.fields {
-            &syn::Fields::Named(ref namedfields) => {
-                let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
-                    |field| FieldInfo {
-                        ident : Some(field.ident.unwrap().clone()),
-                        ty : &field.ty,
-                        attrs: &field.attrs
-                    }).collect();
+        &syn::Data::Struct(ref struc) => {
+            let output = match &struc.fields {
+                &syn::Fields::Named(ref namedfields) => {
+                    let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                        |field| FieldInfo {
+                            ident : Some(field.ident.unwrap().clone()),
+                            ty : &field.ty,
+                            attrs: &field.attrs
+                        }).collect();
 
-                let output = implement_deserialize(field_infos);
-
-
-                quote! {
-                    #[allow(non_upper_case_globals)] 
-                    const #dummy_const: () = {
-                            #uses
-                            impl #impl_generics #deserialize for #name #ty_generics #where_clause {
-                            #[allow(unused_comparisons)]
-                            fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                                
-                                Ok(#name {
-                                    #(#output,)*
-                                })
-                            }                        
-                        }
-                    };
-                }
+                    implement_deserialize(field_infos)
+                },
+                &syn::Fields::Unnamed(ref fields_unnamed) => {
+                     let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|field|
+                        FieldInfo {
+                            ident:None,
+                            ty:&field.ty,
+                            attrs:&field.attrs
+                        }).collect();                                     
+                    implement_deserialize(field_infos)
+                },
+                _ => panic!("Only regular structs supported, not tuple structs."),
+            };
+            quote! {
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                        #uses
+                        impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
+                            
+                            Ok(#name {
+                                #(#output,)*
+                            })
+                        }                        
+                    }
+                };
             }
-            _ => panic!("Only regular structs supported, not tuple structs."),
         },
         _ => {
             panic!("Only regular structs are supported");
@@ -758,7 +787,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         } else {
             idx.to_string()
         };
-
+        //println!("Type: {:?}",field.ty.id.as_ref());
         let removed=check_is_remove(&field.ty);
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
@@ -896,41 +925,53 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
                 };
             }            
         }
-        &syn::Data::Struct(ref struc) => match &struc.fields {
+        &syn::Data::Struct(ref struc) => {
+            let fields;
+            match &struc.fields {
 
-            &syn::Fields::Named(ref namedfields) => {
+                &syn::Fields::Named(ref namedfields) => {
 
-                let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
-                    |field| FieldInfo {
-                        ident : Some(field.ident.unwrap().clone()),
-                        ty : &field.ty,
-                        attrs: &field.attrs
-                    }).collect();
+                    let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                        |field| FieldInfo {
+                            ident : Some(field.ident.unwrap().clone()),
+                            ty : &field.ty,
+                            attrs: &field.attrs
+                        }).collect();
 
-                let fields = implement_withschema(field_infos);
-                quote! {
-                    #[allow(non_upper_case_globals)] 
-                    const #dummy_const: () = {
-                        #uses
-
-                        impl #impl_generics #withschema for #name #ty_generics #where_clause {
-                            #[allow(unused_comparisons)]
-                            #[allow(unused_mut)]
-                            fn schema(version:u32) -> #Schema {
-                                let local_version = version;
-                                let mut fields1 = Vec::new();
-                                #(#fields;)* ;
-                                #Schema::Struct(#SchemaStruct{
-                                    dbg_name: stringify!(#name).to_string(),
-                                    fields: fields1
-                                })
-                                
-                            }
-                        }
-                    };
+                    fields = implement_withschema(field_infos);
                 }
+                &syn::Fields::Unnamed(ref fields_unnamed) => {
+                    let field_infos:Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|f| {
+                        FieldInfo {
+                            ident:None,
+                            ty:&f.ty,
+                            attrs:&f.attrs
+                        }}).collect();                    
+                    fields = implement_withschema(field_infos);
+                }                
+                _ => panic!("Only regular structs supported, not tuple structs."),
+            }            
+            quote! {
+                #[allow(non_upper_case_globals)] 
+                const #dummy_const: () = {
+                    #uses
+
+                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        #[allow(unused_mut)]
+                        fn schema(version:u32) -> #Schema {
+                            let local_version = version;
+                            let mut fields1 = Vec::new();
+                            #(#fields;)* ;
+                            #Schema::Struct(#SchemaStruct{
+                                dbg_name: stringify!(#name).to_string(),
+                                fields: fields1
+                            })
+                            
+                        }
+                    }
+                };
             }
-            _ => panic!("Only regular structs supported, not tuple structs."),
         },
         _ => {
             panic!("Only regular structs are supported");

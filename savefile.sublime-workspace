@@ -4,12 +4,100 @@
 		"selected_items":
 		[
 			[
-				"regular_",
-				"regular_deserialize_vec Function (savefile.rs) : fn regular_deserialize_vec<T>(deserializer: &mut Deserializer) -> Self"
+				"Token",
+				"TokenStream"
+			],
+			[
+				"default_val",
+				"default_val_str_lit"
+			],
+			[
+				"Deser",
+				"Deserializer"
+			],
+			[
+				"des",
+				"deserialize"
+			],
+			[
+				"seri",
+				"Serializer"
+			],
+			[
+				"Bench",
+				"BenchStruct"
+			],
+			[
+				"deseri",
+				"deserializer"
 			],
 			[
 				"de",
-				"deserialize_auto"
+				"deserialize"
+			],
+			[
+				"seria",
+				"serialized"
+			],
+			[
+				"Schem",
+				"SchemaStruct"
+			],
+			[
+				"Vari",
+				"VariantA"
+			],
+			[
+				"Var",
+				"VariantA"
+			],
+			[
+				"Deft",
+				"DefTraitEnum"
+			],
+			[
+				"DefTra",
+				"DefTraitTest"
+			],
+			[
+				"read_",
+				"read_string"
+			],
+			[
+				"to",
+				"to_string"
+			],
+			[
+				"Sch",
+				"SchemaPrimitive"
+			],
+			[
+				"disc",
+				"discriminator"
+			],
+			[
+				"Inc",
+				"IncompatibleSchema"
+			],
+			[
+				"with",
+				"withschema"
+			],
+			[
+				"imple",
+				"implement_withschema"
+			],
+			[
+				"impleme",
+				"implement_reprc"
+			],
+			[
+				"named",
+				"namedfields"
+			],
+			[
+				"regular_",
+				"regular_deserialize_vec Function (savefile.rs) : fn regular_deserialize_vec<T>(deserializer: &mut Deserializer) -> Self"
 			],
 			[
 				"memo",
@@ -18,10 +106,6 @@
 			[
 				"field",
 				"field_to_version   Let (lib.rs) : let (field_from_version, field_to_version, default_trait, default_val) = ("
-			],
-			[
-				"Deser",
-				"Deserialize"
 			],
 			[
 				"field_",
@@ -42,10 +126,6 @@
 			[
 				"vers",
 				"version_to   StructField (lib.rs) : u32                  "
-			],
-			[
-				"Bench",
-				"BenchStruct    Struct (lib.rs) : pub struct BenchStruct               "
 			],
 			[
 				"Tets",
@@ -434,86 +514,6 @@
 			[
 				"Porta",
 				"PortalDirection  Enum (lib.rs) : enum PortalDirection                                    "
-			],
-			[
-				"incoming",
-				"incoming_obj Let (transport.rs) : let incoming_obj = self.roads.get(incoming).unwrap()\\                "
-			],
-			[
-				"incom",
-				"incoming_trucks"
-			],
-			[
-				"Truck",
-				"TruckAvailability"
-			],
-			[
-				"stock",
-				"stockholm_index    Let (transport.rs) : let stockholm_index=nodes.push(stockholm)\\                                                             "
-			],
-			[
-				"availab",
-				"availability_time"
-			],
-			[
-				"truc",
-				"incoming_trucks"
-			],
-			[
-				"out",
-				"outgoing"
-			],
-			[
-				"Log",
-				"LogSupportSelect2 EnumVariant (menu.rs) : LogSupportSelect2{source_house:StoreIndex<House>},"
-			],
-			[
-				"material",
-				"material_type"
-			],
-			[
-				"Materia",
-				"MaterialType"
-			],
-			[
-				"prov",
-				"resupply_provider_index"
-			],
-			[
-				"ai",
-				"ai_state"
-			],
-			[
-				"Agent",
-				"AgentOrder                 Enum (lib.rs) : pub enum AgentOrder                "
-			],
-			[
-				"order",
-				"order_queue"
-			],
-			[
-				"phan",
-				"phantom"
-			],
-			[
-				"h",
-				"have_unready_agent"
-			],
-			[
-				"ord",
-				"order_queue"
-			],
-			[
-				"Form",
-				"Formation               Struct (lib.rs) : pub struct Formation                "
-			],
-			[
-				"chil",
-				"children"
-			],
-			[
-				"Format",
-				"FormationAtom      Trait (formation.rs) : pub trait FormationAtom             "
 			]
 		]
 	},
@@ -523,7 +523,16 @@
 			"file": "savefile-derive/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 33447,
+				"buffer_size": 38211,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "savefile/src/savefile.rs",
+			"settings":
+			{
+				"buffer_size": 47029,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -532,7 +541,7 @@
 			"file": "savefile/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 1640,
+				"buffer_size": 9512,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -541,7 +550,7 @@
 			"file": "savefile-test/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 209,
+				"buffer_size": 248,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -550,8 +559,16 @@
 			"file": "savefile-test/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 6335,
+				"buffer_size": 7905,
 				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "savefile-derive/Cargo.lock",
+			"settings":
+			{
+				"buffer_size": 1809,
 				"line_ending": "Unix"
 			}
 		},
@@ -559,7 +576,7 @@
 			"file": "savefile-test/src/test_versioning.rs",
 			"settings":
 			{
-				"buffer_size": 1723,
+				"buffer_size": 4411,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -568,7 +585,7 @@
 			"file": "savefile-test/src/test_nested_non_repr_c.rs",
 			"settings":
 			{
-				"buffer_size": 732,
+				"buffer_size": 561,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -577,7 +594,7 @@
 			"file": "savefile-test/src/test_nested_repr_c.rs",
 			"settings":
 			{
-				"buffer_size": 684,
+				"buffer_size": 855,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -594,7 +611,7 @@
 			"file": "README.md",
 			"settings":
 			{
-				"buffer_size": 3231,
+				"buffer_size": 4080,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -603,7 +620,7 @@
 			"file": "savefile/src/prelude.rs",
 			"settings":
 			{
-				"buffer_size": 235,
+				"buffer_size": 294,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -612,7 +629,8 @@
 			"file": "savefile-derive/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 627,
+				"buffer_size": 571,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		},
@@ -620,7 +638,7 @@
 			"file": "savefile/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 559,
+				"buffer_size": 607,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -928,11 +946,11 @@
 	],
 	"find":
 	{
-		"height": 54.0
+		"height": 79.0
 	},
 	"find_in_files":
 	{
-		"height": 146.0,
+		"height": 158.0,
 		"where_history":
 		[
 			""
@@ -943,134 +961,134 @@
 		"case_sensitive": false,
 		"find_history":
 		[
-			"effective_default_val",
-			"no default",
-			"impl reprc",
-			"optimiz",
+			"get_enum_size",
+			"unsupported repr",
+			"//",
+			"local_file_version",
+			"println",
+			"u16j",
+			"u16",
+			"reprc",
 			"repr",
-			"reprC",
-			"repr_c_op",
-			"reprc",
-			"optsafe",
-			"reprC",
-			"struct serializ",
-			"struct serialier",
-			"bench",
-			"impl #",
-			"allow",
-			"#version",
-			"for u8",
-			"reprC",
-			"for u8",
-			"optimi",
-			"trait ReprC",
-			"local_des",
-			"local_Des",
-			"local_serializer",
-			"local",
-			"local_de",
-			"#local_",
-			"memory_ver",
-			"defspan",
-			"local_",
-			"local_des",
-			"local_ser",
-			"repr_c",
-			":Seri",
-			"repr_c",
-			"optsa",
-			"local_des",
-			"file_version",
-			"totokens",
-			"use",
-			"optsafe_out",
-			"optsafe_outputs",
-			"optsafe",
-			"optsafe_outputs",
-			"on fields must not in",
-			"_Auto",
-			"_auto",
+			"16",
+			"u16",
+			"enum_size",
+			"deserialize",
+			"fn ser",
+			"fn save",
+			"fn repr",
+			"fn save",
+			"syn::Parse",
+			"enum_size",
+			"unsupported repr",
+			"size",
 			"asdf",
-			"for Vec",
-			"1000",
-			"field ver",
-			"1000",
-			"1001",
-			"Field:",
-			"saturating_add",
-			"min_safe_vers",
-			"struct_Remove",
-			"serializer",
-			"optimiz",
-			"safe",
-			"saturating_add",
-			".max(",
-			" +1",
-			"is_re",
-			"check_is_remove\n",
-			"trait",
-			"reprc",
-			"roundtrip",
-			"reprc",
-			"benchmark",
-			"roundtrip",
-			"bench",
-			">=",
-			"hashmap",
-			"test",
-			"hashmap",
-			"<=",
-			">=",
-			"println",
-			"to_tokens",
-			"Removed",
-			"Vec",
-			"server",
-			"Removed",
-			"diskstore_derive",
-			"reprc",
-			"default",
-			"default_val",
-			"parse(",
-			"default_val",
-			"parse_attr_tag",
-			".to_string",
-			"default_val",
-			"smallstr",
-			"default=",
-			"deafult=",
-			"internal error",
-			"deserializer::new",
-			"version",
-			"impl Deserializer",
-			"struct Removed",
-			"struct Remove",
-			"println",
-			"parse_attr",
-			"test_struct",
-			"Default",
-			"::deserialize(",
-			"Serializer::new",
 			"parse",
-			"versions",
-			"attr name",
-			"version",
-			"deserialize8",
-			"struct Seriali",
-			"ReprC",
-			"serialize",
-			"copy",
-			"test_vec",
-			"assert_roundtrip",
-			"test_vec",
-			"for ve",
-			"hashmap",
+			"asdf",
+			"namevalue",
+			"asdf",
+			"namevalue",
+			"asdf",
+			"meta",
+			"mod",
+			"input.atts",
+			"size",
+			"//",
+			"size\n",
+			"fn savefile",
+			"savefile",
+			"enum",
+			"reprc",
+			"attrs",
+			"enum",
+			"repr",
+			"skill",
+			"reprc",
+			"```",
+			"Const",
+			"#const",
+			"#impl",
+			"span",
+			"optsafe_outputs",
+			"span",
+			"deserialize",
+			"let uses",
+			"magic",
+			"let uses",
+			"dummy_const",
+			"uses",
+			"#deserialize",
+			"default_fn",
+			"asdf",
+			"ident",
+			"default_fn",
+			"default_fn: def",
+			"default_trait",
+			"allow",
+			"tuple",
+			"struct good",
+			"trait",
+			"bench",
+			"dbg_name",
+			"dbg_name\n",
+			"extra_a",
+			"Vec::new",
+			"asdf",
+			"vector",
+			"new_tuple",
+			"for (",
+			"enum Schem",
+			"Schema::",
+			"impl withschema for u",
+			"assert_roundtr",
+			"verify_no",
+			".attrs",
+			"struct.attrs",
+			"tag2",
+			"default_trait",
+			"but disk form",
+			"path",
+			"diff_schema",
+			"path",
+			"SchemaEnum",
+			"diff_stru",
+			"diff_schema",
+			"schema_diff",
+			"schema",
+			"BenchStruct",
+			"use std",
+			"sizeof",
+			"serialized_size",
+			"asdf",
+			"struct Schema",
+			"trait schema",
+			"struct Schema",
+			"implement_reprc",
+			"REprC",
+			"roundtrip",
+			"default_val",
 			"println",
-			"println§",
-			"println",
-			"fields_names",
-			"variant_name",
-			"write_u8"
+			"SchemaStruct",
+			"At location \\\"{}\\\"",
+			"At {}:",
+			"At {}",
+			"At {}]",
+			"AT {[}",
+			"incompa",
+			"Schema",
+			"MemoryAllocationLayoutError",
+			"OutOfMemory",
+			"datacor",
+			"DataCorruption",
+			"asdf",
+			"IncompatibleSchema",
+			"incompat",
+			"UnexpectedEndOfFile",
+			"load",
+			"save(",
+			"withsch",
+			"FieldInfo",
+			"SchemaEnum"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -1098,15 +1116,15 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 33447,
+						"buffer_size": 38211,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								10060,
-								10060
+								28163,
+								28163
 							]
 						],
 						"settings":
@@ -1117,7 +1135,7 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 8056.0,
+						"translation.y": 25802.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
@@ -1125,11 +1143,41 @@
 				},
 				{
 					"buffer": 1,
+					"file": "savefile/src/savefile.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 47029,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								44606,
+								44608
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Rust/Rust.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 48511.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 5,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
 					"file": "savefile/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 1640,
+						"buffer_size": 9512,
 						"regions":
 						{
 						},
@@ -1146,19 +1194,78 @@
 							"syntax": "Packages/Rust/Rust.sublime-syntax"
 						},
 						"translation.x": 0.0,
-						"translation.y": 251.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 6,
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "savefile-test/Cargo.toml",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 248,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								248,
+								248
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 8,
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "savefile-test/src/lib.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 7905,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2862,
+								2867
+							]
+						],
+						"settings":
+						{
+							"show_definitions": false,
+							"syntax": "Packages/Rust/Rust.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 4585.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 4,
 					"type": "text"
 				},
 				{
-					"buffer": 2,
-					"file": "savefile-test/Cargo.toml",
+					"buffer": 5,
+					"file": "savefile-derive/Cargo.lock",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 209,
+						"buffer_size": 1809,
 						"regions":
 						{
 						},
@@ -1177,55 +1284,24 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 3,
+					"stack_index": 11,
 					"type": "text"
 				},
 				{
-					"buffer": 3,
-					"file": "savefile-test/src/lib.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 6335,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								0,
-								0
-							]
-						],
-						"settings":
-						{
-							"show_definitions": false,
-							"syntax": "Packages/Rust/Rust.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"type": "text"
-				},
-				{
-					"buffer": 4,
+					"buffer": 6,
 					"file": "savefile-test/src/test_versioning.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 1723,
+						"buffer_size": 4411,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								964,
-								964
+								309,
+								309
 							]
 						],
 						"settings":
@@ -1234,58 +1310,27 @@
 							"syntax": "Packages/Rust/Rust.sublime-syntax"
 						},
 						"translation.x": 0.0,
-						"translation.y": 694.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 5,
-					"type": "text"
-				},
-				{
-					"buffer": 5,
-					"file": "savefile-test/src/test_nested_non_repr_c.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 732,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								0,
-								0
-							]
-						],
-						"settings":
-						{
-							"show_definitions": false,
-							"syntax": "Packages/Rust/Rust.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 90.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 7,
 					"type": "text"
 				},
 				{
-					"buffer": 6,
-					"file": "savefile-test/src/test_nested_repr_c.rs",
+					"buffer": 7,
+					"file": "savefile-test/src/test_nested_non_repr_c.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 684,
+						"buffer_size": 561,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								217,
+								217
 							]
 						],
 						"settings":
@@ -1299,11 +1344,42 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 6,
+					"stack_index": 10,
 					"type": "text"
 				},
 				{
-					"buffer": 7,
+					"buffer": 8,
+					"file": "savefile-test/src/test_nested_repr_c.rs",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 855,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								289,
+								289
+							]
+						],
+						"settings":
+						{
+							"show_definitions": false,
+							"syntax": "Packages/Rust/Rust.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 3,
+					"type": "text"
+				},
+				{
+					"buffer": 9,
 					"file": ".travis.yml",
 					"semi_transient": false,
 					"settings":
@@ -1327,24 +1403,24 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 9,
+					"stack_index": 13,
 					"type": "text"
 				},
 				{
-					"buffer": 8,
+					"buffer": 10,
 					"file": "README.md",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 3231,
+						"buffer_size": 4080,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								107,
-								107
+								4080,
+								4080
 							]
 						],
 						"settings":
@@ -1352,27 +1428,27 @@
 							"syntax": "Packages/Markdown/Markdown.sublime-syntax"
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 2774.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 8,
+					"stack_index": 9,
 					"type": "text"
 				},
 				{
-					"buffer": 9,
+					"buffer": 11,
 					"file": "savefile/src/prelude.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 235,
+						"buffer_size": 294,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								293,
+								293
 							]
 						],
 						"settings":
@@ -1384,52 +1460,24 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 10,
+					"stack_index": 12,
 					"type": "text"
 				},
 				{
-					"buffer": 10,
+					"buffer": 12,
 					"file": "savefile-derive/Cargo.toml",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 627,
+						"buffer_size": 571,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Text/Plain text.tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 11,
-					"type": "text"
-				},
-				{
-					"buffer": 11,
-					"file": "savefile/Cargo.toml",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 559,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								553,
-								553
+								51,
+								51
 							]
 						],
 						"settings":
@@ -1442,17 +1490,45 @@
 					},
 					"stack_index": 2,
 					"type": "text"
+				},
+				{
+					"buffer": 13,
+					"file": "savefile/Cargo.toml",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 607,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								600,
+								600
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"type": "text"
 				}
 			]
 		}
 	],
 	"incremental_find":
 	{
-		"height": 54.0
+		"height": 58.0
 	},
 	"input":
 	{
-		"height": 35.0
+		"height": 58.0
 	},
 	"layout":
 	{
@@ -1483,7 +1559,7 @@
 	},
 	"output.exec":
 	{
-		"height": 178.0
+		"height": 395.0
 	},
 	"output.find_results":
 	{
@@ -1493,7 +1569,7 @@
 	"project": "savefile.sublime-project",
 	"replace":
 	{
-		"height": 100.0
+		"height": 108.0
 	},
 	"save_all_on_build": true,
 	"select_file":
@@ -1535,7 +1611,7 @@
 	"show_open_files": false,
 	"show_tabs": true,
 	"side_bar_visible": true,
-	"side_bar_width": 1078.0,
+	"side_bar_width": 481.0,
 	"status_bar_visible": true,
 	"template_settings":
 	{

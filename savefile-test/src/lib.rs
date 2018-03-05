@@ -86,6 +86,7 @@ pub struct TestStruct {
     x8: i32,
     x9: i64,
     x10: isize,
+    x11: f32,
 }
 
 #[test]
@@ -101,6 +102,7 @@ pub fn test_struct_reg() {
         x8: 8,
         x9: 9,
         x10: 10,
+        x11 : 11.5,
     });
 }
 
@@ -379,4 +381,14 @@ pub fn test_box() {
     assert_roundtrip(Arc::new(39));
     assert_roundtrip(RefCell::new(40));
     assert_roundtrip(Cell::new(40));
+}
+
+#[derive(Savefile)]
+struct NewTypeSample(u32);
+
+#[test]
+pub fn test_newtype() {
+
+    assert_roundtrip(NewTypeSample(43));
+
 }
