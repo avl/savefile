@@ -394,11 +394,11 @@ pub fn test_newtype() {
 }
 
 #[derive(Savefile,Debug,PartialEq)]
-struct NewTypeSample2(u32,f32);
+struct NewTypeSample2(u32,i8);
 
 #[test]
 pub fn test_newtype2() {
 
-    assert_roundtrip(NewTypeSample2(43,42.5));
+    assert_roundtrip(NewTypeSample2(43,127));
 
 }
