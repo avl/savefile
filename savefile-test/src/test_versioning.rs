@@ -208,7 +208,7 @@ impl Default for DefTraitEnum {
 
 #[derive(Debug, PartialEq, Savefile)]
 struct DefTraitTest {
-    #[versions = "0..0"]    		
+    #[versions = "1.."]    		
     removed_enum:DefTraitEnum
 }
 
@@ -254,5 +254,39 @@ fn test_custom_default_fn() {
 
 }
 
+#[derive(Debug, PartialEq, Savefile)]
+struct StructWithOneType {
+    a_str : String
+}
 
+#[derive(Debug, PartialEq, Savefile)]
+struct AnewType {
+    an_u32 : u32
+}
 
+use std::convert::From;
+impl From<String> for AnewType {
+    fn from(s:String) -> AnewType {
+        AnewType {
+            an_u32 : 9999
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Savefile)]
+struct StructWithAnotherType {
+    #[versions_as="0..0:String"]
+    #[versions="1.."]
+    a_str : AnewType
+}
+
+#[test]
+fn test_change_type_of_field() {
+    use ::assert_roundtrip_to_new_version;
+    assert_roundtrip_to_new_version(
+        StructWithOneType{a_str:"test".to_string()},
+        0,
+        StructWithAnotherType{a_str:AnewType{an_u32:9999}},
+        1
+        );
+}

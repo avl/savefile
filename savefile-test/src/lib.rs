@@ -388,9 +388,7 @@ struct NewTypeSample(u32);
 
 #[test]
 pub fn test_newtype() {
-
     assert_roundtrip(NewTypeSample(43));
-
 }
 
 #[derive(Savefile,Debug,PartialEq)]
@@ -402,3 +400,25 @@ pub fn test_newtype2() {
     assert_roundtrip(NewTypeSample2(43,127));
 
 }
+
+#[derive(Savefile,Debug,PartialEq)]
+struct NoFields {    
+}
+
+#[test]
+pub fn test_struct_no_fields() {
+    assert_roundtrip(NoFields{});
+}
+
+
+#[derive(Savefile,Debug,PartialEq)]
+struct OnlyRemoved {    
+    #[versions="0..0"]
+    rem : Removed<u32>,
+}
+
+#[test]
+pub fn test_struct_only_removed_fields() {
+    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1);
+}
+

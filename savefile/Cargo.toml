@@ -7,7 +7,7 @@ exclude = [
     "*.bin"
 ]
 
-description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
+description = "Simple, convenient, fast, versioned, binary serialization/deserialization library."
 
 readme = "../README.md"
 

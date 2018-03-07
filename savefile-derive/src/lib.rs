@@ -1,3 +1,5 @@
+#![feature(conservative_impl_trait)]
+
 #![recursion_limit="128"]
 #![feature(proc_macro)]
 extern crate proc_macro;
@@ -8,11 +10,21 @@ extern crate syn;
 use proc_macro::TokenStream;
 use syn::DeriveInput;
 use std::iter::IntoIterator;
+
+#[derive(Debug)]
+struct VersionRange {
+    from:u32,
+    to:u32,
+    serialized_type : String,
+}
+
+#[derive(Debug)]
 struct AttrsResult {
     version_from: u32,
     version_to: u32,
     default_fn: Option<syn::Ident>,
     default_val: Option<quote::Tokens>,
+    deserialize_types : Vec<VersionRange>,
 }
 
 fn check_is_remove(field_type: &syn::Type) -> bool {
@@ -40,11 +52,22 @@ fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsR
 
 }
 
+fn overlap<'a>(b:&'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
+    assert!(b.to >= b.from);
+    move |a:&'a VersionRange| {
+        assert!(a.to >= a.from);
+        let no_overlap = a.to < b.from || a.from > b.to;
+        !no_overlap        
+    }
+}
+
+
 fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> AttrsResult {
-    let mut field_from_version = 0;
-    let mut field_to_version = std::u32::MAX;
+    let mut field_from_version = None;
+    let mut field_to_version = None;
     let mut default_fn = None;
     let mut default_val = None;
+    let mut deser_types = Vec::new();
     for attr in attrs.iter() {
         if let Some(ref meta) = attr.interpret_meta() {
             match meta {
@@ -79,6 +102,57 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                         default_fn = Some(syn::Ident::new(&default_fn_str_lit.value(),proc_macro2::Span::call_site()));
                                 
                     };
+                    if x.ident.to_string() == "versions_as" {
+                        match &x.lit {
+                            &syn::Lit::Str(ref litstr2) => {
+                                let output2 : Vec<String> = litstr2.value().splitn(2,":").map(|x| x.to_string()).collect();
+                                if output2.len() != 2 {
+                                    panic!("The #versions_as tag must contain a version range and a deserialization type, such as : #[versions_as=0..3:MyStructType]");
+                                }
+                                let litstr = &output2[0];
+                                let version_type = &output2[1];
+
+                                let output: Vec<String> =
+                                    litstr.split("..").map(|x| x.to_string()).collect();
+                                if output.len() != 2 {
+                                    panic!("versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the versions-attribute)");
+                                }
+                                let (a, b) = (output[0].to_string(), output[1].to_string());
+
+                                let from_ver = if a.trim() == "" {                                    
+                                    0
+                                } else if let Ok(a_u32) = a.parse::<u32>() {
+                                    a_u32
+                                } else {
+                                    panic!("The from version in the version tag must be an integer. Use #[versions=0..3] for example");
+                                };
+
+                                let to_ver = if b.trim() == "" {
+                                    std::u32::MAX
+                                } else if let Ok(b_u32) = b.parse::<u32>() {
+                                    b_u32
+                                } else {
+                                    panic!("The to version in the version tag must be an integer. Use #[versions=0..3] for example");
+                                };
+                                if to_ver < from_ver {
+                                    panic!("Version ranges must specify lower number first.");
+                                }
+
+                                let item = VersionRange {
+                                    from : from_ver,
+                                    to : to_ver,
+                                    serialized_type : version_type.to_string()
+                                };
+                                if deser_types.iter().any(overlap(&item)) {
+                                    panic!("#version_as attributes may not specify overlapping rangres");
+                                }
+                                deser_types.push(item);
+
+                            }
+                            _ => panic!("Unexpected datatype for value of attribute versions"),
+                        }
+                    }
+
                     if x.ident.to_string() == "versions" {
                         match &x.lit {
                             &syn::Lit::Str(ref litstr) => {
@@ -89,20 +163,26 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                                 }
                                 let (a, b) = (output[0].to_string(), output[1].to_string());
 
-                                if a.trim() == "" {
-                                    field_from_version = 0;
+                                if field_from_version.is_some() || field_to_version.is_some() {
+                                    panic!("There can only be one #versions attribute on each field.")
+                                }
+                                if a.trim() == "" {                                    
+                                    field_from_version = Some(0);
                                 } else if let Ok(a_u32) = a.parse::<u32>() {
-                                    field_from_version = a_u32;
+                                    field_from_version = Some(a_u32);
                                 } else {
                                     panic!("The from version in the version tag must be an integer. Use #[versions=0..3] for example");
                                 }
 
                                 if b.trim() == "" {
-                                    field_to_version = std::u32::MAX;
+                                    field_to_version = Some(std::u32::MAX);
                                 } else if let Ok(b_u32) = b.parse::<u32>() {
-                                    field_to_version = b_u32;
+                                    field_to_version = Some(b_u32);
                                 } else {
                                     panic!("The to version in the version tag must be an integer. Use #[versions=0..3] for example");
+                                }
+                                if field_to_version.unwrap() < field_from_version.unwrap() {
+                                    panic!("Version ranges must specify lower number first.");
                                 }
 
                             }
@@ -113,11 +193,26 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
             }
         }
     }
+
+    let versions_tag_range = VersionRange {
+        from : field_from_version.unwrap_or(0),
+        to : field_to_version.unwrap_or(std::u32::MAX),
+        serialized_type: "dummy".to_string()};
+    if deser_types.iter().any(overlap(&versions_tag_range)) {
+        panic!("The version ranges of #version_as attributes may not overlap those of #versions");
+    }
+    for dt in deser_types.iter() {
+        if dt.to >= field_from_version.unwrap_or(0) {
+            panic!("The version ranges of #version_as attributes must be lower than those of the #versions attribute.");
+        }
+    }
+
     AttrsResult {
-        version_from: field_from_version,
-        version_to: field_to_version,
+        version_from: field_from_version.unwrap_or(0),
+        version_to: field_to_version.unwrap_or(std::u32::MAX),
         default_fn: default_fn,
         default_val: default_val,
+        deserialize_types : deser_types
     }
 }
 
@@ -182,8 +277,8 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
     let serialize2 = quote! {
         let local_serializer = serializer;
         if #min_safe_version > local_serializer.version {
-                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory: {}",
-                    #min_safe_version, local_serializer.version);
+                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory version: {}",
+                    #min_safe_version.saturating_sub(1), local_serializer.version);
             }
 
         #(#output)*           
@@ -287,7 +382,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
 
                     impl #impl_generics #serialize for #name #ty_generics #where_clause {
 
-                        #[allow(unused_comparisons)]
+                        #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
                             match self {
                                 #(#output,)*
@@ -335,7 +430,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
                     #uses
 
                     impl #impl_generics #serialize for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
+                        #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
                             #(#fields_serialize)*
                             Ok(())                    
@@ -374,16 +469,26 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             verinfo.default_fn,
             verinfo.default_val,
         );
-        let effective_default_val = if let Some(defval) = default_val {
+        let mut exists_version_which_needs_default_value=false;
+        for ver in 0..verinfo.version_from {
+            if !verinfo.deserialize_types.iter().any(|x| ver >= x.from && ver <= x.to) {
+                exists_version_which_needs_default_value = true;
+            }
+        }
+
+
+        let effective_default_val = if is_removed {
+            quote! { #removeddef::new() }
+        } else if let Some(defval) = default_val {
             quote! { str::parse(#defval).unwrap() }
         } else if let Some(default_fn) = default_fn {
             quote_spanned! { span => #default_fn() }
-        } else if is_removed {
-            quote! { #removeddef::new() }
+        } else if !exists_version_which_needs_default_value {
+            quote! { panic!("Unexpected unsupported file version: {}",#local_deserializer.file_version) } //Should be impossible
         } else {
-            quote_spanned! { span => Default::default() }
-        };
 
+            quote_spanned! { span => Default::default() }        
+        };
         if field_from_version > field_to_version {
             panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
         }
@@ -401,9 +506,22 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             }                    
             if field_from_version < std::u32::MAX { // An addition
                 min_safe_version = min_safe_version.max(field_from_version);
-            }                    
+            }        
+            let mut version_mappings=Vec::new();            
+            for dt in verinfo.deserialize_types.iter() {
+                let dt_from = dt.from;
+                let dt_to = dt.to;
+                let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
+                version_mappings.push(quote!{
+                    if #local_deserializer.file_version >= #dt_from && #local_deserializer.file_version <= #dt_to {
+                        let temp : #dt_field_type = <#dt_field_type>::deserialize(#local_deserializer)?;
+                        <#field_type>::from(temp)    
+                    } else 
+                });
+            }
 
             quote_spanned! { span =>
+                #(#version_mappings)*
                 if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
                     <#field_type>::deserialize(#local_deserializer)?
                 } else {
@@ -422,7 +540,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     output
 }
 
-#[proc_macro_derive(Savefile, attributes(versions, default_val, default_fn))]
+#[proc_macro_derive(Savefile, attributes(versions, versions_as, default_val, default_fn))]
 pub fn savefile(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -528,7 +646,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                 const #dummy_const: () = {
                     #uses
                     impl #impl_generics #deserialize for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
+                        #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                             
                             Ok(match deserializer.read_u8()? {
@@ -576,7 +694,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                 const #dummy_const: () = {
                         #uses
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause {
-                        #[allow(unused_comparisons)]
+                        #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {                            
                             #output
                         }                        
@@ -645,7 +763,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
             extern crate std;
             #uses
             unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
-                #[allow(unused_comparisons,unused_variables)]
+                #[allow(unused_comparisons,unused_variables, unused_variables)]
                 fn repr_c_optimization_safe(file_version:u32) -> bool {
                     // The following is a debug_assert because it is slightly expensive, and the entire
                     // point of the ReprC trait is to speed things up.
@@ -718,7 +836,7 @@ fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
     }
     size_u32
 }
-#[proc_macro_derive(ReprC, attributes(versions, default_val, default_fn))]
+#[proc_macro_derive(ReprC, attributes(versions, versions_as, default_val, default_fn))]
 pub fn reprc(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     
@@ -797,7 +915,6 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         } else {
             idx.to_string()
         };
-        //println!("Type: {:?}",field.ty.id.as_ref());
         let removed=check_is_remove(&field.ty);
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
@@ -808,8 +925,22 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             
         } else {
             
+            let mut version_mappings=Vec::new();            
+            for dt in verinfo.deserialize_types.iter() {
+                let dt_from = dt.from;
+                let dt_to = dt.to;
+                let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
+                version_mappings.push(quote!{
+                    if #local_version >= #dt_from && local_version <= #dt_to {
+                        #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))});
+                    }
+                });
+            }
+
+
             fields.push(quote_spanned!( span => 
-                
+                #(#version_mappings)*
+
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
                     #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
                 }
@@ -915,7 +1046,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
                     impl #impl_generics #withschema for #name #ty_generics #where_clause {
 
                         #[allow(unused_mut)]
-                        #[allow(unused_comparisons)]
+                        #[allow(unused_comparisons, unused_variables)]
                         fn schema(version:u32) -> #Schema {
                             let local_version = version;
                             #Schema::Enum (
@@ -968,7 +1099,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
 
                     impl #impl_generics #withschema for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
-                        #[allow(unused_mut)]
+                        #[allow(unused_mut, unused_variables)]
                         fn schema(version:u32) -> #Schema {
                             let local_version = version;
                             let mut fields1 = Vec::new();
