@@ -9,8 +9,8 @@ use std::hash::Hash;
 extern crate test;
 use std;
 
-//use ::failure::Error;
-
+/// This object represents an error in deserializing or serializinga
+/// an item.
 #[derive(Debug, Fail)]
 #[must_use]
 pub enum SavefileError {
@@ -143,19 +143,12 @@ impl<'a> Serializer<'a> {
     }
 
     /// Creata a new serializer.
-    ///
-    /// * `writer` must be an implementatino of [std::io::Write]
-    /// * version must be the current version number of the data structures in memory.
-    ///   savefile does not support serializing data in any other version number.
-    ///   Whenever a field is removed from the protocol, the version number should
-    ///   be incremented by 1, and the removed field should be marked with
-    ///   a version attribute like:
-    ///   `#[versions = "N..M"]`
-    ///   Where N is the first version in which the field appear (0 if the field has always existed)
-    ///   and M is the version in which the field was removed.
+    /// Don't use this function directly, use the [savefile::save] function instead.
     pub fn save<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,true)?)
     }
+    /// Creata a new serializer.
+    /// Don't use this function directly, use the [savefile::save_noschema] function instead.
     pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,false)?)
     }
@@ -173,6 +166,9 @@ impl<'a> Serializer<'a> {
         Ok(data.serialize(&mut serializer)?)
     }
 
+    /// Create a Serializer.
+    /// Don't use this method directly, use the [savefile::save] function
+    /// instead.
     pub fn new_raw(writer: &mut Write) -> Serializer {
         Serializer { writer, version:0 }
     }
@@ -227,13 +223,14 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Deserialize an object of type T from the given reader.
-    ///
-    /// The arguments should be:
-    ///  * `reader` A [std::io::Read] object to read serialized bytes from.
-    ///  * `version` The version number of the data structures in memory.
+    /// Don't use this method directly, use the [savefile::load] function
+    /// instead.
     pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,true)
     }
+    /// Deserialize an object of type T from the given reader.
+    /// Don't use this method directly, use the [savefile::load_noschema] function
+    /// instead.
     pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,false)
     }
@@ -265,6 +262,10 @@ impl<'a> Deserializer<'a> {
         };
         Ok(T::deserialize(&mut deserializer)?)
     }
+
+    /// Create a Deserializer.
+    /// Don't use this method directly, use the [savefile::load] function
+    /// instead.
     pub fn new_raw(reader: &mut Read) -> Deserializer {
         Deserializer {
             reader,
@@ -274,37 +275,63 @@ impl<'a> Deserializer<'a> {
     }
 }
 
+
+/// Deserialize an instance of type T from the given `reader` .
+/// The current type of T in memory must be equal to `version`.
+/// The deserializer will use the actual protocol version in the
+/// file to do the deserialization.
 pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
     Deserializer::load::<T>(reader,version)
 }
 
+/// Write the given `data` to the `writer`. 
+/// The current version of data must be `version`.
 pub fn save<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save::<T>(writer,version,data)
 }
 
+/// Like [savefile::load] , but used to open files saved without schema,
+/// by one of the _noschema versions of the save functions.
 pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
     Deserializer::load_noschema::<T>(reader,version)
 }
 
+/// Write the given `data` to the `writer`. 
+/// The current version of data must be `version`.
+/// Do this write without writing any schema to disk.
+/// As long as all the serializers and deserializers
+/// are correctly written, the schema is not necessary.
+/// Omitting the schema saves some space in the saved file,
+/// but means that any mistake in implementation of the 
+/// Serialize or Deserialize traits will cause hard-to-troubleshoot
+/// data corruption instead of a nice error message.
 pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save_noschema::<T>(writer,version,data)
 }
 
+/// Like [savefile::load] , except it deserializes from the given file in the filesystem.
+/// This is a pure convenience function.
 pub fn load_file<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load::<T>(&mut f, version)
 }
 
+/// Like [savefile::save] , except it opens a file on the filesystem and writes
+/// the data to it. This is a pure convenience function.
 pub fn save_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
     let mut f = File::create(filepath)?;
     Serializer::save::<T>(&mut f,version,data)
 }
 
+/// Like [savefile::load_noschema] , except it deserializes from the given file in the filesystem.
+/// This is a pure convenience function.
 pub fn load_file_noschema<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load_noschema::<T>(&mut f,version)
 }
 
+/// Like [savefile::save_noschema] , except it opens a file on the filesystem and writes
+/// the data to it. This is a pure convenience function.
 pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
     let mut f = File::create(filepath)?;
     Serializer::save_noschema::<T>(&mut f,version,data)
@@ -357,12 +384,18 @@ pub trait Deserialize : WithSchema + Sized {
 }
 
 
+
+/// A field is serialized according to its value.
+/// The name is just for diagnostics.
 #[derive(Debug,PartialEq)]
 pub struct Field {
     pub name : String,
     pub value : Box<Schema>
 }
 
+/// A struct is by serializing its fields one by one,
+/// without any padding. 
+/// The dbg_name is just for diagnostics.
 #[derive(Debug,PartialEq)]
 pub struct SchemaStruct {
     pub dbg_name : String,
@@ -384,6 +417,9 @@ impl SchemaStruct {
     }
 }
 
+
+/// An enum variant is serialized as its fields, one by one,
+/// without any padding.
 #[derive(Debug,PartialEq)]
 pub struct Variant {
     pub name : String,
@@ -397,6 +433,11 @@ impl Variant {
         })
     }
 }
+
+/// An enum is serialized as its u8 variant discriminator
+/// followed by all the field for that variant.
+/// The name of each variant, as well as its order in 
+/// the enum (the discriminator), is significant.
 #[derive(Debug, PartialEq)]
 pub struct SchemaEnum {
     pub dbg_name : String,
@@ -421,6 +462,10 @@ impl SchemaEnum {
 }
 
 
+/// A primitive is serialized as the little endian
+/// representation of its type, except for string,
+/// which is serialized as an usize length followed
+/// by the string in utf8.
 #[allow(non_camel_case_types)]
 #[derive(Copy,Clone,Debug,PartialEq)]
 pub enum SchemaPrimitive {
@@ -600,7 +645,10 @@ fn diff_fields(a:&[Field],b:&[Field],path:&str, structuretype:&str,
     None
 }
 
-/// Returns None if both schema are equivalent
+/// Return a (kind of) human-readable description of the difference
+/// between the two schemas. The schema 'a' is assumed to be the current
+/// schema (used in memory).
+/// Returns None if both schemas are equivalent
 fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
     let (atype,btype)=match *a {
         Schema::Struct(ref xa) => {
