@@ -73,10 +73,10 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
         if let Some(ref meta) = attr.interpret_meta() {
             match meta {
                 &syn::Meta::Word(ref _x) => {
-                    panic!("Unexpected savefile attribute, word.");
+
                 }
                 &syn::Meta::List(ref _x) => {
-                    panic!("Unexpected savefile attribute, list.");
+
                 }
                 &syn::Meta::NameValue(ref x) => {
                     if x.ident.to_string() == "default_val" {

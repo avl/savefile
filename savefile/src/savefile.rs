@@ -92,6 +92,9 @@ impl From<std::string::FromUtf8Error> for SavefileError {
 
 #[allow(unit_arg)]
 impl<'a> Serializer<'a> {
+    pub fn write_bool(&mut self, v: bool)  -> Result<(),SavefileError> {
+        Ok(self.writer.write_u8( if v {1} else {0})?)
+    }
     pub fn write_u8(&mut self, v: u8)  -> Result<(),SavefileError> {
         Ok(self.writer.write_all(&[v])?)
     }
@@ -175,6 +178,9 @@ impl<'a> Serializer<'a> {
 }
 
 impl<'a> Deserializer<'a> {
+    pub fn read_bool(&mut self) -> Result<bool,SavefileError> {
+        Ok(self.reader.read_u8()? == 1)
+    }
     pub fn read_u8(&mut self) -> Result<u8,SavefileError> {
         let mut buf = [0u8];
         self.reader.read_exact(&mut buf)?;
@@ -480,6 +486,7 @@ pub enum SchemaPrimitive {
     schema_string,
     schema_f32,
     schema_f64,
+    schema_bool,
 }
 impl SchemaPrimitive {
     fn name(&self) -> &'static str {
@@ -495,6 +502,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_string => "String",
             SchemaPrimitive::schema_f32 => "f32",
             SchemaPrimitive::schema_f64 => "f64",
+            SchemaPrimitive::schema_bool => "bool",
         }
     }
 }
@@ -510,6 +518,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_string => None,       
             SchemaPrimitive::schema_f32 => Some(4),
             SchemaPrimitive::schema_f64 => Some(8),
+            SchemaPrimitive::schema_bool => Some(1),
         }
     }
 }
@@ -828,6 +837,7 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_string => 9,
             SchemaPrimitive::schema_f32 => 10,
             SchemaPrimitive::schema_f64 => 11,
+            SchemaPrimitive::schema_bool => 12,
         };
         serializer.write_u8(discr)
     }
@@ -846,6 +856,7 @@ impl Deserialize for SchemaPrimitive {
             9 => SchemaPrimitive::schema_string,
             10 => SchemaPrimitive::schema_f32,
             11 => SchemaPrimitive::schema_f64,
+            12 => SchemaPrimitive::schema_bool,
             c => panic!("Corrupt schema, primitive type #{} encountered",c),
         };
         Ok(var)
@@ -1122,7 +1133,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     }
 }
     
-
+unsafe impl ReprC for bool {fn repr_c_optimization_safe(_version:u32) -> bool {false}} //Hard to know if bool will always be represented by single byte. Seems to depend on a lot of stuff.
 unsafe impl ReprC for u8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for i8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for u16 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
@@ -1325,7 +1336,7 @@ impl Deserialize for () {
 }
 
 
-
+impl WithSchema for bool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}
 impl WithSchema for u8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
 impl WithSchema for i8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
 impl WithSchema for u16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u16)}}
@@ -1359,6 +1370,16 @@ impl Serialize for u8 {
 impl Deserialize for u8 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         deserializer.read_u8()
+    }
+}
+impl Serialize for bool {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_bool(*self)
+    }
+}
+impl Deserialize for bool {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        deserializer.read_bool()
     }
 }
 impl Serialize for i8 {

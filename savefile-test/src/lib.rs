@@ -87,6 +87,7 @@ pub struct TestStruct {
     x9: i64,
     x10: isize,
     x11: f32,
+    x12 : bool,
 }
 
 #[test]
@@ -103,6 +104,7 @@ pub fn test_struct_reg() {
         x9: 9,
         x10: 10,
         x11 : 11.5,
+        x12 : true
     });
 }
 
