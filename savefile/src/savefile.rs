@@ -5,8 +5,12 @@ use std::io::Read;
 use std::fs::File;
 use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
+use std::collections::BinaryHeap;
 use std::hash::Hash;
 extern crate test;
+extern crate bit_vec;
+use self::bit_vec::BitVec;
+
 use std;
 
 /// This object represents an error in deserializing or serializinga
@@ -144,6 +148,9 @@ impl<'a> Serializer<'a> {
         self.write_usize(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
+    pub fn write_bytes(&mut self, v: &[u8]) -> Result<(),SavefileError> {
+        Ok(self.writer.write_all(v)?)
+    }
 
     /// Creata a new serializer.
     /// Don't use this function directly, use the [savefile::save] function instead.
@@ -226,6 +233,12 @@ impl<'a> Deserializer<'a> {
         v.resize(l, 0); //TODO: Optimize this
         self.reader.read_exact(&mut v)?;
         Ok(String::from_utf8(v)?)
+    }
+    pub fn read_bytes(&mut self, len:usize) -> Result<Vec<u8>,SavefileError> {
+        let mut v = Vec::with_capacity(len);
+        v.resize(len, 0); //TODO: Optimize this
+        self.reader.read_exact(&mut v)?;
+        Ok(v)        
     }
 
     /// Deserialize an object of type T from the given reader.
@@ -541,6 +554,7 @@ pub enum Schema {
     Enum(SchemaEnum),
     Primitive(SchemaPrimitive),
     Vector(Box<Schema>),
+    SchemaOption(Box<Schema>),
     Undefined,
     ZeroSize,
 }
@@ -591,6 +605,9 @@ impl Schema {
             Schema::Vector(ref _vector) => {
                 None
             }
+            Schema::SchemaOption(ref _content) => {
+                None
+            }
             Schema::Undefined => {
                 None
             }
@@ -604,6 +621,11 @@ impl Schema {
 fn diff_vector(a:&Schema,b:&Schema,path:String) -> Option<String> {
     diff_schema(a,b,
         path + "/*")
+}
+
+fn diff_option(a:&Schema,b:&Schema,path:String) -> Option<String> {
+    diff_schema(a,b,
+        path + "/?")
 }
 
 fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
@@ -668,6 +690,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Enum(_) => ("struct","enum"),
                 Schema::Primitive(_) => ("struct","primitive"),
                 Schema::Vector(_) => ("struct","vector"),
+                Schema::SchemaOption(_) => ("struct","option"),
                 Schema::Undefined => ("struct","undefined"),
                 Schema::ZeroSize => ("struct","zerosize"),
             }
@@ -680,6 +703,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Struct(_) => ("enum","struct"),
                 Schema::Primitive(_) => ("enum","primitive"),
                 Schema::Vector(_) => ("enum","vector"),
+                Schema::SchemaOption(_) => ("enum","option"),
                 Schema::Undefined => ("enum","undefined"),
                 Schema::ZeroSize => ("enum","zerosize"),
             }
@@ -692,9 +716,23 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Struct(_) => ("primitive","struct"),
                 Schema::Enum(_) => ("primitive","enum"),
                 Schema::Vector(_) => ("primitive","vector"),
+                Schema::SchemaOption(_) => ("primitive","option"),
                 Schema::Undefined => ("primitive","undefined"),
                 Schema::ZeroSize => ("primitive","zerosize"),
             }
+        }
+        Schema::SchemaOption(ref xa) => {
+            match *b {
+                Schema::SchemaOption(ref xb) => {
+                    return diff_option(xa,xb,path);
+                },
+                Schema::Struct(_) => ("option","struct"),
+                Schema::Enum(_) => ("option","enum"),
+                Schema::Primitive(_) => ("option","primitive"),
+                Schema::Vector(_) => ("option","vector"),
+                Schema::Undefined => ("option","undefined"),
+                Schema::ZeroSize => ("option","zerosize"),
+            }            
         }
         Schema::Vector(ref xa) => {
             match *b {
@@ -704,6 +742,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Struct(_) => ("vector","struct"),
                 Schema::Enum(_) => ("vector","enum"),
                 Schema::Primitive(_) => ("vector","primitive"),
+                Schema::SchemaOption(_) => ("vector","option"),
                 Schema::Undefined => ("vector","undefined"),
                 Schema::ZeroSize => ("vector","zerosize"),
             }
@@ -719,6 +758,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Vector(_) => ("zerosize","vector"),
                 Schema::Struct(_) => ("zerosize","struct"),
                 Schema::Enum(_) => ("zerosize","enum"),
+                Schema::SchemaOption(_) => ("zerosize","option"),
                 Schema::Primitive(_) => ("zerosize","primitive"),
                 Schema::Undefined => ("zerosize","undefined"),
             }
@@ -924,6 +964,10 @@ impl Serialize for Schema {
             Schema::ZeroSize => {
                 serializer.write_u8(6)
             },
+            Schema::SchemaOption(ref content) => {
+                serializer.write_u8(7)?;
+                content.serialize(serializer)
+            },
         }
     }    
 }
@@ -938,6 +982,7 @@ impl Deserialize for Schema {
             4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?)),
             5 => Schema::Undefined,
             6 => Schema::ZeroSize,
+            7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             c => panic!("Corrupt schema, schema variant had value {}", c),
         };
 
@@ -1024,12 +1069,13 @@ impl<T> Removed<T> {
         }
     }
 }
-
 impl<T:WithSchema> WithSchema for Removed<T> {
     fn schema(version:u32) -> Schema {
         <T>::schema(version)
     }    
 }
+
+
 impl<T:WithSchema> Serialize for Removed<T> {
     fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
@@ -1043,6 +1089,124 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
         })
     }
 }
+
+
+impl<T> WithSchema for std::marker::PhantomData<T> {
+    fn schema(_version:u32) -> Schema {
+        Schema::ZeroSize
+    }    
+}
+
+
+impl<T> Serialize for std::marker::PhantomData<T> {
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        Ok(())
+    }
+}
+impl<T> Deserialize for std::marker::PhantomData<T> {
+    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {        
+        Ok(std::marker::PhantomData)
+    }
+}
+
+
+
+impl<T:WithSchema> WithSchema for Option<T> {fn schema(version:u32) -> Schema {Schema::SchemaOption(Box::new(T::schema(version)))}}
+
+impl<T: Serialize> Serialize for Option<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        match self {
+            &Some(ref x) => {serializer.write_bool(true)?;x.serialize(serializer)},
+            &None => serializer.write_bool(false)
+        }
+    }
+}
+impl<T: Deserialize> Deserialize for Option<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let issome=deserializer.read_bool()?;
+        if issome {
+            Ok(Some(T::deserialize(deserializer)?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl WithSchema for BitVec {
+    fn schema(version:u32) -> Schema {
+        Schema::Struct(SchemaStruct{
+            dbg_name : "BitVec".to_string(),
+            fields : vec![
+                Field {
+                    name: "num_bits".to_string(),
+                    value: Box::new(usize::schema(version)),
+                },
+                Field {
+                    name: "num_bytes".to_string(),
+                    value: Box::new(usize::schema(version)),
+                },
+                Field {
+                    name: "buffer".to_string(),
+                    value: Box::new(Schema::Vector(
+                        Box::new(u8::schema(version))
+                    )),
+                },
+            ]
+        })
+    }
+}
+
+impl Serialize for BitVec {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        let bytes=self.to_bytes();
+        serializer.write_usize(bytes.len())?;
+        serializer.write_bytes(&bytes)?;
+        Ok(())            
+    }
+}
+impl Deserialize for BitVec {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let numbits = deserializer.read_usize()?;
+        let numbytes= deserializer.read_usize()?;
+        let bytes = deserializer.read_bytes(numbytes)?;
+        let mut ret=BitVec::from_bytes(&bytes);
+        ret.truncate(numbits);
+        Ok(ret)
+    }
+}
+    
+
+
+impl<T: WithSchema> WithSchema for BinaryHeap<T> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)))
+    }
+}
+impl<T: Serialize+Ord> Serialize for BinaryHeap<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        for item in self.iter() {
+            item.serialize(serializer)?
+        }
+        Ok(())            
+    }
+}
+impl<T: Deserialize+Ord> Deserialize for BinaryHeap<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let l = deserializer.read_usize()?;
+        let mut ret = BinaryHeap::with_capacity(l);
+        for _ in 0..l {
+            ret.push(T::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+    
+
+
 
 fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(),SavefileError> {
     let l = item.len();
@@ -1334,6 +1498,7 @@ impl Deserialize for () {
         Ok(())
     }
 }
+
 
 
 impl WithSchema for bool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}

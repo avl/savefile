@@ -4,10 +4,14 @@ extern crate test;
 extern crate savefile;
 #[macro_use]
 extern crate savefile_derive;
+
+extern crate bit_vec;
+use bit_vec::BitVec;
+
 use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
-
+use std::collections::BinaryHeap;
 mod test_versioning;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
@@ -40,6 +44,25 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
 
     let f_internal_size = f.get_ref().len();
     assert_eq!(f.position() as usize,f_internal_size);
+}
+pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
+    let mut f = Cursor::new(Vec::new());
+    {
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            Serializer::save(&mut bufw, 0, &sample).unwrap();
+        }
+        bufw.flush().unwrap();
+    }
+    f.set_position(0);
+    let roundtrip_result;
+    {
+        roundtrip_result = Deserializer::load::<E>(&mut f, 0).unwrap();
+    }
+
+    let f_internal_size = f.get_ref().len();
+    assert_eq!(f.position() as usize,f_internal_size);
+    roundtrip_result
 }
 
 #[derive(Debug, Savefile, PartialEq)]
@@ -114,6 +137,19 @@ pub fn test_vec() {
     v.push(43u8);
 
     assert_roundtrip(v);
+}
+
+#[test]
+pub fn test_bin_heap() {
+    let mut v = BinaryHeap::new();
+    v.push(43u8);
+
+    let vv:Vec<u8>=v.iter().map(|x|*x).collect();
+    let n=roundtrip(v);
+    let nv:Vec<u8>=n.iter().map(|x|*x).collect();
+
+    assert_eq!(nv,vv);
+    
 }
 
 #[test]
@@ -351,6 +387,12 @@ pub fn test_box() {
     assert_roundtrip(RefCell::new(40));
     assert_roundtrip(Cell::new(40));
 }
+#[test]
+pub fn test_option() {
+    assert_roundtrip(Some(32));
+    let x:Option<u32> = None;
+    assert_roundtrip(x);
+}
 
 #[derive(Savefile,Debug,PartialEq)]
 struct NewTypeSample(u32);
@@ -391,3 +433,23 @@ pub fn test_struct_only_removed_fields() {
     assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1);
 }
 
+
+
+#[test]
+pub fn test_bitvec() {
+    let bv1 = BitVec::new();
+    let mut bv2 = BitVec::new();
+    bv2.push(false);
+    let mut bv3 = BitVec::new();
+    bv3.push(false);
+    bv3.push(true);
+    bv3.push(false);
+    let mut bv4 = BitVec::new();
+    for i in 0..127 {
+        bv4.push(if i%2==0 {true} else {false});
+    }
+    assert_roundtrip(bv1);
+    assert_roundtrip(bv2);
+    assert_roundtrip(bv3);
+    assert_roundtrip(bv4);
+}

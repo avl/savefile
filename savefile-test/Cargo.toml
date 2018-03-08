@@ -10,3 +10,5 @@ savefile-derive = { path = "../savefile-derive" }
 serde="*"
 serde_derive="*"
 bincode="*"
+bit-vec = "*"
+
