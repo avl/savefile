@@ -15,6 +15,7 @@ use std::iter::IntoIterator;
 struct VersionRange {
     from:u32,
     to:u32,
+    convert_fun : String,
     serialized_type : String,
 }
 
@@ -105,12 +106,25 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     if x.ident.to_string() == "versions_as" {
                         match &x.lit {
                             &syn::Lit::Str(ref litstr2) => {
-                                let output2 : Vec<String> = litstr2.value().splitn(2,":").map(|x| x.to_string()).collect();
-                                if output2.len() != 2 {
+                                let output2 : Vec<String> = litstr2.value().splitn(3,":").map(|x| x.to_string()).collect();
+                                if output2.len() != 3 && output2.len()!=2 {
                                     panic!("The #versions_as tag must contain a version range and a deserialization type, such as : #[versions_as=0..3:MyStructType]");
                                 }
                                 let litstr = &output2[0];
-                                let version_type = &output2[1];
+
+                                let convert_fun:String;
+                                let version_type:String;
+
+                                if output2.len()==2 {
+                                    convert_fun = "".to_string();
+                                    version_type = output2[1].to_string();
+                                } else {
+                                    convert_fun = output2[1].to_string();
+                                    version_type = output2[2].to_string();    
+                                }
+
+                                
+                                
 
                                 let output: Vec<String> =
                                     litstr.split("..").map(|x| x.to_string()).collect();
@@ -141,6 +155,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                                 let item = VersionRange {
                                     from : from_ver,
                                     to : to_ver,
+                                    convert_fun : convert_fun.to_string(),
                                     serialized_type : version_type.to_string()
                                 };
                                 if deser_types.iter().any(overlap(&item)) {
@@ -197,6 +212,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     let versions_tag_range = VersionRange {
         from : field_from_version.unwrap_or(0),
         to : field_to_version.unwrap_or(std::u32::MAX),
+        convert_fun : "dummy".to_string(),
         serialized_type: "dummy".to_string()};
     if deser_types.iter().any(overlap(&versions_tag_range)) {
         panic!("The version ranges of #version_as attributes may not overlap those of #versions");
@@ -512,10 +528,21 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
                 let dt_from = dt.from;
                 let dt_to = dt.to;
                 let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
+                let dt_convert_fun =
+                    if dt.convert_fun.len() > 0 {
+                        let dt_conv_fun = syn::Ident::new(&dt.convert_fun, span);
+                        quote! { #dt_conv_fun }
+                    }
+                    else {
+                        quote! { <#field_type>::from }
+                    };
+                    
+                 
+
                 version_mappings.push(quote!{
                     if #local_deserializer.file_version >= #dt_from && #local_deserializer.file_version <= #dt_to {
                         let temp : #dt_field_type = <#dt_field_type>::deserialize(#local_deserializer)?;
-                        <#field_type>::from(temp)    
+                        #dt_convert_fun(temp)
                     } else 
                 });
             }

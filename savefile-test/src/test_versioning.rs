@@ -290,3 +290,26 @@ fn test_change_type_of_field() {
         1
         );
 }
+
+fn convert2newtype(s:String) -> AnewType {
+    AnewType {
+        an_u32 : s.parse().unwrap()
+    }
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct StructWithAnotherType2 {
+    #[versions_as="0..0:convert2newtype:String"]
+    #[versions="1.."]
+    a_str : AnewType
+}
+
+#[test]
+fn test_change_type_of_field2() {
+    use ::assert_roundtrip_to_new_version;
+    assert_roundtrip_to_new_version(
+        StructWithOneType{a_str:"422".to_string()},
+        0,
+        StructWithAnotherType2{a_str:AnewType{an_u32:422}},
+        1
+        );
+}
