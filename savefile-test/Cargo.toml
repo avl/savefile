@@ -11,4 +11,5 @@ serde="*"
 serde_derive="*"
 bincode="*"
 bit-vec = "*"
+arrayvec="*"
 

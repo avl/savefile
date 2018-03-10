@@ -1,5 +1,6 @@
 extern crate byteorder;
 extern crate alloc;
+extern crate arrayvec;
 use std::io::Write;
 use std::io::Read;
 use std::fs::File;
@@ -29,7 +30,9 @@ pub enum SavefileError {
     #[fail(display = "Out of memory: {}",err)]
     OutOfMemory{err:std::heap::AllocErr},
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
-    MemoryAllocationLayoutError
+    MemoryAllocationLayoutError,
+    #[fail(display = "Arrayvec: {}",msg)]    
+    ArrayvecCapacityError{msg:String},
 }
 
 
@@ -89,6 +92,12 @@ impl From<std::heap::AllocErr> for SavefileError {
 impl From<std::string::FromUtf8Error> for SavefileError {
     fn from(s: std::string::FromUtf8Error) -> SavefileError {
         SavefileError::InvalidUtf8{msg:s.to_string()}
+    }
+}
+
+impl<T> From<arrayvec::CapacityError<T> > for SavefileError {
+    fn from(s: arrayvec::CapacityError<T>) -> SavefileError {
+        SavefileError::ArrayvecCapacityError{msg:s.to_string()}
     }
 }
 
@@ -1310,6 +1319,89 @@ unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 
 
+impl<T1> WithSchema for [T1;0] {
+    fn schema(_version:u32) -> Schema {
+        Schema::ZeroSize
+    }
+}
+impl<T1> Serialize for [T1;0] {
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        Ok(())
+    }
+}
+impl<T1> Deserialize for [T1;0] {
+    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok([])
+    }
+}
+
+
+
+impl<T1:WithSchema> WithSchema for [T1;1] {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple1::<T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for [T1;1] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self[0].serialize(serializer)
+    }
+}
+impl<T1:Deserialize> Deserialize for [T1;1] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            [T1::deserialize(deserializer)?]
+        )
+    }
+}
+
+impl<T1:WithSchema> WithSchema for [T1;2] {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple2::<T1,T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for [T1;2] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self[0].serialize(serializer)?;
+        self[1].serialize(serializer)?;
+        Ok(())
+    }
+}
+impl<T1:Deserialize> Deserialize for [T1;2] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            [T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?]
+        )
+    }
+}
+
+impl<T1:WithSchema> WithSchema for [T1;3] {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple3::<T1,T1,T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for [T1;3] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self[0].serialize(serializer)?;
+        self[1].serialize(serializer)?;
+        self[2].serialize(serializer)?;
+        Ok(())
+
+    }
+}
+impl<T1:Deserialize> Deserialize for [T1;3] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            [T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?,]
+        )
+    }
+}
+
+
+
 impl<T1:WithSchema,T2:WithSchema,T3:WithSchema> WithSchema for (T1,T2,T3) {
     fn schema(version:u32) -> Schema {
         Schema::new_tuple3::<T1,T2,T3>(version)
@@ -1332,6 +1424,8 @@ impl<T1:Deserialize,T2:Deserialize,T3:Deserialize> Deserialize for (T1,T2,T3) {
         )
     }
 }
+
+
 
 impl<T1:WithSchema,T2:WithSchema> WithSchema for (T1,T2) {
     fn schema(version:u32) -> Schema {
@@ -1371,22 +1465,21 @@ impl<T1:Deserialize> Deserialize for (T1,) {
     }
 }
 
-impl<T:WithSchema> WithSchema for [T;1] {
-    fn schema(version:u32) -> Schema {
-        Schema::new_tuple1::<T>(version)
+
+impl<T:arrayvec::Array<Item = u8> > WithSchema for arrayvec::ArrayString<T> {
+    fn schema(_version:u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
-impl<T:Serialize> Serialize for [T;1] {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        self[0].serialize(serializer)
+impl<T:arrayvec::Array<Item = u8> > Serialize for arrayvec::ArrayString<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        serializer.write_string(self.as_str())
     }
 }
-impl<T:Deserialize> Deserialize for [T;1] {
+impl<T:arrayvec::Array<Item = u8> > Deserialize for arrayvec::ArrayString<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let ret = [
-            T::deserialize(deserializer)?
-        ];
-        Ok(ret)
+        let s = deserializer.read_string()?;
+        Ok(arrayvec::ArrayString::from(&s)?)
     }
 }
 

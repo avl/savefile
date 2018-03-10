@@ -12,6 +12,7 @@ use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
 use std::collections::BinaryHeap;
+extern crate arrayvec;
 mod test_versioning;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
@@ -137,6 +138,20 @@ pub fn test_vec() {
     v.push(43u8);
 
     assert_roundtrip(v);
+}
+
+
+#[derive(Savefile,Debug,PartialEq)]
+struct GenericWrapper<T:Serialize+Deserialize+WithSchema+Debug+PartialEq> {
+    something : T
+}
+
+#[test]
+pub fn test_generic() {
+
+    assert_roundtrip(GenericWrapper {
+        something:42u32
+    });
 }
 
 #[test]
@@ -302,6 +317,23 @@ pub fn assert_roundtrip_to_new_version<
     assert_eq!(expected_v2, roundtrip_result);
     roundtrip_result
 }
+
+#[test]
+pub fn test_array_string() {
+    use arrayvec::ArrayString;
+    let arraystr:ArrayString<[u8;30]>=ArrayString::from("Hello everyone").unwrap();
+    assert_roundtrip(arraystr);
+}
+
+#[test]
+pub fn test_short_arrays() {
+    let empty:[u32;0]=[];
+    assert_roundtrip(empty);
+    assert_roundtrip([1]);
+    assert_roundtrip([1,2]);
+    assert_roundtrip([1,2,3]);
+}
+
 
 #[test]
 pub fn test_small_struct_upgrade() {
