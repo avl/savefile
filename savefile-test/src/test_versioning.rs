@@ -266,7 +266,7 @@ struct AnewType {
 
 use std::convert::From;
 impl From<String> for AnewType {
-    fn from(s:String) -> AnewType {
+    fn from(_dummy:String) -> AnewType {
         AnewType {
             an_u32 : 9999
         }

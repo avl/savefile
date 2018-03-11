@@ -6,12 +6,10 @@ extern crate savefile;
 extern crate savefile_derive;
 
 extern crate bit_vec;
-use bit_vec::BitVec;
 
 use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
-use std::collections::BinaryHeap;
 extern crate arrayvec;
 mod test_versioning;
 mod test_nested_non_repr_c;
@@ -156,6 +154,7 @@ pub fn test_generic() {
 
 #[test]
 pub fn test_bin_heap() {
+    use std::collections::BinaryHeap;
     let mut v = BinaryHeap::new();
     v.push(43u8);
 
@@ -469,6 +468,7 @@ pub fn test_struct_only_removed_fields() {
 
 #[test]
 pub fn test_bitvec() {
+    use bit_vec::BitVec;
     let bv1 = BitVec::new();
     let mut bv2 = BitVec::new();
     bv2.push(false);
