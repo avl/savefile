@@ -4,6 +4,7 @@
 #![feature(test)]
 #![feature(specialization)]
 #![feature(attr_literals)]
+#![feature(core_intrinsics)]
 /*!
 This is the documentation for `savefile`
 
@@ -1732,6 +1733,9 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             let align = mem::align_of::<T>();
             let elem_size = mem::size_of::<T>();
             let num_elems = deserializer.read_usize()?;
+            if num_elems == 0 {
+                return Ok(Vec::new());
+            }
             let num_bytes = elem_size * num_elems;
             let layout = if let Some(layout) = alloc::allocator::Layout::from_size_align(num_bytes, align) {
                 Ok(layout)

@@ -206,6 +206,7 @@ pub struct BenchStruct {
 use test::{Bencher, black_box};
 
 
+
 #[bench]
 fn bench_savefile_serialize(b: &mut Bencher) {
 
@@ -269,6 +270,13 @@ pub fn test_bench_struct() {
             }
             ]
         );
+}
+
+#[test]
+pub fn test_u16_vec() {
+    assert_roundtrip(Vec::<u16>::new());
+    assert_roundtrip(vec![0u16,42u16]);
+    assert_roundtrip(vec![0u16,1,2,3,4,5,6,7,8,9]);
 }
 
 #[derive(Debug, PartialEq, Savefile)]
