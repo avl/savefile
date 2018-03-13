@@ -529,19 +529,10 @@
 			}
 		},
 		{
-			"file": "savefile/src/savefile.rs",
-			"settings":
-			{
-				"buffer_size": 58467,
-				"encoding": "UTF-8",
-				"line_ending": "Unix"
-			}
-		},
-		{
 			"file": "savefile/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 13654,
+				"buffer_size": 73929,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -550,7 +541,7 @@
 			"file": "savefile-test/Cargo.toml",
 			"settings":
 			{
-				"buffer_size": 263,
+				"buffer_size": 276,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -559,7 +550,7 @@
 			"file": "savefile-test/src/lib.rs",
 			"settings":
 			{
-				"buffer_size": 9570,
+				"buffer_size": 10140,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -576,7 +567,7 @@
 			"file": "savefile-test/src/test_versioning.rs",
 			"settings":
 			{
-				"buffer_size": 5680,
+				"buffer_size": 5685,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -620,7 +611,7 @@
 			"file": "savefile/src/prelude.rs",
 			"settings":
 			{
-				"buffer_size": 294,
+				"buffer_size": 284,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -961,6 +952,16 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"unsafe",
+			"vec",
+			"ReprC",
+			"binary",
+			"bitvec",
+			"use std",
+			"fn save",
+			"for [",
+			"for (",
+			"for [",
 			"for Vec",
 			"read_string",
 			"deserialize_str",
@@ -1078,17 +1079,7 @@
 			"meta",
 			"mod",
 			"input.atts",
-			"size",
-			"//",
-			"size\n",
-			"fn savefile",
-			"savefile",
-			"enum",
-			"reprc",
-			"attrs",
-			"enum",
-			"repr",
-			"skill"
+			"size"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -1107,7 +1098,7 @@
 	"groups":
 	[
 		{
-			"selected": 4,
+			"selected": 1,
 			"sheets":
 			[
 				{
@@ -1123,8 +1114,8 @@
 						"selection":
 						[
 							[
-								1576,
-								1576
+								0,
+								0
 							]
 						],
 						"settings":
@@ -1135,7 +1126,7 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 1978.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 3,
@@ -1143,50 +1134,19 @@
 				},
 				{
 					"buffer": 1,
-					"file": "savefile/src/savefile.rs",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 58467,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								9603,
-								9603
-							]
-						],
-						"settings":
-						{
-							"show_definitions": false,
-							"syntax": "Packages/Rust/Rust.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 9044.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"type": "text"
-				},
-				{
-					"buffer": 2,
 					"file": "savefile/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 13654,
+						"buffer_size": 73929,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								7648,
-								7652
+								58269,
+								58269
 							]
 						],
 						"settings":
@@ -1197,27 +1157,27 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 7321.0,
+						"translation.y": 65604.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 7,
+					"stack_index": 0,
 					"type": "text"
 				},
 				{
-					"buffer": 3,
+					"buffer": 2,
 					"file": "savefile-test/Cargo.toml",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 263,
+						"buffer_size": 276,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								252,
-								252
+								276,
+								276
 							]
 						],
 						"settings":
@@ -1232,20 +1192,20 @@
 					"type": "text"
 				},
 				{
-					"buffer": 4,
+					"buffer": 3,
 					"file": "savefile-test/src/lib.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 9570,
+						"buffer_size": 10140,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								4444,
-								4444
+								0,
+								0
 							]
 						],
 						"settings":
@@ -1256,14 +1216,14 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 7245.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 0,
+					"stack_index": 1,
 					"type": "text"
 				},
 				{
-					"buffer": 5,
+					"buffer": 4,
 					"file": "savefile-derive/Cargo.lock",
 					"semi_transient": false,
 					"settings":
@@ -1291,20 +1251,20 @@
 					"type": "text"
 				},
 				{
-					"buffer": 6,
+					"buffer": 5,
 					"file": "savefile-test/src/test_versioning.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 5680,
+						"buffer_size": 5685,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								4640,
-								4640
+								40,
+								41
 							]
 						],
 						"settings":
@@ -1315,14 +1275,14 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 9257.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 4,
+					"stack_index": 2,
 					"type": "text"
 				},
 				{
-					"buffer": 7,
+					"buffer": 6,
 					"file": "savefile-test/src/test_nested_non_repr_c.rs",
 					"semi_transient": false,
 					"settings":
@@ -1353,7 +1313,7 @@
 					"type": "text"
 				},
 				{
-					"buffer": 8,
+					"buffer": 7,
 					"file": "savefile-test/src/test_nested_repr_c.rs",
 					"semi_transient": false,
 					"settings":
@@ -1384,7 +1344,7 @@
 					"type": "text"
 				},
 				{
-					"buffer": 9,
+					"buffer": 8,
 					"file": ".travis.yml",
 					"semi_transient": false,
 					"settings":
@@ -1408,11 +1368,11 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 13,
+					"stack_index": 12,
 					"type": "text"
 				},
 				{
-					"buffer": 10,
+					"buffer": 9,
 					"file": "README.md",
 					"semi_transient": false,
 					"settings":
@@ -1442,20 +1402,20 @@
 					"type": "text"
 				},
 				{
-					"buffer": 11,
+					"buffer": 10,
 					"file": "savefile/src/prelude.rs",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 294,
+						"buffer_size": 284,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								293,
-								293
+								8,
+								8
 							]
 						],
 						"settings":
@@ -1467,11 +1427,11 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 12,
+					"stack_index": 4,
 					"type": "text"
 				},
 				{
-					"buffer": 12,
+					"buffer": 11,
 					"file": "savefile-derive/Cargo.toml",
 					"semi_transient": false,
 					"settings":
@@ -1495,11 +1455,11 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 6,
+					"stack_index": 7,
 					"type": "text"
 				},
 				{
-					"buffer": 13,
+					"buffer": 12,
 					"file": "savefile/Cargo.toml",
 					"semi_transient": false,
 					"settings":
@@ -1523,7 +1483,7 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 2,
+					"stack_index": 6,
 					"type": "text"
 				}
 			]
