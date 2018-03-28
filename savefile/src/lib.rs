@@ -935,8 +935,10 @@ fn maybe_max(a:Option<usize>,b:Option<usize>) -> Option<usize> {
     None 
 }
 impl SchemaEnum {
+
     fn serialized_size(&self) -> Option<usize> {
-        self.variants.iter().fold(Some(0usize),|prev,x| {
+        let discr_size = 1usize;  //Discriminator is always 1 byte
+        self.variants.iter().fold(Some(discr_size),|prev,x| {
             maybe_max(prev,x.serialized_size())
         })
     }

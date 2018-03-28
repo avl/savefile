@@ -493,3 +493,34 @@ pub fn test_bitvec() {
     assert_roundtrip(bv3);
     assert_roundtrip(bv4);
 }
+
+#[repr(u8)]
+#[derive(Savefile, ReprC, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum TerrainType {
+    Wheat,
+    Forest,
+    Desert,
+    Rock,
+    Dirt,
+    Grass,
+    Water,
+}
+
+#[repr(C)]
+#[derive(ReprC, Savefile, Clone, Copy, Debug,PartialEq)]
+pub struct TerrainTile
+{
+    pub curtype: TerrainType,
+    pub resource: u8, //logarithmic scale, base resource abundance
+    pub height: i16,
+}
+
+
+#[test]
+pub fn test_terrain() {
+    assert_roundtrip(vec![TerrainTile {
+        curtype : TerrainType::Dirt,
+        resource:42,
+        height:2111
+    }]);
+}

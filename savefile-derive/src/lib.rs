@@ -796,7 +796,8 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
                     // point of the ReprC trait is to speed things up.
                     if cfg!(debug_assertions) {
                         if Some(std::mem::size_of::<#name>()) != <#name as #WithSchema>::schema(file_version).serialized_size() {
-                            panic!("Size mismatch for struct #name. In memory size: {}, schema size: {:?}. Maybe use repr(C)?",
+                            panic!("Size mismatch for struct {}. In memory size: {}, schema size: {:?}. Maybe use repr(C)?",
+                                stringify!(#name),
                                 std::mem::size_of::<#name>(),
                                 <#name as #WithSchema>::schema(file_version).serialized_size());
                         }
