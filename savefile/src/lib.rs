@@ -730,7 +730,7 @@ impl<'a> Deserializer<'a> {
             let memory_schema = T::schema(file_ver);
             let file_schema = Schema::deserialize(&mut schema_deserializer)?;
             
-            if let Some(err) = diff_schema(&file_schema, &memory_schema,".".to_string()) {
+            if let Some(err) = diff_schema(&memory_schema, &file_schema,".".to_string()) {
                 return Err(SavefileError::IncompatibleSchema{
                     message:format!("Saved schema differs from in-memory schema for version {}. Error: {}",file_ver,
                     err)});

@@ -794,7 +794,13 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
                 fn repr_c_optimization_safe(file_version:u32) -> bool {
                     // The following is a debug_assert because it is slightly expensive, and the entire
                     // point of the ReprC trait is to speed things up.
-                    debug_assert_eq!(Some(std::mem::size_of::<#name>()) , <#name as #WithSchema>::schema(file_version).serialized_size());
+                    if cfg!(debug_assertions) {
+                        if Some(std::mem::size_of::<#name>()) != <#name as #WithSchema>::schema(file_version).serialized_size() {
+                            panic!("Size mismatch for struct #name. In memory size: {}, schema size: {:?}. Maybe use repr(C)?",
+                                std::mem::size_of::<#name>(),
+                                <#name as #WithSchema>::schema(file_version).serialized_size());
+                        }
+                    }
                     let local_file_version = file_version;
                     file_version >= #min_safe_version
                     #( && #optsafe_outputs)*
