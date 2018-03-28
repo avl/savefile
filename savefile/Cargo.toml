@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 exclude = [
@@ -26,7 +26,7 @@ bit-vec="0.4"
 arrayvec="0.4"
 
 [dev-dependencies]
-savefile-derive = { path = "../savefile-derive", version="0.2.5" }
+savefile-derive = { path = "../savefile-derive", version="0.2.6" }
 
 
 
