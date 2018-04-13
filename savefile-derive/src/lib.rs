@@ -242,7 +242,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
     let mut min_safe_version=0;
     let mut output = Vec::new();
     
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     let span = proc_macro2::Span::call_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
     let mut index_number = 0;
@@ -316,7 +316,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
     let generics = input.generics;
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
 
     let gen2=generics.clone();
     let (impl_generics, ty_generics, where_clause) = gen2.split_for_impl();
@@ -336,7 +336,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
         Result<(),_savefile::prelude::SavefileError>
     };
     let magic=format!("_IMPL_SAVEFILE_SERIALIZE_FOR_{}", &name).to_string();    
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -467,7 +467,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
 fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     let removeddef = quote_spanned! { defspan => _savefile::prelude::Removed };
     let local_deserializer = quote_spanned! { defspan => deserializer};
 
@@ -592,7 +592,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
 
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     
     let name = input.ident;
 
@@ -618,7 +618,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
 
     
     let magic=format!("_IMPL_SAVEFILE_DESERIALIZE_FOR_{}", &name).to_string();    
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
     
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -742,7 +742,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
     let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     let reprc = quote_spanned! {defspan=>
         _savefile::prelude::ReprC
     };    
@@ -754,7 +754,7 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
             extern crate savefile as _savefile;            
         };
     let magic=format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();    
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
 
     for ref field in &field_infos {
 
@@ -931,7 +931,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 #[allow(non_snake_case)]
 fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
     let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema };
@@ -995,7 +995,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::def_site();
+    let defspan = proc_macro2::Span::call_site();
     let withschema = quote_spanned! {defspan=>
         _savefile::prelude::WithSchema
     };
@@ -1010,7 +1010,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
     let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
     
     let magic=format!("_IMPL_SAVEFILE_WITHSCHEMA_FOR_{}", &name).to_string();    
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::def_site());
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
