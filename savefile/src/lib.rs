@@ -1767,26 +1767,26 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                 return Ok(Vec::new());
             }
             let num_bytes = elem_size * num_elems;
-            let layout = if let Some(layout) = alloc::allocator::Layout::from_size_align(num_bytes, align) {
+            let layout = if let Ok(layout) = alloc::allocator::Layout::from_size_align(num_bytes, align) {
                 Ok(layout)
             } else {
                 Err(SavefileError::MemoryAllocationLayoutError)
             }?;
-            let ptr = unsafe { alloc::heap::Heap.alloc(layout.clone())? };
+            let ptr = unsafe { alloc::heap::Global.alloc(layout.clone())? };
 
             {
-                let slice = unsafe { std::slice::from_raw_parts_mut(ptr, num_bytes) };
+                let slice = unsafe { std::slice::from_raw_parts_mut(ptr.as_ptr() as *mut u8, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
                     Ok(()) => {Ok(())}
                     Err(err) => {
                         unsafe {
-                            alloc::heap::Heap.dealloc(ptr, layout);
+                            alloc::heap::Global.dealloc(ptr, layout);
                         }
                         Err(err)
                     }
                 }?;
             }
-            let ret=unsafe { Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems) };
+            let ret=unsafe { Vec::from_raw_parts(ptr.as_ptr() as *mut T, num_elems, num_elems) };
             Ok(ret)
         }
     }
