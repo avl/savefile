@@ -23,6 +23,7 @@ struct VersionRange {
 struct AttrsResult {
     version_from: u32,
     version_to: u32,
+    ignore:bool,
     default_fn: Option<syn::Ident>,
     default_val: Option<quote::Tokens>,
     deserialize_types : Vec<VersionRange>,
@@ -68,11 +69,15 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     let mut field_to_version = None;
     let mut default_fn = None;
     let mut default_val = None;
+    let mut ignore = false;
     let mut deser_types = Vec::new();
     for attr in attrs.iter() {
         if let Some(ref meta) = attr.interpret_meta() {
             match meta {
-                &syn::Meta::Word(ref _x) => {
+                &syn::Meta::Word(ref x) => {
+                    if x.to_string() == "ignore" {
+                        ignore=true;
+                    }
 
                 }
                 &syn::Meta::List(ref _x) => {
@@ -102,6 +107,11 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                         };
                         default_fn = Some(syn::Ident::new(&default_fn_str_lit.value(),proc_macro2::Span::call_site()));
                                 
+                    };
+
+                    if x.ident.to_string() == "ignore" {
+                        ignore=true;                            
+                        println!("Ignored");
                     };
                     if x.ident.to_string() == "versions_as" {
                         match &x.lit {
@@ -228,6 +238,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
         version_to: field_to_version.unwrap_or(std::u32::MAX),
         default_fn: default_fn,
         default_val: default_val,
+        ignore: ignore,
         deserialize_types : deser_types
     }
 }
@@ -250,6 +261,10 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
         {
 
             let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+
+            if verinfo.ignore {
+                continue;
+            }
             let (field_from_version, field_to_version) =
                 (verinfo.version_from, verinfo.version_to);
 
@@ -486,10 +501,14 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             verinfo.default_val,
         );
         let mut exists_version_which_needs_default_value=false;
-        for ver in 0..verinfo.version_from {
-            if !verinfo.deserialize_types.iter().any(|x| ver >= x.from && ver <= x.to) {
-                exists_version_which_needs_default_value = true;
-            }
+        if verinfo.ignore {
+            exists_version_which_needs_default_value = true;
+        } else {
+            for ver in 0..verinfo.version_from {
+                if !verinfo.deserialize_types.iter().any(|x| ver >= x.from && ver <= x.to) {
+                    exists_version_which_needs_default_value = true;
+                }
+            }            
         }
 
 
@@ -500,21 +519,24 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         } else if let Some(default_fn) = default_fn {
             quote_spanned! { span => #default_fn() }
         } else if !exists_version_which_needs_default_value {
-            quote! { panic!("Unexpected unsupported file version: {}",#local_deserializer.file_version) } //Should be impossible
+            quote! { panic!("Unexpected unsupported file version: {}",#local_deserializer.file_version) } //Should be impossible    
         } else {
-
             quote_spanned! { span => Default::default() }        
         };
         if field_from_version > field_to_version {
             panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
         }
 
-        let src = if field_from_version == 0 && field_to_version == std::u32::MAX {
+        let src = if field_from_version == 0 && field_to_version == std::u32::MAX  && !verinfo.ignore {
             if is_removed {
                 panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
             };
             quote_spanned! { span =>
                 <#field_type>::deserialize(#local_deserializer)?
+            }
+        } else if verinfo.ignore {            
+            quote_spanned! { span => 
+                #effective_default_val
             }
         } else {    
             if field_to_version < std::u32::MAX { // A delete
@@ -567,7 +589,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     output
 }
 
-#[proc_macro_derive(Savefile, attributes(versions, versions_as, default_val, default_fn))]
+#[proc_macro_derive(Savefile, attributes(versions, versions_as, ignore, default_val, default_fn))]
 pub fn savefile(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -759,6 +781,9 @@ fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:sy
     for ref field in &field_infos {
 
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        if verinfo.ignore {
+            panic!("The ReprC attribute cannot be derived for structures containing ignored fields");
+        }
         let (field_from_version, field_to_version) =
             (verinfo.version_from, verinfo.version_to);
 
@@ -870,7 +895,7 @@ fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
     }
     size_u32
 }
-#[proc_macro_derive(ReprC, attributes(versions, versions_as, default_val, default_fn))]
+#[proc_macro_derive(ReprC, attributes(versions, versions_as, ignore, default_val, default_fn))]
 pub fn reprc(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     
@@ -941,6 +966,9 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
     for (idx,ref field) in field_infos.iter().enumerate() {
         
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        if verinfo.ignore {
+            continue;
+        }
         let (field_from_version, field_to_version) =
             (verinfo.version_from, verinfo.version_to);
 

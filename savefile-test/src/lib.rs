@@ -412,7 +412,18 @@ pub fn test_tuple() {
         t3:(42u32,43u32,44u32),
     });;   
 }
+#[derive(Debug, PartialEq, Savefile )]
+struct StructWithIgnored {
+    a:u32,
+    b:u32,
+    #[ignore]
+    c:u32,
+}
 
+#[test]
+pub fn test_ignored() {
+    assert_roundtrip(StructWithIgnored{a:42,b:7,c:0});
+}
 
 #[test]
 pub fn test_box() {

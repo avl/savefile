@@ -257,6 +257,34 @@ struct SomeType {
 
 ```
 
+## The ignore attribute
+
+The ignore attribute can be used to exclude certain fields from serialization. They still 
+need to be constructed during deserialization (of course), so you need to use one of the
+default-attributes to make sure the field can be constructed. If none of the  default-attributes
+(described above) are used, savefile will attempt to use the Default trait. 
+
+Here is an example, where a cached value is not to be deserialized.
+In this example, the value will be 0.0 after deserialization, regardless
+of the value when serializing.
+
+```
+# #[macro_use]
+# extern crate savefile_derive;
+
+#[derive(Savefile)]
+struct IgnoreExample {
+    a: f64,
+    b: f64,
+    #[ignore]
+    cached_product: f64
+}
+# fn main() {}
+
+```
+
+
+
 ## The versions_as attribute
 
 The versions_as attribute can be used to support changing the type of a field.
