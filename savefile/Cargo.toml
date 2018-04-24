@@ -22,7 +22,7 @@ travis-ci = { repository = "avl/savefile", branch = "master" }
 [dependencies]
 byteorder="1.2"
 failure="0.1"
-bit-vec="0.4"
+bit-vec="*"
 arrayvec="0.4"
 
 [dev-dependencies]

@@ -492,7 +492,7 @@ use std::collections::BinaryHeap;
 use std::hash::Hash;
 extern crate test;
 extern crate bit_vec;
-use self::bit_vec::BitVec;
+//use self::bit_vec::BitVec;
 
 
 /// This object represents an error in deserializing or serializinga
@@ -1624,7 +1624,7 @@ impl<T: Deserialize> Deserialize for Option<T> {
     }
 }
 
-impl WithSchema for BitVec {
+impl WithSchema for bit_vec::BitVec {
     fn schema(version:u32) -> Schema {
         Schema::Struct(SchemaStruct{
             dbg_name : "BitVec".to_string(),
@@ -1648,7 +1648,7 @@ impl WithSchema for BitVec {
     }
 }
 
-impl Serialize for BitVec {
+impl Serialize for bit_vec::BitVec {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
@@ -1658,12 +1658,12 @@ impl Serialize for BitVec {
         Ok(())            
     }
 }
-impl Deserialize for BitVec {
+impl Deserialize for bit_vec::BitVec {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let numbits = deserializer.read_usize()?;
         let numbytes= deserializer.read_usize()?;
         let bytes = deserializer.read_bytes(numbytes)?;
-        let mut ret=BitVec::from_bytes(&bytes);
+        let mut ret=bit_vec::BitVec::from_bytes(&bytes);
         ret.truncate(numbits);
         Ok(ret)
     }
