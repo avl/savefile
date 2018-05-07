@@ -5,6 +5,8 @@
 #![feature(specialization)]
 #![feature(attr_literals)]
 #![feature(core_intrinsics)]
+#![feature(integer_atomics)]
+
 /*!
 This is the documentation for `savefile`
 
@@ -488,6 +490,16 @@ extern crate arrayvec;
 use std::io::Write;
 use std::io::Read;
 use std::fs::File;
+use std::sync::atomic::{
+    Ordering,
+    AtomicBool,
+    AtomicU8,AtomicI8,
+    AtomicU16,AtomicI16,
+    AtomicU32,AtomicI32,
+    AtomicU64,AtomicI64,
+    AtomicUsize,AtomicIsize,
+};
+
 use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::collections::BinaryHeap;
@@ -1819,6 +1831,9 @@ unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 
 
+
+
+
 impl<T1> WithSchema for [T1;0] {
     fn schema(_version:u32) -> Schema {
         Schema::ZeroSize
@@ -2094,6 +2109,31 @@ impl Deserialize for () {
 
 
 
+impl WithSchema for AtomicBool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}
+impl WithSchema for AtomicU8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
+impl WithSchema for AtomicI8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
+impl WithSchema for AtomicU16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u16)}}
+impl WithSchema for AtomicI16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i16)}}
+impl WithSchema for AtomicU32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u32)}}
+impl WithSchema for AtomicI32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i32)}}
+impl WithSchema for AtomicU64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u64)}}
+impl WithSchema for AtomicI64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i64)}}
+impl WithSchema for AtomicUsize {fn schema(_version:u32) -> Schema {
+        match std::mem::size_of::<usize>() {
+            4 => Schema::Primitive(SchemaPrimitive::schema_u32),
+            8 => Schema::Primitive(SchemaPrimitive::schema_u64),
+            _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
+        }
+}}
+impl WithSchema for AtomicIsize {fn schema(_version:u32) -> Schema {
+        match std::mem::size_of::<isize>() {
+            4 => Schema::Primitive(SchemaPrimitive::schema_i32),
+            8 => Schema::Primitive(SchemaPrimitive::schema_i64),
+            _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
+        }
+}}
+
+
 impl WithSchema for bool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}
 impl WithSchema for u8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
 impl WithSchema for i8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
@@ -2107,14 +2147,14 @@ impl WithSchema for usize {fn schema(_version:u32) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
             8 => Schema::Primitive(SchemaPrimitive::schema_u64),
-            _ => panic!("Size of usize was neither 32 bit or 64 bit. This is not supported by the savefile crate."),
+            _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
 }}
 impl WithSchema for isize {fn schema(_version:u32) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
             8 => Schema::Primitive(SchemaPrimitive::schema_i64),
-            _ => panic!("Size of isize was neither 32 bit or 64 bit. This is not supported by the savefile crate."),
+            _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
 }}
 impl WithSchema for f32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f32)}}
@@ -2140,16 +2180,7 @@ impl Deserialize for bool {
         deserializer.read_bool()
     }
 }
-impl Serialize for i8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        serializer.write_i8(*self)
-    }
-}
-impl Deserialize for i8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        deserializer.read_i8()
-    }
-}
+
 
 
 impl Serialize for f32 {
@@ -2174,7 +2205,16 @@ impl Deserialize for f64 {
     }
 }
 
-
+impl Serialize for i8 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_i8(*self)
+    }
+}
+impl Deserialize for i8 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        deserializer.read_i8()
+    }
+}
 impl Serialize for u16 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         serializer.write_u16(*self)
@@ -2268,3 +2308,96 @@ impl Deserialize for isize {
 
 
 
+impl Serialize for AtomicI8 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_i8(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicI8 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicI8::new(deserializer.read_i8()?))
+    }
+}
+impl Serialize for AtomicU16 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_u16(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicU16 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicU16::new(deserializer.read_u16()?))
+    }
+}
+impl Serialize for AtomicI16 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_i16(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicI16 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicI16::new(deserializer.read_i16()?))
+    }
+}
+
+impl Serialize for AtomicU32 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_u32(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicU32 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicU32::new(deserializer.read_u32()?))
+    }
+}
+impl Serialize for AtomicI32 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_i32(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicI32 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicI32::new(deserializer.read_i32()?))
+    }
+}
+
+impl Serialize for AtomicU64 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_u64(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicU64 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicU64::new(deserializer.read_u64()?))
+    }
+}
+impl Serialize for AtomicI64 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_i64(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicI64 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicI64::new(deserializer.read_i64()?))
+    }
+}
+
+impl Serialize for AtomicUsize {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_usize(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicUsize {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicUsize::new(deserializer.read_usize()?))
+    }
+}
+impl Serialize for AtomicIsize {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_isize(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicIsize {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicIsize::new(deserializer.read_isize()?))
+    }
+}
