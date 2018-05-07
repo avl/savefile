@@ -2306,6 +2306,16 @@ impl Deserialize for isize {
 
 
 
+impl Serialize for AtomicBool {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_bool(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicBool {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicBool::new(deserializer.read_bool()?))
+    }
+}
 
 impl Serialize for AtomicU8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
