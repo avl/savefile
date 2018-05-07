@@ -1,3 +1,4 @@
+#![feature(integer_atomics)]
 
 #![feature(test)]
 extern crate test;
@@ -535,3 +536,24 @@ pub fn test_terrain() {
         height:2111
     }]);
 }
+
+
+use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
+#[test]
+pub fn test_atomic() {
+    let mut atom = AtomicUsize::new(43);
+    let mut f = Cursor::new(Vec::new());
+    {
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            Serializer::save(&mut bufw, 1, &atom).unwrap();
+        }
+        bufw.flush().unwrap();
+    }
+    f.set_position(0);
+    {
+        let roundtrip_result : AtomicUsize = Deserializer::load(&mut f, 1).unwrap();
+        assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));        
+    }
+}
+
