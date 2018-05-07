@@ -2307,7 +2307,16 @@ impl Deserialize for isize {
 
 
 
-
+impl Serialize for AtomicU8 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_u8(self.load(Ordering::SeqCst))
+    }
+}
+impl Deserialize for AtomicU8 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(AtomicU8::new(deserializer.read_u8()?))
+    }
+}
 impl Serialize for AtomicI8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         serializer.write_i8(self.load(Ordering::SeqCst))

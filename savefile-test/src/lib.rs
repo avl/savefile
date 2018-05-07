@@ -541,7 +541,7 @@ pub fn test_terrain() {
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 #[test]
 pub fn test_atomic() {
-    let mut atom = AtomicUsize::new(43);
+    let mut atom = AtomicU8::new(43);
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
@@ -552,7 +552,7 @@ pub fn test_atomic() {
     }
     f.set_position(0);
     {
-        let roundtrip_result : AtomicUsize = Deserializer::load(&mut f, 1).unwrap();
+        let roundtrip_result : AtomicU8 = Deserializer::load(&mut f, 1).unwrap();
         assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));        
     }
 }
