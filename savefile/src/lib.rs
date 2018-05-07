@@ -183,7 +183,7 @@ Using the #[versions] tag is critically important. If this is messed up, data co
 When a field is added, its type must implement the Default trait (unless the default_val or default_fn attributes
 are used).
 
-There also exists a default_val, a default_fn and a versions_as field. More about these below:
+There also exists a default_val, a default_fn and a versions_as attribute. More about these below:
 
 ## The versions attribute
 
@@ -193,7 +193,7 @@ Rules for using the #[versions] attribute:
  * You may only save data using version N (supply this number when calling `save`)
  * When data is loaded, you must supply version N as the memory-version number to `load`. Load will
    still adapt the deserialization operation to the version of the serialized data.
- * The version number N is "global". All components of the saved data must have the same version. 
+ * The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version. 
  * Whenever changes to the data are to be made, the global version number N must be increased.
  * You may add a new field to your structs, iff you also give it a #[versions = "N.."] attribute. N must be the new version of your data.
  * You may remove a field from your structs. If previously it had no #[versions] attribute, you must
@@ -381,6 +381,8 @@ This is dangerous. You, as implementor of the `ReprR` trait take full responsibi
 that all the following rules are upheld:
 
  * The type T is Copy
+ * The host platform is little endian. The savefile disk format uses little endian. Automatic validation of this should
+ * probably be added to savefile. 
  * The type T is a struct or an enum without fields. Using it on enums with fields will probably lead to silent data corruption.
  * The type is represented in memory in an ordered, packed representation. Savefile is not
  clever enough to inspect the actual memory layout and adapt to this, so the memory representation
@@ -495,7 +497,7 @@ extern crate bit_vec;
 //use self::bit_vec::BitVec;
 
 
-/// This object represents an error in deserializing or serializinga
+/// This object represents an error in deserializing or serializing
 /// an item.
 #[derive(Debug, Fail)]
 #[must_use]
@@ -1039,15 +1041,27 @@ fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:&str) -> Option<Stri
 
 
 /// The schema represents the save file format
-/// of your data. 
+/// of your data structure. It is an AST (Abstract Syntax Tree)
+/// for consisting of various types of nodes in the savefile 
+/// format. Custom Serialize-implementations cannot add new types to
+/// this tree, but must reuse these existing ones. 
+/// See the various enum variants for more information:
 #[derive(Debug,PartialEq)]
 pub enum Schema {
+    /// Represents a struct. Custom implementations of Serialize may use this
+    /// format are encouraged to use this format. 
     Struct(SchemaStruct),
+    /// Represents an enum
     Enum(SchemaEnum),
+    /// Represents a primitive: Any of the various integer types (u8, i8, u16, i16 etc...), or String
     Primitive(SchemaPrimitive),
+    /// A Vector of arbitrary nodes, all of the given type
     Vector(Box<Schema>),
+    /// An Option variable instance of the given type.
     SchemaOption(Box<Schema>),
+    /// Basically a dummy value, the Schema nodes themselves report this schema if queried.
     Undefined,
+    /// A zero-sized type. I.e, there is no data to serialize or deserialize.
     ZeroSize,
 }
 
