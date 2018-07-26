@@ -19,8 +19,8 @@ travis-ci = { repository = "avl/savefile", branch = "master" }
 proc-macro = true
 
 [dependencies]
-quote = "0.5.1"
-syn = "0.13.1"
-proc-macro2 = { version = "0.3.6", features = ["nightly"] }
+quote = "0.6"
+syn = "0.14"
+proc-macro2 = { version = "0.4", features = ["nightly"] }
 
 

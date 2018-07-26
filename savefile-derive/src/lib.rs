@@ -1,13 +1,17 @@
 #![feature(conservative_impl_trait)]
 
 #![recursion_limit="128"]
-#![feature(proc_macro)]
+
+//#![feature(proc_macro)]
 extern crate proc_macro;
+
+
 extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
 extern crate syn;
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
+use proc_macro2::Span;
 use syn::DeriveInput;
 use std::iter::IntoIterator;
 
@@ -25,14 +29,14 @@ struct AttrsResult {
     version_to: u32,
     ignore:bool,
     default_fn: Option<syn::Ident>,
-    default_val: Option<quote::Tokens>,
+    default_val: Option<TokenStream>,
     deserialize_types : Vec<VersionRange>,
 }
 
 fn check_is_remove(field_type: &syn::Type) -> bool {
     use quote::ToTokens;
     let mut is_remove=false;
-    let mut tokens = quote::Tokens::new();
+    let mut tokens = TokenStream::new();
     field_type.to_tokens(&mut tokens);
     for tok in tokens.into_iter() {
         if tok.to_string()=="Removed" { //TODO: This is not robust, since it's based on text matching
@@ -249,7 +253,7 @@ struct FieldInfo<'a> {
     attrs: &'a Vec<syn::Attribute>
 }
 
-fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool, index:bool) -> (quote::Tokens,Vec<quote::Tokens>) {
+fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:bool, index:bool) -> (TokenStream,Vec<TokenStream>) {
     let mut min_safe_version=0;
     let mut output = Vec::new();
     
@@ -317,14 +321,14 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
     let fields_names =
         field_infos.iter().map(|field| {
-            let fieldname = field.ident;
+            let fieldname = (field.ident).as_ref().unwrap().to_string();
             quote! { ref #fieldname }
         }).collect();
     (serialize2,fields_names)
 
 }
 
-fn serialize(input: DeriveInput) -> quote::Tokens {
+fn serialize(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
@@ -363,7 +367,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
 
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
                 let var_idx = var_idx as u8;
-                let var_ident = variant.ident;
+                let var_ident = (variant.ident).clone();
                 let variant_name = quote!{ #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => &#variant_name};
                 match &variant.fields {
@@ -388,7 +392,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
 
                         let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
                             FieldInfo {
-                                ident:Some(syn::Ident::from("x".to_string() + &idx.to_string())),
+                                ident:Some(syn::Ident::new(&("x".to_string() + &idx.to_string()),Span::call_site())),
                                 ty:&field.ty,
                                 attrs:&field.attrs
                             }).collect();               
@@ -425,8 +429,8 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
             }
         }
         &syn::Data::Struct(ref struc) => { 
-            let fields_serialize:quote::Tokens;
-            let _field_names:Vec<quote::Tokens>;
+            let fields_serialize:TokenStream;
+            let _field_names:Vec<TokenStream>;
             match &struc.fields {
                 &syn::Fields::Named(ref namedfields) => {
                     let field_infos : Vec<FieldInfo> = namedfields.named.iter().map(|field|
@@ -479,7 +483,7 @@ fn serialize(input: DeriveInput) -> quote::Tokens {
     expanded
 }
 
-fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
+fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -579,7 +583,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
             }
         };
 
-        if let Some(id) = field.ident {            
+        if let Some(ref id) = field.ident {            
             let id_spanned = quote_spanned! { span => #id};
             output.push(quote!(#id_spanned : #src ));
         } else {
@@ -590,7 +594,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 }
 
 #[proc_macro_derive(Savefile, attributes(versions, versions_as, ignore, default_val, default_fn))]
-pub fn savefile(input: TokenStream) -> TokenStream {
+pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
     let s=serialize(input.clone());
@@ -609,7 +613,7 @@ pub fn savefile(input: TokenStream) -> TokenStream {
 
     expanded.into()
 }
-fn deserialize(input: DeriveInput) -> quote::Tokens {
+fn deserialize(input: DeriveInput) -> TokenStream {
 
 
 
@@ -652,7 +656,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
 
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
                 let var_idx = var_idx as u8;
-                let var_ident = variant.ident;
+                let var_ident = variant.ident.clone();
                 let variant_name = quote!{ #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
                 match &variant.fields {
@@ -712,7 +716,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
                 &syn::Fields::Named(ref namedfields) => {
                     let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                         |field| FieldInfo {
-                            ident : Some(field.ident.unwrap().clone()),
+                            ident : Some(field.ident.clone().unwrap()),
                             ty : &field.ty,
                             attrs: &field.attrs
                         }).collect();
@@ -760,7 +764,7 @@ fn deserialize(input: DeriveInput) -> quote::Tokens {
 }
 
 #[allow(non_snake_case)]
-fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:syn::Ident) -> quote::Tokens {
+fn implement_reprc(field_infos:Vec<FieldInfo>, generics : syn::Generics, name:syn::Ident) -> TokenStream {
     let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let span = proc_macro2::Span::call_site();
@@ -849,19 +853,19 @@ fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
                 }
                 &syn::Meta::List(ref metalist) => {
 
-                    if &metalist.ident.as_ref() == &"repr" {
+                    if &metalist.ident.to_string() == &"repr" {
                         for x in &metalist.nested {
                             let size_str : String = match *x {
                                 syn::NestedMeta::Meta(ref inner_x) => {
                                     match inner_x {
                                         &syn::Meta::NameValue(ref _x) => {
-                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_token_stream());
                                         }
                                         &syn::Meta::Word(ref lit_word) => {
-                                            lit_word.as_ref().to_string()
+                                            lit_word.to_string()
                                         }
                                         &syn::Meta::List(ref _metalist) => {
-                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_token_stream());
                                         }
                                     }                                    
                                 },
@@ -869,7 +873,7 @@ fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
                                     match lit {
                                         &syn::Lit::Str(ref litstr) => litstr.value(),
                                         _ => {
-                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_tokens());
+                                            panic!("Unsupported repr-attribute: repr({:?})",x.clone().into_token_stream());
                                         }
                                     }
                                 },
@@ -896,7 +900,7 @@ fn get_enum_size(attrs:&Vec<syn::Attribute>) -> Option<u32> {
     size_u32
 }
 #[proc_macro_derive(ReprC, attributes(versions, versions_as, ignore, default_val, default_fn))]
-pub fn reprc(input: TokenStream) -> TokenStream {
+pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
     
     let name = input.ident;
@@ -936,7 +940,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 
                 let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                     |field| FieldInfo {
-                        ident : Some(field.ident.unwrap().clone()),
+                        ident : Some(field.ident.clone().unwrap()),
                         ty : &field.ty,
                         attrs: &field.attrs
                     }).collect();
@@ -954,7 +958,7 @@ pub fn reprc(input: TokenStream) -> TokenStream {
 }
 
 #[allow(non_snake_case)]
-fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
+fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
@@ -972,7 +976,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
         let (field_from_version, field_to_version) =
             (verinfo.version_from, verinfo.version_to);
 
-        let name=if let Some(name) = field.ident {
+        let name=if let Some(name) = field.ident.clone() {
             (&name).to_string()
         } else {
             idx.to_string()
@@ -1015,7 +1019,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<quote::Tokens> {
 
 
 #[allow(non_snake_case)]
-fn withschema(input: DeriveInput) -> quote::Tokens {
+fn withschema(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
@@ -1049,7 +1053,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
                     panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
                 }
                 let var_idx = var_idx as u8;
-                let var_ident = variant.ident;
+                let var_ident = variant.ident.clone();
                 let variant_name = quote!{ #var_ident };
                 let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
 
@@ -1136,7 +1140,7 @@ fn withschema(input: DeriveInput) -> quote::Tokens {
 
                     let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
                         |field| FieldInfo {
-                            ident : Some(field.ident.unwrap().clone()),
+                            ident : Some(field.ident.clone().unwrap()),
                             ty : &field.ty,
                             attrs: &field.attrs
                         }).collect();

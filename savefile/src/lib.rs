@@ -523,7 +523,7 @@ pub enum SavefileError {
     #[fail(display = "Invalid utf8 character {}",msg)]
     InvalidUtf8{msg:String},
     #[fail(display = "Out of memory: {}",err)]
-    OutOfMemory{err:std::heap::AllocErr},
+    OutOfMemory{err:std::alloc::AllocErr},
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
     MemoryAllocationLayoutError,
     #[fail(display = "Arrayvec: {}",msg)]    
@@ -578,8 +578,8 @@ impl From<std::io::Error> for SavefileError {
     }
 }
 
-impl From<std::heap::AllocErr> for SavefileError {
-    fn from(s: std::heap::AllocErr) -> SavefileError {
+impl From<std::alloc::AllocErr> for SavefileError {
+    fn from(s: std::alloc::AllocErr) -> SavefileError {
         SavefileError::OutOfMemory{err:s}
     }
 }
@@ -1785,7 +1785,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             Ok(regular_deserialize_vec::<T>(deserializer)?)
         } else {
             use std::mem;
-            use std::heap::Alloc;
+            
             let align = mem::align_of::<T>();
             let elem_size = mem::size_of::<T>();
             let num_elems = deserializer.read_usize()?;
@@ -1793,26 +1793,26 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                 return Ok(Vec::new());
             }
             let num_bytes = elem_size * num_elems;
-            let layout = if let Ok(layout) = alloc::allocator::Layout::from_size_align(num_bytes, align) {
+            let layout = if let Ok(layout) = std::alloc::Layout::from_size_align(num_bytes, align) {
                 Ok(layout)
             } else {
                 Err(SavefileError::MemoryAllocationLayoutError)
             }?;
-            let ptr = unsafe { alloc::heap::Global.alloc(layout.clone())? };
+            let ptr = unsafe { std::alloc::alloc(layout.clone()) };
 
             {
-                let slice = unsafe { std::slice::from_raw_parts_mut(ptr.as_ptr() as *mut u8, num_bytes) };
+                let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
                     Ok(()) => {Ok(())}
                     Err(err) => {
                         unsafe {
-                            alloc::heap::Global.dealloc(ptr, layout);
+                            std::alloc::dealloc(ptr, layout);
                         }
                         Err(err)
                     }
                 }?;
             }
-            let ret=unsafe { Vec::from_raw_parts(ptr.as_ptr() as *mut T, num_elems, num_elems) };
+            let ret=unsafe { Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems) };
             Ok(ret)
         }
     }
