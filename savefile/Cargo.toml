@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.2.9"
+version = "0.2.10"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 exclude = [
