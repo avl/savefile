@@ -321,7 +321,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
     let fields_names =
         field_infos.iter().map(|field| {
-            let fieldname = (field.ident).as_ref().unwrap().to_string();
+            let fieldname = field.ident.clone();
             quote! { ref #fieldname }
         }).collect();
     (serialize2,fields_names)
