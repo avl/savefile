@@ -3,7 +3,6 @@
 #![recursion_limit = "256"]
 #![feature(test)]
 #![feature(specialization)]
-#![feature(attr_literals)]
 #![feature(core_intrinsics)]
 #![feature(integer_atomics)]
 
@@ -502,6 +501,7 @@ use std::sync::atomic::{
 
 use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::collections::BinaryHeap;
 use std::hash::Hash;
 extern crate test;
@@ -1106,6 +1106,18 @@ impl Schema {
                     Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
                     Field {name:"1".to_string(), value: Box::new(T2::schema(version))},
                     Field {name:"2".to_string(), value: Box::new(T3::schema(version))}
+                ]
+            })
+    }
+    pub fn new_tuple4<T1:WithSchema,T2:WithSchema,T3:WithSchema,T4:WithSchema>(version:u32) -> Schema {
+        Schema::Struct(
+            SchemaStruct {
+                dbg_name: "4-Tuple".to_string(),
+                fields:vec![
+                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
+                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))},
+                    Field {name:"2".to_string(), value: Box::new(T3::schema(version))},
+                    Field {name:"3".to_string(), value: Box::new(T4::schema(version))}
                 ]
             })
     }
@@ -1817,6 +1829,46 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
         }
     }
 }
+
+impl<T: WithSchema> WithSchema for VecDeque<T> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)))
+    }
+}
+
+impl<T: Serialize> Serialize for VecDeque<T> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        regular_serialize_vecdeque::<T>(self, serializer)
+    }
+}
+
+impl<T: Deserialize> Deserialize for VecDeque<T> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(regular_deserialize_vecdeque::<T>(deserializer)?)
+    }    
+}
+
+
+
+fn regular_serialize_vecdeque<T: Serialize>(item: &VecDeque<T>, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    let l = item.len();
+    serializer.write_usize(l)?;
+    for item in item.iter() {
+        item.serialize(serializer)?
+    }
+    Ok(())
+}
+
+
+fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer) -> Result<VecDeque<T>,SavefileError> {
+    let l = deserializer.read_usize()?;
+    let mut ret = VecDeque::with_capacity(l);
+    for _ in 0..l {
+        ret.push_back(T::deserialize(deserializer)?);
+    }
+    Ok(ret)
+}
+
     
 unsafe impl ReprC for bool {fn repr_c_optimization_safe(_version:u32) -> bool {false}} //Hard to know if bool will always be represented by single byte. Seems to depend on a lot of stuff.
 unsafe impl ReprC for u8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
@@ -1911,6 +1963,34 @@ impl<T1:Deserialize> Deserialize for [T1;3] {
             [T1::deserialize(deserializer)?,
              T1::deserialize(deserializer)?,
              T1::deserialize(deserializer)?,]
+        )
+    }
+}
+
+
+impl<T1:WithSchema> WithSchema for [T1;4] {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple4::<T1,T1,T1,T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for [T1;4] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self[0].serialize(serializer)?;
+        self[1].serialize(serializer)?;
+        self[2].serialize(serializer)?;
+        self[3].serialize(serializer)?;
+        Ok(())
+
+    }
+}
+impl<T1:Deserialize> Deserialize for [T1;4] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            [T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?,
+             T1::deserialize(deserializer)?,
+             ]
         )
     }
 }
