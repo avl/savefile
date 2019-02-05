@@ -1006,6 +1006,7 @@ pub enum SchemaPrimitive {
     schema_f32,
     schema_f64,
     schema_bool,
+    schema_canary1,
 }
 impl SchemaPrimitive {
     fn name(&self) -> &'static str {
@@ -1022,6 +1023,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_f32 => "f32",
             SchemaPrimitive::schema_f64 => "f64",
             SchemaPrimitive::schema_bool => "bool",
+            SchemaPrimitive::schema_canary1 => "u32",
         }
     }
 }
@@ -1038,6 +1040,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_f32 => Some(4),
             SchemaPrimitive::schema_f64 => Some(8),
             SchemaPrimitive::schema_bool => Some(1),
+            SchemaPrimitive::schema_canary1 => Some(4),
         }
     }
 }
@@ -1074,7 +1077,7 @@ pub enum Schema {
     /// Basically a dummy value, the Schema nodes themselves report this schema if queried.
     Undefined,
     /// A zero-sized type. I.e, there is no data to serialize or deserialize.
-    ZeroSize,
+    ZeroSize,    
 }
 
 impl Schema {
@@ -1249,6 +1252,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("primitive","option"),
                 Schema::Undefined => ("primitive","undefined"),
                 Schema::ZeroSize => ("primitive","zerosize"),
+
             }
         }
         Schema::SchemaOption(ref xa) => {
@@ -1408,6 +1412,7 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_f32 => 10,
             SchemaPrimitive::schema_f64 => 11,
             SchemaPrimitive::schema_bool => 12,
+            SchemaPrimitive::schema_canary1 => 13,
         };
         serializer.write_u8(discr)
     }
@@ -1427,6 +1432,7 @@ impl Deserialize for SchemaPrimitive {
             10 => SchemaPrimitive::schema_f32,
             11 => SchemaPrimitive::schema_f64,
             12 => SchemaPrimitive::schema_bool,
+            13 => SchemaPrimitive::schema_canary1,
             c => panic!("Corrupt schema, primitive type #{} encountered",c),
         };
         Ok(var)
@@ -1829,6 +1835,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
         }
     }
 }
+
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
     fn schema(version:u32) -> Schema {
@@ -2500,3 +2507,34 @@ impl Deserialize for AtomicIsize {
         Ok(AtomicIsize::new(deserializer.read_isize()?))
     }
 }
+
+#[derive(Clone,Copy,Eq,PartialEq,Default,Debug)]
+pub struct Canary1 {
+}
+impl Canary1 {
+    pub fn new() -> Canary1 {
+        Canary1 {}
+    }
+}
+impl Deserialize for Canary1 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let magic = deserializer.read_u32()?;
+        if magic != 0x47566843 {
+            panic!("Encountered bad magic value when deserializing Canary1");
+        }
+        Ok(Canary1{})
+    }
+}
+
+impl Serialize for Canary1 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_u32(0x47566843)
+    }
+}
+
+impl WithSchema for Canary1 {
+    fn schema(_version:u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_canary1)
+    }    
+}
+

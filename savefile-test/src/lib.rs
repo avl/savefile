@@ -557,3 +557,18 @@ pub fn test_atomic() {
     }
 }
 
+
+#[derive(Savefile,Debug,PartialEq)]
+struct CanaryTest {  
+    canary1: Canary1,
+    some_field: i32  
+}
+
+#[test]
+pub fn test_canary1() {
+    assert_roundtrip(CanaryTest{
+        canary1: Canary1::default(),
+        some_field : 43
+    });
+}
+
