@@ -2520,7 +2520,8 @@ impl Deserialize for Canary1 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let magic = deserializer.read_u32()?;
         if magic != 0x47566843 {
-            panic!("Encountered bad magic value when deserializing Canary1");
+            panic!("Encountered bad magic value when deserializing Canary1. Expected {} but got {}",
+                0x47566843,magic);            
         }
         Ok(Canary1{})
     }
