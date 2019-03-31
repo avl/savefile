@@ -7,6 +7,7 @@ extern crate savefile;
 extern crate savefile_derive;
 
 extern crate bit_vec;
+extern crate smallvec;
 
 use std::fmt::Debug;
 use std::io::Write;
@@ -332,6 +333,40 @@ pub fn test_array_string() {
     let arraystr:ArrayString<[u8;30]>=ArrayString::from("Hello everyone").unwrap();
     assert_roundtrip(arraystr);
 }
+
+#[test]
+pub fn test_smallvec0() {
+    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    v.push(1);
+    assert_roundtrip(v);
+}
+
+#[test]
+pub fn test_smallvec1() {
+    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    v.push(1);
+    assert_roundtrip(v);
+}
+
+#[test]
+pub fn test_smallvec2() {
+    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    v.push(1);
+    v.push(2);
+    assert_roundtrip(v);
+}
+
+#[test]
+pub fn test_smallvec3() {
+    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    assert_roundtrip(v);
+}
+
+
+
 
 #[test]
 pub fn test_short_arrays() {

@@ -486,6 +486,7 @@ pub mod prelude;
 extern crate byteorder;
 extern crate alloc;
 extern crate arrayvec;
+extern crate smallvec;
 use std::io::Write;
 use std::io::Read;
 use std::fs::File;
@@ -742,6 +743,10 @@ impl<'a> Deserializer<'a> {
         let mut v = Vec::with_capacity(len);
         v.resize(len, 0); //TODO: Optimize this
         self.reader.read_exact(&mut v)?;
+        Ok(v)        
+    }
+    pub fn read_bytes_to_buf(&mut self, len:usize, buf:&mut [u8]) -> Result<(),SavefileError> {
+        self.reader.read_exact(buf)?;
         Ok(v)        
     }
 
@@ -1742,6 +1747,36 @@ impl<T: Deserialize+Ord> Deserialize for BinaryHeap<T> {
 }
     
 
+impl<T:smallvec::Array> WithSchema for smallvec::SmallVec<T> 
+    where T::Item : WithSchema {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(T::Item::schema(version)))
+    }
+}
+
+impl<T:smallvec::Array> Serialize for smallvec::SmallVec<T> 
+    where T::Item : Serialize {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+        let l = self.len();
+        serializer.write_usize(l)?;
+        for item in self.iter() {
+            item.serialize(serializer)?
+        }
+        Ok(())
+    }
+}
+impl<T:smallvec::Array> Deserialize for smallvec::SmallVec<T> 
+    where T::Item : Deserialize {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let l = deserializer.read_usize()?;
+        let mut ret = Self::with_capacity(l);
+        for _ in 0..l {
+            ret.push(T::Item::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+
 
 
 fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(),SavefileError> {
@@ -2066,6 +2101,7 @@ impl<T1:Deserialize> Deserialize for (T1,) {
         )
     }
 }
+
 
 
 impl<T:arrayvec::Array<Item = u8> > WithSchema for arrayvec::ArrayString<T> {
