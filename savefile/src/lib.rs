@@ -747,7 +747,7 @@ impl<'a> Deserializer<'a> {
     }
     pub fn read_bytes_to_buf(&mut self, len:usize, buf:&mut [u8]) -> Result<(),SavefileError> {
         self.reader.read_exact(buf)?;
-        Ok(v)        
+        Ok(())        
     }
 
     /// Deserialize an object of type T from the given reader.
