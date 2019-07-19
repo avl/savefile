@@ -378,7 +378,7 @@ as low as possible.
 Savefile has an unsafe trait [savefile::ReprC] that you can implement for a type T. This instructs
 Savefile to optimize serialization of Vec<T> into being a very fast, raw memory copy.
 
-This is dangerous. You, as implementor of the `ReprR` trait take full responsibility
+This is dangerous. You, as implementor of the `ReprC` trait take full responsibility
 that all the following rules are upheld:
 
  * The type T is Copy
@@ -505,6 +505,9 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::collections::BinaryHeap;
 use std::hash::Hash;
+extern crate indexmap;
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 extern crate test;
 extern crate bit_vec;
 //use self::bit_vec::BitVec;
@@ -599,7 +602,7 @@ impl<T> From<arrayvec::CapacityError<T> > for SavefileError {
 
 
 
-#[allow(unit_arg)]
+
 impl<'a> Serializer<'a> {
     pub fn write_bool(&mut self, v: bool)  -> Result<(),SavefileError> {
         Ok(self.writer.write_u8( if v {1} else {0})?)
@@ -745,7 +748,7 @@ impl<'a> Deserializer<'a> {
         self.reader.read_exact(&mut v)?;
         Ok(v)        
     }
-    pub fn read_bytes_to_buf(&mut self, len:usize, buf:&mut [u8]) -> Result<(),SavefileError> {
+    pub fn read_bytes_to_buf(&mut self, _len:usize, buf:&mut [u8]) -> Result<(),SavefileError> {
         self.reader.read_exact(buf)?;
         Ok(())        
     }
@@ -1597,12 +1600,100 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     }
 }
 
+
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
+    for IndexMap<K, V, S> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(
+            Schema::Struct(SchemaStruct{
+                dbg_name: "KeyValuePair".to_string(),
+                fields: vec![
+                    Field {
+                        name: "key".to_string(),
+                        value: Box::new(K::schema(version)),
+                    },
+                    Field {
+                        name: "value".to_string(),
+                        value: Box::new(V::schema(version)),
+                    },
+                ]
+            })))
+    }        
+}
+
+
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
+    for IndexMap<K, V, S>
+{
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_usize(self.len())?;
+        for (k, v) in self.iter() {
+            k.serialize(serializer)?;
+            v.serialize(serializer)?;
+        }
+        Ok(())
+    }
+}
+
+
+impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let l = deserializer.read_usize()?;
+        let mut ret = IndexMap::with_capacity(l);
+        for _ in 0..l {
+            ret.insert(K::deserialize(deserializer)?, V::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+
+impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema
+    for IndexSet<K, S> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(
+            Schema::Struct(SchemaStruct{
+                dbg_name: "Key".to_string(),
+                fields: vec![
+                    Field {
+                        name: "key".to_string(),
+                        value: Box::new(K::schema(version)),
+                    },
+                ]
+            })))
+    }        
+}
+
+
+impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize
+    for IndexSet<K, S>
+{
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_usize(self.len())?;
+        for k in self.iter() {
+            k.serialize(serializer)?;
+        }
+        Ok(())
+    }
+}
+
+
+impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let l = deserializer.read_usize()?;
+        let mut ret = IndexSet::with_capacity(l);
+        for _ in 0..l {
+            ret.insert(K::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+
+
 #[derive(Debug, PartialEq)]
 pub struct Removed<T> {
     phantom: std::marker::PhantomData<T>,
 }
 
-#[allow(new_without_default_derive)] //You should never need to instantiate Removed yourself anyway.
 impl<T> Removed<T> {
     pub fn new() -> Removed<T> {
         Removed {
