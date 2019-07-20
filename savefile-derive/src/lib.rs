@@ -1,5 +1,3 @@
-#![feature(conservative_impl_trait)]
-
 #![recursion_limit="128"]
 
 //#![feature(proc_macro)]
