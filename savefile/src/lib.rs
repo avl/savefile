@@ -487,6 +487,9 @@ extern crate byteorder;
 extern crate alloc;
 extern crate arrayvec;
 extern crate smallvec;
+extern crate parking_lot;
+use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::io::Write;
 use std::io::Read;
 use std::fs::File;
@@ -1550,6 +1553,46 @@ impl Serialize for String {
 impl Deserialize for String {
     fn deserialize(deserializer: &mut Deserializer) -> Result<String,SavefileError> {
         deserializer.read_string()
+    }
+}
+
+
+impl<T:WithSchema> WithSchema for Mutex<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }    
+}
+
+impl<T:Serialize> Serialize for Mutex<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        let data = self.lock();
+        data.serialize(serializer)
+    }
+}
+
+impl<T:Deserialize> Deserialize for Mutex<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>,SavefileError> {
+        Ok(Mutex::new(T::deserialize(deserializer)?))
+    }
+}
+
+
+impl<T:WithSchema> WithSchema for RwLock<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }    
+}
+
+impl<T:Serialize> Serialize for RwLock<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        let data = self.read();
+        data.serialize(serializer)
+    }
+}
+
+impl<T:Deserialize> Deserialize for RwLock<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<RwLock<T>,SavefileError> {
+        Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
 

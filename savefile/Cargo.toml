@@ -26,6 +26,7 @@ bit-vec="0.5"
 arrayvec="0.4"
 smallvec="0.6"
 indexmap ="*"
+parking_lot= { version = "0.5" }
 
 [dev-dependencies]
 savefile-derive = { path = "../savefile-derive", version="0.2.11" }
