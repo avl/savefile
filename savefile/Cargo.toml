@@ -2,6 +2,8 @@
 name = "savefile"
 version = "0.2.12"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
+documentation = "https://docs.rs/savefile/"
+homepage = "https://github.com/avl/savefile/"
 
 exclude = [
     "*.bin"
