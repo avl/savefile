@@ -2162,7 +2162,7 @@ impl<T: Serialize, const N:usize> Serialize for [T; N] {
     }
 }
 impl<T: Deserialize, const N:usize> Deserialize for [T;N] {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let mut data: [MaybeUninit<T>; N] = unsafe {
             MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
         };
