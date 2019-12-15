@@ -1,8 +1,8 @@
 #![recursion_limit="128"]
 
 //#![feature(proc_macro)]
-extern crate proc_macro;
 
+extern crate proc_macro;
 
 extern crate proc_macro2;
 #[macro_use]

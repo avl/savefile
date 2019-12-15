@@ -379,6 +379,71 @@ pub fn test_short_arrays() {
 
 
 #[test]
+pub fn test_short_array_with_drop_contents() {
+    let empty:[String;0]=[];
+    assert_roundtrip(empty);
+    assert_roundtrip(["Hej".to_string(),"Hello".to_string()]);
+}
+
+#[test]
+pub fn test_short_array_with_drop_contents_leak_test() {
+    let mut i =0;
+    loop {
+        let test = [format!("Test {}",i),format!("Other {}",i)];
+        assert_roundtrip(test);
+        i+=1;
+        if i>23 {
+            break;
+        }
+    }
+}
+#[test]
+pub fn test_string_leak_test() {
+    let mut i =0;
+    loop {
+        let test = format!("Test {}",i);
+        assert_roundtrip(test);
+        i+=1;
+        if i>23 {
+            break;
+        }
+    }
+}
+
+
+#[test]
+pub fn test_long_array() {
+    let arr=[47;32];
+    assert_roundtrip(arr);
+}
+
+
+#[test]
+pub fn test_very_long_array() {
+    #[derive(Savefile)]
+    struct LongArray([u32;1000]);
+    impl Debug for LongArray {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "Long array")
+        }
+    }
+    impl PartialEq for LongArray {
+        fn eq(&self, other: &Self) -> bool {
+            for idx in 0..1000 {
+                if self.0[idx] != other.0[idx] {
+                    return false;
+                }
+            }
+            true
+        }
+    }
+
+    let mut arr=LongArray([47;1000]);
+    arr.0[0]=0;
+    assert_roundtrip(arr);
+}
+
+#[test]
 pub fn test_small_struct_upgrade() {
     assert_roundtrip_to_new_version(
         SmallStruct { x1: 123, x2: 321 },
@@ -574,6 +639,8 @@ pub fn test_terrain() {
 
 
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
+use std::string::ToString;
+
 #[test]
 pub fn test_atomic() {
     let mut atom = AtomicU8::new(43);

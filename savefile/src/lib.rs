@@ -5,6 +5,8 @@
 #![feature(specialization)]
 #![feature(core_intrinsics)]
 #![feature(integer_atomics)]
+#![feature(const_generics)]
+
 
 /*!
 This is the documentation for `savefile`
@@ -504,6 +506,7 @@ use std::sync::atomic::{
 };
 
 use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::mem::MaybeUninit;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::collections::BinaryHeap;
@@ -927,7 +930,22 @@ pub struct Field {
     pub value : Box<Schema>
 }
 
-/// A struct is by serializing its fields one by one,
+/// An array is serialized by serializing its items one by one,
+/// without any padding.
+/// The dbg_name is just for diagnostics.
+#[derive(Debug,PartialEq)]
+pub struct SchemaArray {
+    pub item_type : Box<Schema>,
+    pub count: usize,
+}
+
+impl SchemaArray {
+    fn serialized_size(&self) -> Option<usize> {
+        self.item_type.serialized_size().map(|x|x* self.count)
+    }
+}
+
+/// A struct is serialized by serializing its fields one by one,
 /// without any padding. 
 /// The dbg_name is just for diagnostics.
 #[derive(Debug,PartialEq)]
@@ -1083,6 +1101,8 @@ pub enum Schema {
     Primitive(SchemaPrimitive),
     /// A Vector of arbitrary nodes, all of the given type
     Vector(Box<Schema>),
+    /// An array of N arbitrary nodes, all of the given type
+    Array(SchemaArray),
     /// An Option variable instance of the given type.
     SchemaOption(Box<Schema>),
     /// Basically a dummy value, the Schema nodes themselves report this schema if queried.
@@ -1149,6 +1169,9 @@ impl Schema {
             Schema::Vector(ref _vector) => {
                 None
             }
+            Schema::Array(ref array) => {
+                array.serialized_size()
+            }
             Schema::SchemaOption(ref _content) => {
                 None
             }
@@ -1165,6 +1188,16 @@ impl Schema {
 fn diff_vector(a:&Schema,b:&Schema,path:String) -> Option<String> {
     diff_schema(a,b,
         path + "/*")
+}
+
+fn diff_array(a:&SchemaArray,b:&SchemaArray,path:String) -> Option<String> {
+    if a.count!=b.count {
+        return Some(format!("At location [{}]: In memory array has length {}, but disk format length {}.",
+            path,a.count,b.count));
+    }
+
+    diff_schema(&a.item_type,&b.item_type,
+         format!("{}/[{}]",path,a.count))
 }
 
 fn diff_option(a:&Schema,b:&Schema,path:String) -> Option<String> {
@@ -1237,6 +1270,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("struct","option"),
                 Schema::Undefined => ("struct","undefined"),
                 Schema::ZeroSize => ("struct","zerosize"),
+                Schema::Array(_) => ("struct","array"),
             }
         }
         Schema::Enum(ref xa) => {
@@ -1250,6 +1284,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("enum","option"),
                 Schema::Undefined => ("enum","undefined"),
                 Schema::ZeroSize => ("enum","zerosize"),
+                Schema::Array(_) => ("enum","array"),
             }
         }
         Schema::Primitive(ref xa) => {
@@ -1263,6 +1298,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("primitive","option"),
                 Schema::Undefined => ("primitive","undefined"),
                 Schema::ZeroSize => ("primitive","zerosize"),
+                Schema::Array(_) => ("primitive","array"),
 
             }
         }
@@ -1277,7 +1313,8 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::Vector(_) => ("option","vector"),
                 Schema::Undefined => ("option","undefined"),
                 Schema::ZeroSize => ("option","zerosize"),
-            }            
+                Schema::Array(_) => ("option","array"),
+            }
         }
         Schema::Vector(ref xa) => {
             match *b {
@@ -1290,6 +1327,7 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("vector","option"),
                 Schema::Undefined => ("vector","undefined"),
                 Schema::ZeroSize => ("vector","zerosize"),
+                Schema::Array(_) => ("vector","array"),
             }
         }
         Schema::Undefined => {
@@ -1306,6 +1344,19 @@ fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
                 Schema::SchemaOption(_) => ("zerosize","option"),
                 Schema::Primitive(_) => ("zerosize","primitive"),
                 Schema::Undefined => ("zerosize","undefined"),
+                Schema::Array(_) => ("zerosize","array"),
+            }
+        }
+        Schema::Array(ref xa) => {
+            match *b {
+                Schema::Vector(_) => ("array","vector"),
+                Schema::Struct(_) => ("array","struct"),
+                Schema::Enum(_) => ("array","enum"),
+                Schema::Primitive(_) => ("array","primitive"),
+                Schema::SchemaOption(_) => ("array","option"),
+                Schema::Undefined => ("array","undefined"),
+                Schema::ZeroSize => ("array","zerosize"),
+                Schema::Array(ref xb) => return diff_array(xa,xb,path),
             }
         }
     };
@@ -1350,6 +1401,9 @@ impl Serialize for Variant {
         Ok(())
     }    
 }
+
+
+
 impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         Ok(Variant {
@@ -1368,6 +1422,30 @@ impl Deserialize for Variant {
                 ret
             }
         })
+    }
+}
+impl Serialize for SchemaArray {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        serializer.write_usize(self.count)?;
+        self.item_type.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl Deserialize for SchemaArray {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let count = deserializer.read_usize()?;
+        let item_type = Box::new(Schema::deserialize(deserializer)?);
+        Ok(
+            SchemaArray {
+                count,
+                item_type,
+            }
+        )
+    }
+}
+impl WithSchema for SchemaArray {
+    fn schema(_version:u32) -> Schema {
+        Schema::Undefined
     }
 }
 
@@ -1515,6 +1593,10 @@ impl Serialize for Schema {
                 serializer.write_u8(7)?;
                 content.serialize(serializer)
             },
+            Schema::Array(ref array) => {
+                serializer.write_u8(8)?;
+                array.serialize(serializer)
+            },
         }
     }    
 }
@@ -1530,6 +1612,7 @@ impl Deserialize for Schema {
             5 => Schema::Undefined,
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
+            8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
             c => panic!("Corrupt schema, schema variant had value {}", c),
         };
 
@@ -2059,9 +2142,96 @@ unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 
 
+impl<T: WithSchema, const N:usize> WithSchema for [T; N] {
+    fn schema(version:u32) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(T::schema(version)),
+            count: N
+        })
+    }
+}
 
 
 
+impl<T: Serialize, const N:usize> Serialize for [T; N] {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        for item in self.iter() {
+            item.serialize(serializer)?
+        }
+        Ok(())
+    }
+}
+impl<T: Deserialize, const N:usize> Deserialize for [T;N] {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        let mut data: [MaybeUninit<T>; N] = unsafe {
+            MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+        };
+        for idx in 0..N {
+            data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
+        }
+        let ptr = &mut data as *mut _ as *mut [T; N];
+        let res = unsafe { ptr.read() };
+        core::mem::forget(data);
+        Ok( res )
+    }
+}
+
+impl<T: Serialize + ReprC, const N:usize> Serialize for [T; N] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        unsafe {
+            if !T::repr_c_optimization_safe(serializer.version) {
+                for item in self.iter() {
+                    item.serialize(serializer)?
+                }
+                Ok(())
+            } else {
+                serializer.write_buf(std::slice::from_raw_parts(
+                    self.as_ptr() as *const u8,
+                    std::mem::size_of::<T>() * N,
+                ))
+            }
+        }
+    }
+}
+
+impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        if !T::repr_c_optimization_safe(deserializer.file_version) {
+            let mut data: [MaybeUninit<T>; N] = unsafe {
+                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+            };
+            for idx in 0..N {
+                data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
+            }
+            let ptr = &mut data as *mut _ as *mut [T; N];
+            let res = unsafe { ptr.read() };
+            core::mem::forget(data);
+            Ok( res )
+        } else {
+            let mut data: [MaybeUninit<T>; N] = unsafe {
+                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+            };
+
+            {
+                let ptr = data.as_ptr();
+                let num_bytes = std::mem::size_of::<T>() * N;
+                let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
+                deserializer.reader.read_exact(slice)?;
+            }
+            let ptr = &mut data as *mut _ as *mut [T; N];
+            let res = unsafe { ptr.read() };
+            core::mem::forget(data);
+            Ok( res )
+        }
+    }
+}
+
+
+
+
+
+
+/*
 impl<T1> WithSchema for [T1;0] {
     fn schema(_version:u32) -> Schema {
         Schema::ZeroSize
@@ -2082,7 +2252,7 @@ impl<T1> Deserialize for [T1;0] {
 
 impl<T1:WithSchema> WithSchema for [T1;1] {
     fn schema(version:u32) -> Schema {
-        Schema::new_tuple1::<T1>(version)
+        Vector::new_tuple1::<T1>(version)
     }
 }
 impl<T1:Serialize> Serialize for [T1;1] {
@@ -2170,7 +2340,7 @@ impl<T1:Deserialize> Deserialize for [T1;4] {
         )
     }
 }
-
+*/
 
 
 impl<T1:WithSchema,T2:WithSchema,T3:WithSchema> WithSchema for (T1,T2,T3) {
