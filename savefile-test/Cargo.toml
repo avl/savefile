@@ -7,6 +7,6 @@ authors = ["Anders Musikka <anders@andersmusikka.se>"]
 savefile = { path = "../savefile" }
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.5"
-arrayvec="*"
+arrayvec="0.4"
 smallvec="1.0"
 
