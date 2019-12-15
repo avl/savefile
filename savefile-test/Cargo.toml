@@ -8,5 +8,5 @@ savefile = { path = "../savefile" }
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.5"
 arrayvec="*"
-smallvec="*"
+smallvec="1.0"
 
