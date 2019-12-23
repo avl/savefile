@@ -8,6 +8,7 @@ extern crate savefile_derive;
 
 extern crate bit_vec;
 extern crate smallvec;
+extern crate byteorder;
 
 use std::fmt::Debug;
 use std::io::Write;
@@ -674,3 +675,153 @@ pub fn test_canary1() {
     });
 }
 
+
+
+#[test]
+pub fn test_crypto1() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let zerokey = [0u8;32];
+    let mut temp = Vec::new();
+    {
+        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        writer.write_u32::<LittleEndian>(0x01020304).unwrap();
+        writer.flush();
+    }
+    let zerokey = [0u8;32];
+    println!("Temp: {:?}",temp);
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+    println!("Bufr: {:?}",bufr);
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+    println!("About to read");
+
+    let end = reader.read_u32::<LittleEndian>().unwrap();
+
+    assert_eq!(end,0x01020304);
+}
+
+
+#[test]
+pub fn test_crypto_big1() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let zerokey = [0u8;32];
+    let mut temp = Vec::new();
+
+    let mut writer = CryptoWriter::new(&mut temp,zerokey);
+    for i in 0..10000 {
+        writer.write_u64::<LittleEndian>(i).unwrap();
+    }
+    writer.flush_final();
+
+    let zerokey = [0u8;32];
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+    println!("Bufr: {:?}",bufr);
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+    println!("About to read");
+
+    for i in 0..10000 {
+        assert_eq!(reader.read_u64::<LittleEndian>().unwrap(),i);
+    }
+}
+
+
+
+#[test]
+pub fn test_crypto_big2() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let zerokey = [0u8;32];
+    let mut kb = [0u8;1024];
+    let mut temp = Vec::new();
+    {
+        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        let kbl = kb.len();
+        for i in 0..kbl {
+            kb[i] = (i/4) as u8;
+        }
+        for i in 0..1000 {
+            writer.write(&kb).unwrap();
+        }
+        writer.flush();
+
+    }
+    let zerokey = [0u8;32];
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+    println!("About to read");
+
+    use std::io::Read;
+    let mut testkb= [0;1024];
+    for i in 0..1000 {
+        reader.read_exact(&mut testkb);
+        for j in 0..kb.len() {
+
+            assert_eq!(kb[j],testkb[j]);
+        }
+    }
+}
+
+
+#[test]
+pub fn test_crypto_big3() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let zerokey = [0u8;32];
+    let mut kb = [0u8;1024*128-17];
+    let mut temp = Vec::new();
+    {
+        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        let kbl = kb.len();
+        for i in 0..kbl {
+            kb[i] = (i/4) as u8;
+        }
+        for i in 0..10 {
+            writer.write(&kb).unwrap();
+        }
+        writer.flush();
+
+    }
+    let zerokey = [0u8;32];
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+    println!("About to read");
+
+    use std::io::Read;
+    let mut testkb= [0;1024*128-17];
+    for i in 0..10 {
+        reader.read_exact(&mut testkb);
+        for j in 0..kb.len() {
+
+            assert_eq!(kb[j],testkb[j]);
+        }
+    }
+}
+
+#[test]
+pub fn test_encrypted_file1() {
+    save_encrypted_file("test.bin",1,&47usize,"mypassword");
+    let result : usize = load_encrypted_file("test.bin",1,"mypassword").unwrap();
+    assert_eq!(result,47usize);
+}
+
+#[test]
+pub fn test_encrypted_file_bad_password() {
+    save_encrypted_file("test.bin",1,&47usize,"mypassword");
+    let result = load_encrypted_file::<usize>("test.bin",1,"mypassword2");
+    assert!(result.is_err());
+}

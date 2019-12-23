@@ -492,7 +492,7 @@ extern crate smallvec;
 extern crate parking_lot;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
-use std::io::Write;
+use std::io::{Write, Error, ErrorKind};
 use std::io::Read;
 use std::fs::File;
 use std::sync::atomic::{
@@ -505,7 +505,7 @@ use std::sync::atomic::{
     AtomicUsize,AtomicIsize,
 };
 
-use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{LittleEndian};
 use std::mem::MaybeUninit;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -536,8 +536,10 @@ pub enum SavefileError {
     OutOfMemory{err:std::alloc::AllocErr},
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
     MemoryAllocationLayoutError,
-    #[fail(display = "Arrayvec: {}",msg)]    
+    #[fail(display = "Arrayvec: {}",msg)]
     ArrayvecCapacityError{msg:String},
+    #[fail(display = "ShortRead")]
+    ShortRead,
 }
 
 
@@ -607,6 +609,194 @@ impl<T> From<arrayvec::CapacityError<T> > for SavefileError {
 }
 
 
+
+
+use ring::{aead};
+use ring::aead::{Nonce, UnboundKey, LessSafeKey, AES_256_GCM, SealingKey, OpeningKey, NonceSequence, BoundKey};
+use ring::error::Unspecified;
+extern crate rand;
+
+use rand::rngs::{OsRng};
+use rand::RngCore;
+use std::hash::Hasher;
+use byteorder::WriteBytesExt;
+use byteorder::ReadBytesExt;
+
+extern crate ring;
+
+#[derive(Debug)]
+struct RandomNonceSequence {
+    data1:u64,
+    data2:u32,
+}
+impl RandomNonceSequence {
+    pub fn new() -> RandomNonceSequence {
+
+        RandomNonceSequence {
+            data1: OsRng.next_u64(),
+            data2: OsRng.next_u32(),
+        }
+    }
+    pub fn serialize(&self, writer:&mut Write) -> Result<(),SavefileError>{
+        writer.write_u64::<LittleEndian>(self.data1)?;
+        writer.write_u32::<LittleEndian>(self.data2)?;
+        Ok(())
+    }
+    pub fn deserialize(reader: &mut Read) -> Result<RandomNonceSequence,SavefileError> {
+        Ok(RandomNonceSequence {
+            data1: reader.read_u64::<LittleEndian>()?,
+            data2: reader.read_u32::<LittleEndian>()?,
+        })
+    }
+}
+
+impl NonceSequence for RandomNonceSequence {
+    fn advance(&mut self) -> Result<Nonce, Unspecified> {
+        self.data2 = self.data2.wrapping_add(1);
+        if self.data2 == 0 {
+            self.data1 = self.data1.wrapping_add(1);
+        }
+        use std::mem::transmute;
+        let mut bytes = [0u8;12];
+        let bytes1:[u8;8] = unsafe { transmute(self.data1.to_le()) };
+        let bytes2:[u8;4] = unsafe { transmute(self.data2.to_le()) };
+        for i in 0..8 {
+            bytes[i]=bytes1[i];
+        }
+        for i in 0..4 {
+            bytes[i+8]=bytes2[i];
+        }
+
+        Ok(Nonce::assume_unique_for_key(bytes))
+    }
+}
+
+
+pub struct CryptoWriter<'a> {
+    writer : &'a mut Write,
+    buf: Vec<u8>,
+    sealkey : SealingKey<RandomNonceSequence>
+}
+pub struct CryptoReader<'a> {
+    reader : &'a mut Read,
+    buf: Vec<u8>,
+    offset:usize,
+    openingkey : OpeningKey<RandomNonceSequence>
+}
+
+impl<'a> CryptoReader<'a> {
+    pub fn new(reader:&'a mut Read, key_bytes: [u8;32]) -> Result<CryptoReader<'a>,SavefileError> {
+
+        let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
+
+        let mut nonce_sequence = RandomNonceSequence::deserialize(reader)?;
+        let mut openingkey = OpeningKey::new(unboundkey, nonce_sequence);
+
+        Ok(CryptoReader {
+            reader,
+            offset:0,
+            buf:Vec::new(),
+            openingkey
+        })
+    }
+
+}
+
+const CRYPTO_BUFSIZE : usize = 100_000;
+
+impl<'a> Drop for CryptoWriter<'a> {
+    fn drop(&mut self) {
+        self.flush();
+    }
+}
+impl<'a> CryptoWriter<'a> {
+    pub fn new(writer:&'a mut Write, key_bytes: [u8;32]) -> CryptoWriter<'a> {
+        let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
+        let mut nonce_sequence = RandomNonceSequence::new();
+        nonce_sequence.serialize(writer);
+        let mut sealkey = SealingKey::new(unboundkey, nonce_sequence);
+        CryptoWriter {
+            writer,
+            buf: Vec::new(),
+            sealkey
+        }
+    }
+    pub fn flush_final(mut self) -> Result<(),SavefileError> {
+        self.flush()?;
+        Ok(())
+    }
+}
+struct ExtendableSubVec<'a>(&'a mut Vec<u8>,usize);
+
+/*impl<'a> AsRef<u8> for ExtendableSubVec<'a> {
+    fn as_ref(&self) -> &u8 {
+        unimplemented!()
+    }
+}
+*/
+impl<'a> Read for CryptoReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+
+        loop {
+            println!("readsize: {}, bufsize: {}",buf.len(),self.buf.len()-self.offset);
+            if buf.len() <= self.buf.len() - self.offset {
+                buf.clone_from_slice(&self.buf[self.offset .. self.offset+buf.len()]);
+                self.offset += buf.len();
+                return Ok((buf.len()))
+            }
+
+            {
+                let newlen = self.buf.len() - self.offset;
+                let buflen = self.buf.len();
+                self.buf.copy_within(self.offset..buflen,0);
+                self.buf.resize(newlen,0);
+                self.offset = 0;
+
+            }
+
+            let curlen = self.reader.read_u64::<LittleEndian>()? as usize;
+
+            self.buf.resize(self.offset + curlen,0);
+
+            self.reader.read_exact(&mut self.buf[self.offset..self.offset+curlen])?;
+
+            match self.openingkey.open_in_place(aead::Aad::empty(),
+                &mut self.buf[self.offset..]) {
+                Ok(_) => {},
+                Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error")); }
+            }
+            self.buf.resize(self.buf.len(),0);
+
+        }
+    }
+}
+impl<'a> Write for CryptoWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.buf.extend(buf);
+        if self.buf.len() > CRYPTO_BUFSIZE {
+            self.flush()?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        if self.buf.len() > 0 {
+            let expected_final_len =self.buf.len() as u64 + 16;
+            self.writer.write_u64::<LittleEndian>(expected_final_len)?; //16 for the tag
+            match self.sealkey.seal_in_place_append_tag(
+                aead::Aad::empty(),
+                &mut self.buf,
+            ) {
+                Ok(_) => {},
+                Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error"));}
+            }
+            debug_assert!(self.buf.len() == expected_final_len as usize, "The size of the TAG generated by the AES 256 GCM in ring seems to have changed! This is very unexpected. File a bug on the savefile-crate");
+            self.writer.write(&self.buf[0..self.buf.len()])?;
+            self.buf.clear();
+        }
+        Ok(())
+    }
+}
 
 
 impl<'a> Serializer<'a> {
@@ -874,9 +1064,39 @@ pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, d
     Serializer::save_noschema::<T>(&mut f,version,data)
 }
 
+/// Like [savefile::save_file], except encrypts the data with AES256, using the SHA256 hash
+/// of the password as key.
+pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T, password: &str) -> Result<(),SavefileError> {
+    use ring::{digest, test};
+    let actual = digest::digest(&digest::SHA256, password.as_bytes());
+    let mut  key = [0u8;32];
+    let password_hash = actual.as_ref();
+    assert_eq!(password_hash.len(), key.len(),"A SHA256 sum must be 32 bytes");
+    key.clone_from_slice(password_hash);
+
+    let mut f = File::create(filepath)?;
+    let mut writer = CryptoWriter::new(&mut f,key);
+
+    Serializer::save::<T>(&mut writer,version,data)?;
+    writer.flush();
+    Ok(())
+}
 
 
+/// Like [savefile::load_file], except it expects the file to be an encrypted file previously stored using
+/// [savefile::save_encrypted_file].
+pub fn load_encrypted_file<T:WithSchema+Deserialize>(filepath:&str, version: u32, password: &str) -> Result<T,SavefileError> {
+    use ring::{digest, test};
+    let actual = digest::digest(&digest::SHA256, password.as_bytes());
+    let mut  key = [0u8;32];
+    let password_hash = actual.as_ref();
+    assert_eq!(password_hash.len(), key.len(),"A SHA256 sum must be 32 bytes");
+    key.clone_from_slice(password_hash);
 
+    let mut f = File::open(filepath)?;
+    let mut reader = CryptoReader::new(&mut f, key).unwrap();
+    Deserializer::load::<T>(&mut reader, version)
+}
 
 
 /// This trait must be implemented by all data structures you wish to be able to save.
@@ -2481,6 +2701,7 @@ impl<T:Deserialize> Deserialize for Arc<T> {
 
 use std::cell::RefCell;
 use std::cell::Cell;
+use std::fmt::Debug;
 
 impl<T:WithSchema> WithSchema for RefCell<T> {
     fn schema(version:u32) -> Schema {
