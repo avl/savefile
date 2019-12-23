@@ -691,12 +691,9 @@ pub fn test_crypto1() {
         writer.flush();
     }
     let zerokey = [0u8;32];
-    println!("Temp: {:?}",temp);
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
-    println!("Bufr: {:?}",bufr);
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
-    println!("About to read");
 
     let end = reader.read_u32::<LittleEndian>().unwrap();
 
@@ -722,9 +719,7 @@ pub fn test_crypto_big1() {
     let zerokey = [0u8;32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
-    println!("Bufr: {:?}",bufr);
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
-    println!("About to read");
 
     for i in 0..10000 {
         assert_eq!(reader.read_u64::<LittleEndian>().unwrap(),i);
@@ -759,7 +754,6 @@ pub fn test_crypto_big2() {
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
-    println!("About to read");
 
     use std::io::Read;
     let mut testkb= [0;1024];
@@ -799,7 +793,6 @@ pub fn test_crypto_big3() {
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
-    println!("About to read");
 
     use std::io::Read;
     let mut testkb= [0;1024*128-17];

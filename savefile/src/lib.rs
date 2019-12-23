@@ -738,7 +738,6 @@ impl<'a> Read for CryptoReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
 
         loop {
-            println!("readsize: {}, bufsize: {}",buf.len(),self.buf.len()-self.offset);
             if buf.len() <= self.buf.len() - self.offset {
                 buf.clone_from_slice(&self.buf[self.offset .. self.offset+buf.len()]);
                 self.offset += buf.len();
