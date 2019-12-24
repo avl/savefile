@@ -86,10 +86,10 @@ const GLOBAL_VERSION:u32 = 1;
 #[derive(Savefile)]
 struct Player {
     name : String,
-    #[versions="0..0"] //Only version 0 had this field
+    #[savefile_versions="0..0"] //Only version 0 had this field
     strength : Removed<u32>,
     inventory : Vec<String>,
-    #[versions="1.."] //Only versions 1 and later have this field
+    #[savefile_versions="1.."] //Only versions 1 and later have this field
     skills : Vec<String>,
 }
 
@@ -163,14 +163,14 @@ The Serialize trait implementation only needs to support the latest version.
 The derive macro used by Savefile supports multiple versions of structs. To make this work,
 you have to add attributes whenever fields are removed, added or have their types changed.
 
-When adding or removing fields, use the #[versions] attribute.
+When adding or removing fields, use the #[savefile_versions] attribute.
 
 The syntax is one of the following:
 
 ```text
-#[versions = "N.."]  //A field added in version N
-#[versions = "..N"]  //A field removed in version N+1. That is, it existed up to and including version N.
-#[versions = "N..M"] //A field that was added in version N and removed in M+1. That is, a field which existed in versions N .. up to and including M.
+#[savefile_versions = "N.."]  //A field added in version N
+#[savefile_versions = "..N"]  //A field removed in version N+1. That is, it existed up to and including version N.
+#[savefile_versions = "N..M"] //A field that was added in version N and removed in M+1. That is, a field which existed in versions N .. up to and including M.
 ```
 
 Removed fields must keep their deserialization type. This is easiest accomplished by substituting their previous type
@@ -181,16 +181,16 @@ Savefile tries to validate that the `Removed<T>` type is used correctly. This va
 matching, so it may trigger false positives for other types named Removed. Please avoid using a type with
 such a name. If this becomes a problem, please file an issue on github.
 
-Using the #[versions] tag is critically important. If this is messed up, data corruption is likely.
+Using the #[savefile_versions] tag is critically important. If this is messed up, data corruption is likely.
 
 When a field is added, its type must implement the Default trait (unless the default_val or default_fn attributes
 are used).
 
-There also exists a default_val, a default_fn and a versions_as attribute. More about these below:
+There also exists a savefile_default_val, a default_fn and a savefile_versions_as attribute. More about these below:
 
 ## The versions attribute
 
-Rules for using the #[versions] attribute:
+Rules for using the #[savefile_versions] attribute:
 
  * You must keep track of what the current version of your data is. Let's call this version N.
  * You may only save data using version N (supply this number when calling `save`)
@@ -198,14 +198,14 @@ Rules for using the #[versions] attribute:
    still adapt the deserialization operation to the version of the serialized data.
  * The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version. 
  * Whenever changes to the data are to be made, the global version number N must be increased.
- * You may add a new field to your structs, iff you also give it a #[versions = "N.."] attribute. N must be the new version of your data.
- * You may remove a field from your structs. If previously it had no #[versions] attribute, you must
-   add a #[versions = "..N-1"] attribute. If it already had an attribute #[versions = "M.."], you must close
-   its version interval using the current version of your data: #[versions = "M..N-1"]. Whenever a field is removed,
+ * You may add a new field to your structs, iff you also give it a #[savefile_versions = "N.."] attribute. N must be the new version of your data.
+ * You may remove a field from your structs. If previously it had no #[savefile_versions] attribute, you must
+   add a #[savefile_versions = "..N-1"] attribute. If it already had an attribute #[savefile_versions = "M.."], you must close
+   its version interval using the current version of your data: #[savefile_versions = "M..N-1"]. Whenever a field is removed,
    its type must simply be changed to Removed<T> where T is its previous type. You may never completely remove 
    items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
-   For example, if you remove a field in version 3, you should add a #[versions="..2"] attribute.
- * You may not change the type of a field in your structs, except when using the versions_as-macro.
+   For example, if you remove a field in version 3, you should add a #[savefile_versions="..2"] attribute.
+ * You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
 
 
  
@@ -223,8 +223,8 @@ Example:
 #[derive(Savefile)]
 struct SomeType {
     old_field: u32,
-    #[default_val="42"]
-    #[versions="1.."]
+    #[savefile_default_val="42"]
+    #[savefile_versions="1.."]
     new_field: u32
 }
 
@@ -252,8 +252,8 @@ fn make_hello_pair() -> (String,String) {
 #[derive(Savefile)]
 struct SomeType {
     old_field: u32,
-    #[default_fn="make_hello_pair"]
-    #[versions="1.."]
+    #[savefile_default_fn="make_hello_pair"]
+    #[savefile_versions="1.."]
     new_field: (String,String)
 }
 # fn main() {}
@@ -288,9 +288,9 @@ struct IgnoreExample {
 
 
 
-## The versions_as attribute
+## The savefile_versions_as attribute
 
-The versions_as attribute can be used to support changing the type of a field.
+The savefile_versions_as attribute can be used to support changing the type of a field.
 
 Let's say the first version of our protocol uses the following struct:
 
@@ -358,8 +358,8 @@ We realize that we need to increase the range of the max_speed_kmh variable, and
 
 #[derive(Savefile)]
 struct Racecar {
-    #[versions_as="0..0:u8"]
-    #[versions="1.."]
+    #[savefile_versions_as="0..0:u8"]
+    #[savefile_versions="1.."]
     max_speed_kmh : u16,
 }
 # fn main() {}
@@ -453,12 +453,12 @@ const GLOBAL_VERSION:u32 = 2;
 #[derive(Savefile)]
 struct Player {
     name : String,
-    #[versions="0..0"] //Only version 0 had this field
+    #[savefile_versions="0..0"] //Only version 0 had this field
     strength : Removed<u32>,
     inventory : Vec<String>,
-    #[versions="1.."] //Only versions 1 and later have this field
+    #[savefile_versions="1.."] //Only versions 1 and later have this field
     skills : Vec<String>,
-    #[versions="2.."] //Only versions 2 and later have this field
+    #[savefile_versions="2.."] //Only versions 2 and later have this field
     history : Vec<Position>
 }
 

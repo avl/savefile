@@ -9,10 +9,10 @@ struct Version1 {
 #[derive(Debug, PartialEq, Savefile)]
 struct Version2 {
 	a: String,		
-    #[versions = "0..0"]
+    #[savefile_versions = "0..0"]
 	b: Removed<Vec<String>>,
-    #[default_val = "123"]
-    #[versions = "1.."]
+    #[savefile_default_val = "123"]
+    #[savefile_versions = "1.."]
 	newb: u32,
 	c: usize
 }
@@ -20,12 +20,12 @@ struct Version2 {
 #[derive(Debug, PartialEq, Savefile)]
 struct Version3 {
 	a: String,		
-    #[versions = "0..0"]
+    #[savefile_versions = "0..0"]
 	b: Removed<Vec<String>>,
-    #[versions = "1..1"]
+    #[savefile_versions = "1..1"]
 	newb: u32,
 	c: usize,
-    #[versions = "2.."]
+    #[savefile_versions = "2.."]
 	d: usize
 }
 
@@ -75,7 +75,7 @@ enum EnumVer1 {
 enum EnumVer2 {
     Variant1,
     Variant2,
-    #[versions = "1.."]
+    #[savefile_versions = "1.."]
     Variant3,
 }
 
@@ -108,7 +108,7 @@ enum EnumVerA2 {
     Variant1,
     Variant2 {
     	x:u32,
-    	#[versions = "0..0"]    	
+    	#[savefile_versions = "0..0"]
     	y:Removed<u32>
     },
 }
@@ -137,7 +137,7 @@ enum EnumVerB2 {
     Variant1,
     Variant2(
     	u32,
-    	#[versions = "0..0"]    	
+    	#[savefile_versions = "0..0"]
     	Removed<u32>
     ),
 }
@@ -208,7 +208,7 @@ impl Default for DefTraitEnum {
 
 #[derive(Debug, PartialEq, Savefile)]
 struct DefTraitTest {
-    #[versions = "1.."]    		
+    #[savefile_versions = "1.."]
     removed_enum:DefTraitEnum
 }
 
@@ -239,8 +239,8 @@ fn test_custom_default_fn() {
 	#[derive(Debug, PartialEq, Savefile)]
 	struct VersionB2 {
 		a: String,		
-	    #[default_fn = "b_default"]
-	    #[versions = "1.."]
+	    #[savefile_default_fn = "b_default"]
+	    #[savefile_versions = "1.."]
 		b: String
 	}
 	
@@ -275,8 +275,8 @@ impl From<String> for AnewType {
 
 #[derive(Debug, PartialEq, Savefile)]
 struct StructWithAnotherType {
-    #[versions_as="0..0:String"]
-    #[versions="1.."]
+    #[savefile_versions_as="0..0:String"]
+    #[savefile_versions="1.."]
     a_str : AnewType
 }
 
@@ -298,8 +298,8 @@ fn convert2newtype(s:String) -> AnewType {
 }
 #[derive(Debug, PartialEq, Savefile)]
 struct StructWithAnotherType2 {
-    #[versions_as="0..0:convert2newtype:String"]
-    #[versions="1.."]
+    #[savefile_versions_as="0..0:convert2newtype:String"]
+    #[savefile_versions="1.."]
     a_str : AnewType
 }
 

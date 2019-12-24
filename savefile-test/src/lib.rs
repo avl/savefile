@@ -297,11 +297,11 @@ pub fn test_small_struct() {
 struct SmallStruct2 {
     x1: u32,
     x2: i32,
-    #[default_val = "100"]
-    #[versions = "1.."]
+    #[savefile_default_val = "100"]
+    #[savefile_versions = "1.."]
     x3: String,
-    #[default_val = "123"]
-    #[versions = "1.."]
+    #[savefile_default_val = "123"]
+    #[savefile_versions = "1.."]
     x4: u64,
 }
 
@@ -467,12 +467,12 @@ struct SmallStructRem1 {
 }
 #[derive(Debug, PartialEq, Savefile )]
 struct SmallStructRem2 {
-    #[versions = "..0"]
+    #[savefile_versions = "..0"]
     x1: Removed<u32>,
     x2: i32,
     x3: String,
-    #[default_val = "123"]
-    #[versions = "1.."]
+    #[savefile_default_val = "123"]
+    #[savefile_versions = "1.."]
     x4: isize,
 }
 
@@ -514,13 +514,12 @@ pub fn test_tuple() {
         t3:(42u32,43u32,44u32),
     });;   
 }
-/*
-This test is disabled for now because ignore collides
+
 #[derive(Debug, PartialEq, Savefile )]
 struct StructWithIgnored {
     a:u32,
     b:u32,
-    #[ignore]
+    #[savefile_ignore]
     c:u32,
 }
 
@@ -528,7 +527,7 @@ struct StructWithIgnored {
 pub fn test_ignored() {
     assert_roundtrip(StructWithIgnored{a:42,b:7,c:0});
 }
-*/
+
 
 #[test]
 pub fn test_box() {
@@ -579,7 +578,7 @@ pub fn test_struct_no_fields() {
 
 #[derive(Savefile,Debug,PartialEq)]
 struct OnlyRemoved {    
-    #[versions="0..0"]
+    #[savefile_versions="0..0"]
     rem : Removed<u32>,
 }
 

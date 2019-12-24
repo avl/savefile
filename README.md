@@ -1,24 +1,5 @@
 [![Build Status](https://travis-ci.org/avl/savefile.svg?branch=master)](https://travis-ci.org/avl/savefile)
 
-# WARNING
-
-THIS IS STILL VERY EXPERIMENTAL! THERE WILL BE BUGS.
-
-Also, version 0.3.0 breaks binary compatibility with 0.2.*. This is because
-arrays of generic length are now supported (using Rust nightly's const_generics-feature).
-Previously short arrays were supported, and were (hackishly) serialized as tuples.
-Now arrays are truly supported, although very large arrays may cause the stack to be
-exhausted since the deserialization framework treats arrays as values. This means
-that any arrays serialized using 0.2.* cannot be deserialized using 0.3.*. 
-
-Contact me if this is a showstopper. My general feeling, though, is that there
-are no users of this software except the author.
-
-This software is very young and possibly NOT ready for use yet :-) .
-You have been warned. If you're looking for a high quality 
-serialization library for rust, you should probably look at serde instead: 
-https://github.com/serde-rs/serde
-
 # Sample 
 
 ```rust
@@ -59,6 +40,31 @@ fn main() {
 }
 
 ```
+
+## 0.4.0 Breaking Change
+
+I just realized that 'ignore' was a very bad name for a custom attribute, since this
+is now a built-in attribute into the Rust language. 
+
+I have prefixed all savefile-attributes with the string "savefile_" .
+
+This breaks existing code, in a rather silent way. The fix is simply to update
+all usages of savefile-attributes to include prefix 'savefile_' . The samples in the
+docs are correct.
+
+
+## 0.3.0 Breaking Change
+
+Also, version 0.3.0 breaks binary compatibility with 0.2.*. This is because
+arrays of generic length are now supported (using Rust nightly's const_generics-feature).
+Previously short arrays were supported, and were (hackishly) serialized as tuples.
+Now arrays are truly supported, although very large arrays may cause the stack to be
+exhausted since the deserialization framework treats arrays as values. This means
+that any arrays serialized using 0.2.* cannot be deserialized using 0.3.*. 
+
+Contact me if this is a showstopper. My general feeling, though, is that there
+are no users of this software except the author.
+
 
 # Docs
 
