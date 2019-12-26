@@ -1,4 +1,4 @@
-#![feature(alloc)]
+#![allow(incomplete_features)]
 #![feature(allocator_api)]
 #![recursion_limit = "256"]
 #![feature(test)]
@@ -540,6 +540,8 @@ pub enum SavefileError {
     ArrayvecCapacityError{msg:String},
     #[fail(display = "ShortRead")]
     ShortRead,
+    #[fail(display = "CryptographyError")]
+    CryptographyError,
 }
 
 
@@ -548,7 +550,7 @@ pub enum SavefileError {
 /// This is basically just a wrapped `std::io::Write` object
 /// and a file protocol version number.
 pub struct Serializer<'a> {
-    writer: &'a mut Write,
+    writer: &'a mut dyn Write,
     pub version: u32,
 }
 
@@ -557,7 +559,7 @@ pub struct Serializer<'a> {
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
 pub struct Deserializer<'a> {
-    reader: &'a mut Read,
+    reader: &'a mut dyn Read,
     pub file_version: u32,
     pub memory_version: u32,
 }
@@ -612,13 +614,12 @@ impl<T> From<arrayvec::CapacityError<T> > for SavefileError {
 
 
 use ring::{aead};
-use ring::aead::{Nonce, UnboundKey, LessSafeKey, AES_256_GCM, SealingKey, OpeningKey, NonceSequence, BoundKey};
+use ring::aead::{Nonce, UnboundKey, AES_256_GCM, SealingKey, OpeningKey, NonceSequence, BoundKey};
 use ring::error::Unspecified;
 extern crate rand;
 
 use rand::rngs::{OsRng};
 use rand::RngCore;
-use std::hash::Hasher;
 use byteorder::WriteBytesExt;
 use byteorder::ReadBytesExt;
 
@@ -637,12 +638,12 @@ impl RandomNonceSequence {
             data2: OsRng.next_u32(),
         }
     }
-    pub fn serialize(&self, writer:&mut Write) -> Result<(),SavefileError>{
+    pub fn serialize(&self, writer:&mut dyn Write) -> Result<(),SavefileError>{
         writer.write_u64::<LittleEndian>(self.data1)?;
         writer.write_u32::<LittleEndian>(self.data2)?;
         Ok(())
     }
-    pub fn deserialize(reader: &mut Read) -> Result<RandomNonceSequence,SavefileError> {
+    pub fn deserialize(reader: &mut dyn Read) -> Result<RandomNonceSequence,SavefileError> {
         Ok(RandomNonceSequence {
             data1: reader.read_u64::<LittleEndian>()?,
             data2: reader.read_u32::<LittleEndian>()?,
@@ -673,24 +674,25 @@ impl NonceSequence for RandomNonceSequence {
 
 
 pub struct CryptoWriter<'a> {
-    writer : &'a mut Write,
+    writer : &'a mut dyn Write,
     buf: Vec<u8>,
-    sealkey : SealingKey<RandomNonceSequence>
+    sealkey : SealingKey<RandomNonceSequence>,
+    failed: bool
 }
 pub struct CryptoReader<'a> {
-    reader : &'a mut Read,
+    reader : &'a mut dyn Read,
     buf: Vec<u8>,
     offset:usize,
     openingkey : OpeningKey<RandomNonceSequence>
 }
 
 impl<'a> CryptoReader<'a> {
-    pub fn new(reader:&'a mut Read, key_bytes: [u8;32]) -> Result<CryptoReader<'a>,SavefileError> {
+    pub fn new(reader:&'a mut dyn Read, key_bytes: [u8;32]) -> Result<CryptoReader<'a>,SavefileError> {
 
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
 
-        let mut nonce_sequence = RandomNonceSequence::deserialize(reader)?;
-        let mut openingkey = OpeningKey::new(unboundkey, nonce_sequence);
+        let nonce_sequence = RandomNonceSequence::deserialize(reader)?;
+        let openingkey = OpeningKey::new(unboundkey, nonce_sequence);
 
         Ok(CryptoReader {
             reader,
@@ -706,34 +708,30 @@ const CRYPTO_BUFSIZE : usize = 100_000;
 
 impl<'a> Drop for CryptoWriter<'a> {
     fn drop(&mut self) {
-        self.flush();
+        self.flush().expect("The implicit flush in the Drop of CryptoWriter failed. This causes this panic. If you want to be able to handle this, make sure to call flush() manually. If a manual flush has failed, Drop won't panic.");
     }
 }
 impl<'a> CryptoWriter<'a> {
-    pub fn new(writer:&'a mut Write, key_bytes: [u8;32]) -> CryptoWriter<'a> {
+    pub fn new(writer:&'a mut dyn Write, key_bytes: [u8;32]) -> Result<CryptoWriter<'a>,SavefileError> {
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
-        let mut nonce_sequence = RandomNonceSequence::new();
-        nonce_sequence.serialize(writer);
-        let mut sealkey = SealingKey::new(unboundkey, nonce_sequence);
-        CryptoWriter {
+        let nonce_sequence = RandomNonceSequence::new();
+        nonce_sequence.serialize(writer)?;
+        let sealkey = SealingKey::new(unboundkey, nonce_sequence);
+        Ok(CryptoWriter {
             writer,
             buf: Vec::new(),
-            sealkey
-        }
+            sealkey,
+            failed: false
+        })
     }
     pub fn flush_final(mut self) -> Result<(),SavefileError> {
+        if self.failed {
+            panic!("Call to failed CryptoWriter");
+        }
         self.flush()?;
         Ok(())
     }
 }
-struct ExtendableSubVec<'a>(&'a mut Vec<u8>,usize);
-
-/*impl<'a> AsRef<u8> for ExtendableSubVec<'a> {
-    fn as_ref(&self) -> &u8 {
-        unimplemented!()
-    }
-}
-*/
 impl<'a> Read for CryptoReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
 
@@ -741,36 +739,42 @@ impl<'a> Read for CryptoReader<'a> {
             if buf.len() <= self.buf.len() - self.offset {
                 buf.clone_from_slice(&self.buf[self.offset .. self.offset+buf.len()]);
                 self.offset += buf.len();
-                return Ok((buf.len()))
+                return Ok(buf.len())
             }
 
             {
+                let oldlen = self.buf.len();
                 let newlen = self.buf.len() - self.offset;
-                let buflen = self.buf.len();
-                self.buf.copy_within(self.offset..buflen,0);
+                self.buf.copy_within(self.offset..oldlen,0);
                 self.buf.resize(newlen,0);
                 self.offset = 0;
 
             }
 
             let curlen = self.reader.read_u64::<LittleEndian>()? as usize;
+            if curlen > CRYPTO_BUFSIZE + 16 {
+                return Err(Error::new(ErrorKind::Other,"Cryptography error"));
+            }
+            let orglen = self.buf.len();
+            self.buf.resize(orglen + curlen,0);
 
-            self.buf.resize(self.offset + curlen,0);
-
-            self.reader.read_exact(&mut self.buf[self.offset..self.offset+curlen])?;
+            self.reader.read_exact(&mut self.buf[orglen..orglen+curlen])?;
 
             match self.openingkey.open_in_place(aead::Aad::empty(),
-                &mut self.buf[self.offset..]) {
+                &mut self.buf[orglen..]) {
                 Ok(_) => {},
                 Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error")); }
             }
-            self.buf.resize(self.buf.len(),0);
+            self.buf.resize(self.buf.len()-16,0);
 
         }
     }
 }
 impl<'a> Write for CryptoWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        if self.failed {
+            panic!("Call to failed CryptoWriter");
+        }
         self.buf.extend(buf);
         if self.buf.len() > CRYPTO_BUFSIZE {
             self.flush()?;
@@ -778,21 +782,45 @@ impl<'a> Write for CryptoWriter<'a> {
         Ok(buf.len())
     }
 
+    /// Writes any non-written buffered bytes to the underlying stream.
+    /// If this fails, there is no recovery. The buffered data will have been
+    /// lost. The
     fn flush(&mut self) -> Result<(), Error> {
-        if self.buf.len() > 0 {
-            let expected_final_len =self.buf.len() as u64 + 16;
+        self.failed = true;
+        let mut offset=0;
+
+        let mut tempbuf= Vec::new();
+        if self.buf.len() > CRYPTO_BUFSIZE {
+            tempbuf = Vec::<u8>::with_capacity(CRYPTO_BUFSIZE+16);
+        }
+
+        while self.buf.len() > offset {
+
+            let curbuf;
+            if offset==0 && self.buf.len() <= CRYPTO_BUFSIZE {
+                curbuf=&mut self.buf;
+            } else {
+                let chunksize = (self.buf.len() - offset).min(CRYPTO_BUFSIZE);
+                tempbuf.resize(chunksize,0u8);
+                tempbuf.clone_from_slice(&self.buf[offset..offset+chunksize]);
+                curbuf = &mut tempbuf;
+            }
+            let expected_final_len = curbuf.len() as u64 + 16;
+            debug_assert!(expected_final_len <= CRYPTO_BUFSIZE as u64 + 16);
             self.writer.write_u64::<LittleEndian>(expected_final_len)?; //16 for the tag
             match self.sealkey.seal_in_place_append_tag(
                 aead::Aad::empty(),
-                &mut self.buf,
+                curbuf,
             ) {
                 Ok(_) => {},
                 Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error"));}
             }
-            debug_assert!(self.buf.len() == expected_final_len as usize, "The size of the TAG generated by the AES 256 GCM in ring seems to have changed! This is very unexpected. File a bug on the savefile-crate");
-            self.writer.write(&self.buf[0..self.buf.len()])?;
-            self.buf.clear();
+            debug_assert!(curbuf.len() == expected_final_len as usize, "The size of the TAG generated by the AES 256 GCM in ring seems to have changed! This is very unexpected. File a bug on the savefile-crate");
+            self.writer.write(&curbuf[..])?;
+            offset += curbuf.len()-16;
         }
+        self.buf.clear();
+        self.failed = false;
         Ok(())
     }
 }
@@ -857,15 +885,15 @@ impl<'a> Serializer<'a> {
 
     /// Creata a new serializer.
     /// Don't use this function directly, use the [savefile::save] function instead.
-    pub fn save<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+    pub fn save<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,true)?)
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [savefile::save_noschema] function instead.
-    pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+    pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,false)?)
     }
-    fn save_impl<T:WithSchema + Serialize>(writer: &mut Write, version: u32, data: &T, with_schema: bool) -> Result<(),SavefileError> {
+    fn save_impl<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T, with_schema: bool) -> Result<(),SavefileError> {
         writer.write_u32::<LittleEndian>(version).unwrap();
 
         if with_schema
@@ -882,7 +910,7 @@ impl<'a> Serializer<'a> {
     /// Create a Serializer.
     /// Don't use this method directly, use the [savefile::save] function
     /// instead.
-    pub fn new_raw(writer: &mut Write) -> Serializer {
+    pub fn new_raw(writer: &mut dyn Write) -> Serializer {
         Serializer { writer, version:0 }
     }
 }
@@ -951,16 +979,16 @@ impl<'a> Deserializer<'a> {
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [savefile::load] function
     /// instead.
-    pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+    pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,true)
     }
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [savefile::load_noschema] function
     /// instead.
-    pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+    pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,false)
     }
-    fn load_impl<T:WithSchema+Deserialize>(reader: &mut Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
+    fn load_impl<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
         let file_ver = reader.read_u32::<LittleEndian>()?;
         if file_ver > version {
             panic!(
@@ -992,7 +1020,7 @@ impl<'a> Deserializer<'a> {
     /// Create a Deserializer.
     /// Don't use this method directly, use the [savefile::load] function
     /// instead.
-    pub fn new_raw(reader: &mut Read) -> Deserializer {
+    pub fn new_raw(reader: &mut dyn Read) -> Deserializer {
         Deserializer {
             reader,
             file_version: 0,
@@ -1006,19 +1034,19 @@ impl<'a> Deserializer<'a> {
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
-pub fn load<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
     Deserializer::load::<T>(reader,version)
 }
 
 /// Write the given `data` to the `writer`. 
 /// The current version of data must be `version`.
-pub fn save<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+pub fn save<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save::<T>(writer,version,data)
 }
 
 /// Like [savefile::load] , but used to open files saved without schema,
 /// by one of the _noschema versions of the save functions.
-pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) -> Result<T,SavefileError> {
+pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
     Deserializer::load_noschema::<T>(reader,version)
 }
 
@@ -1031,7 +1059,7 @@ pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut Read, version: u32) 
 /// but means that any mistake in implementation of the 
 /// Serialize or Deserialize traits will cause hard-to-troubleshoot
 /// data corruption instead of a nice error message.
-pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut Write, version: u32, data: &T) -> Result<(),SavefileError> {
+pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save_noschema::<T>(writer,version,data)
 }
 
@@ -1066,7 +1094,7 @@ pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, d
 /// Like [savefile::save_file], except encrypts the data with AES256, using the SHA256 hash
 /// of the password as key.
 pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T, password: &str) -> Result<(),SavefileError> {
-    use ring::{digest, test};
+    use ring::{digest};
     let actual = digest::digest(&digest::SHA256, password.as_bytes());
     let mut  key = [0u8;32];
     let password_hash = actual.as_ref();
@@ -1074,10 +1102,10 @@ pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, 
     key.clone_from_slice(password_hash);
 
     let mut f = File::create(filepath)?;
-    let mut writer = CryptoWriter::new(&mut f,key);
+    let mut writer = CryptoWriter::new(&mut f,key)?;
 
     Serializer::save::<T>(&mut writer,version,data)?;
-    writer.flush();
+    writer.flush()?;
     Ok(())
 }
 
@@ -1085,7 +1113,7 @@ pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, 
 /// Like [savefile::load_file], except it expects the file to be an encrypted file previously stored using
 /// [savefile::save_encrypted_file].
 pub fn load_encrypted_file<T:WithSchema+Deserialize>(filepath:&str, version: u32, password: &str) -> Result<T,SavefileError> {
-    use ring::{digest, test};
+    use ring::{digest};
     let actual = digest::digest(&digest::SHA256, password.as_bytes());
     let mut  key = [0u8;32];
     let password_hash = actual.as_ref();

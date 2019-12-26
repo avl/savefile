@@ -1,5 +1,5 @@
 #![feature(integer_atomics)]
-
+#![allow(unused_imports)]
 #![feature(test)]
 extern crate test;
 extern crate savefile;
@@ -9,6 +9,7 @@ extern crate savefile_derive;
 extern crate bit_vec;
 extern crate smallvec;
 extern crate byteorder;
+extern crate rand;
 
 use std::fmt::Debug;
 use std::io::Write;
@@ -205,7 +206,6 @@ pub struct BenchStruct {
     pad4:u32,
 }
 
-#[allow(unused_imports)]
 use test::{Bencher, black_box};
 
 
@@ -512,7 +512,7 @@ pub fn test_tuple() {
         t1:(42u32,),
         t2:(42u32,43u32),
         t3:(42u32,43u32,44u32),
-    });;   
+    });
 }
 
 #[derive(Debug, PartialEq, Savefile )]
@@ -641,12 +641,13 @@ pub fn test_terrain() {
 }
 
 
+#[cfg(test)]
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
 
 #[test]
 pub fn test_atomic() {
-    let mut atom = AtomicU8::new(43);
+    let atom = AtomicU8::new(43);
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
@@ -688,9 +689,9 @@ pub fn test_crypto1() {
     let zerokey = [0u8;32];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
         writer.write_u32::<LittleEndian>(0x01020304).unwrap();
-        writer.flush();
+        writer.flush().unwrap();
     }
     let zerokey = [0u8;32];
 
@@ -712,11 +713,11 @@ pub fn test_crypto_big1() {
     let zerokey = [0u8;32];
     let mut temp = Vec::new();
 
-    let mut writer = CryptoWriter::new(&mut temp,zerokey);
+    let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
     for i in 0..10000 {
         writer.write_u64::<LittleEndian>(i).unwrap();
     }
-    writer.flush_final();
+    writer.flush_final().unwrap();
 
     let zerokey = [0u8;32];
 
@@ -740,15 +741,15 @@ pub fn test_crypto_big2() {
     let mut kb = [0u8;1024];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
         let kbl = kb.len();
         for i in 0..kbl {
             kb[i] = (i/4) as u8;
         }
-        for i in 0..1000 {
+        for _ in 0..1000 {
             writer.write(&kb).unwrap();
         }
-        writer.flush();
+        writer.flush().unwrap();
 
     }
     let zerokey = [0u8;32];
@@ -759,8 +760,8 @@ pub fn test_crypto_big2() {
 
     use std::io::Read;
     let mut testkb= [0;1024];
-    for i in 0..1000 {
-        reader.read_exact(&mut testkb);
+    for _ in 0..1000 {
+        reader.read_exact(&mut testkb).unwrap();
         for j in 0..kb.len() {
 
             assert_eq!(kb[j],testkb[j]);
@@ -779,15 +780,15 @@ pub fn test_crypto_big3() {
     let mut kb = [0u8;1024*128-17];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey);
+        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
         let kbl = kb.len();
         for i in 0..kbl {
             kb[i] = (i/4) as u8;
         }
-        for i in 0..10 {
+        for _ in 0..10 {
             writer.write(&kb).unwrap();
         }
-        writer.flush();
+        writer.flush().unwrap();
 
     }
     let zerokey = [0u8;32];
@@ -798,8 +799,8 @@ pub fn test_crypto_big3() {
 
     use std::io::Read;
     let mut testkb= [0;1024*128-17];
-    for i in 0..10 {
-        reader.read_exact(&mut testkb);
+    for _ in 0..10 {
+        reader.read_exact(&mut testkb).unwrap();
         for j in 0..kb.len() {
 
             assert_eq!(kb[j],testkb[j]);
@@ -807,16 +808,142 @@ pub fn test_crypto_big3() {
     }
 }
 
+
+#[test]
+pub fn test_crypto_big4() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let zerokey = [0u8;32];
+    let mut kb = [0u8;10000];
+    let mut temp = Vec::new();
+    {
+        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let kbl = kb.len();
+        for i in 0..kbl {
+            kb[i] = (i/4) as u8;
+        }
+        for _ in 0..1000 {
+            writer.write(&kb).unwrap();
+        }
+        writer.flush().unwrap();
+
+    }
+    let zerokey = [0u8;32];
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+
+    use std::io::Read;
+    let mut testkb= [0;10000];
+    for _ in 0..1000 {
+        reader.read_exact(&mut testkb).unwrap();
+        for j in 0..kb.len() {
+
+            assert_eq!(kb[j],testkb[j]);
+        }
+    }
+}
+#[test]
+pub fn test_crypto_big5() {
+    use byteorder::{LittleEndian};
+    use byteorder::WriteBytesExt;
+    use byteorder::ReadBytesExt;
+
+    let mut kb = Box::new([0u8;1024*302]);
+    let mut testkb = Box::new([0;1024*302]);
+
+    for i in 0..kb.len() {
+        kb[i] = (i%257) as u8;
+    }
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let zerokey = [0u8;32];
+    let mut temp = Vec::new();
+    {
+        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let _kbl = kb.len();
+        let mut offset = 0;
+        loop {
+            let mut delta:usize;
+            if rng.gen_range(0,10) == 0 {
+                delta = rng.gen_range(0,300_000);
+            } else {
+                delta = rng.gen_range(0,80000);
+            }
+            if delta + offset > kb.len() {
+                delta = kb.len() - offset;
+            }
+            if delta == 0 {
+                break;
+            }
+            writer.write(&kb[offset..offset+delta]).unwrap();
+            offset += delta;
+        }
+
+        writer.flush().unwrap();
+
+    }
+    let zerokey = [0u8;32];
+
+    let mut bufr = std::io::BufReader::new(&temp[..]);
+
+    let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
+
+    use std::io::Read;
+    {
+
+        let mut offset = 0;
+        loop {
+            let mut delta:usize;
+            if rng.gen_range(0,10) == 0 {
+                delta = rng.gen_range(0,300_000);
+            } else {
+                delta = rng.gen_range(0,80000);
+            }
+            if delta + offset > kb.len() {
+                delta = kb.len() - offset;
+            }
+            if delta == 0 {
+                break;
+            }
+            reader.read_exact(&mut testkb[offset..offset+delta]).unwrap();
+            for i in offset..offset+delta {
+                assert_eq!(testkb[i],kb[i]);
+            }
+            offset += delta;
+        }
+    }
+}
+
 #[test]
 pub fn test_encrypted_file1() {
-    save_encrypted_file("test.bin",1,&47usize,"mypassword");
+    save_encrypted_file("test.bin",1,&47usize,"mypassword").unwrap();
     let result : usize = load_encrypted_file("test.bin",1,"mypassword").unwrap();
     assert_eq!(result,47usize);
 }
 
 #[test]
 pub fn test_encrypted_file_bad_password() {
-    save_encrypted_file("test.bin",1,&47usize,"mypassword");
-    let result = load_encrypted_file::<usize>("test.bin",1,"mypassword2");
+    save_encrypted_file("test2.bin",1,&47usize,"mypassword").unwrap();
+    let result = load_encrypted_file::<usize>("test2.bin",1,"mypassword2");
+    assert!(result.is_err());
+}
+
+#[test]
+pub fn test_decrypt_junk_file() {
+    {
+        use std::fs::File;
+        use byteorder::WriteBytesExt;
+        use rand::Rng;
+        let mut f = File::create("test3.bin").unwrap();
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            f.write_u8(rng.gen()).unwrap();
+        }
+    }
+    let result = load_encrypted_file::<usize>("test3.bin",1,"mypassword2");
     assert!(result.is_err());
 }

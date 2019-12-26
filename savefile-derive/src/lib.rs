@@ -914,7 +914,7 @@ pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 }
             }  
             
-            let mut field_infos = Vec::<FieldInfo>::new();
+            let field_infos = Vec::<FieldInfo>::new();
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
                     &syn::Fields::Named(ref _fields_named) => {                        
