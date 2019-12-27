@@ -279,7 +279,7 @@ of the value when serializing.
 struct IgnoreExample {
     a: f64,
     b: f64,
-    #[ignore]
+    #[savefile_ignore]
     cached_product: f64
 }
 # fn main() {}
