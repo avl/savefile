@@ -323,8 +323,8 @@ fn convert(phone_number:u64) -> String {
 #[derive(Savefile)]
 struct Employee {
     name : String,
-    #[versions_as="0..0:convert:u64"]
-    #[versions="1.."]
+    #[savefile_versions_as="0..0:convert:u64"]
+    #[savefile_versions="1.."]
     phone_number : String
 }
 # fn main() {}
