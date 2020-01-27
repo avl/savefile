@@ -974,33 +974,40 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
     for (idx,ref field) in field_infos.iter().enumerate() {
 
-        /*let field_name=if let Some(name) = field.ident.clone() {
-            (&name).to_string()
-        } else {
-            idx.to_string()
-        };*/
         let field_name = field.ident.clone();
         let removed=check_is_remove(&field.ty);
         let field_type = &field.ty;
         if !removed {
-            let fieldname ;
-
-            let quoted_fieldname;
             if need_self {
-                fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
-                quoted_fieldname = quote! { &self.#fieldname };
+
+                let fieldname;
+                let fieldname_raw;
+
+                if let Some(id) = field.ident.clone() {
+                    fieldname = quote!{&self.#id};
+                    fieldname_raw = quote!{#id};
+                } else {
+                    let idd = syn::Index::from(idx);
+                    fieldname = quote! {&self.#idd};
+                    fieldname_raw = quote!{#idd};
+                }
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname_raw).to_string(), #fieldname))}));
+                fields_names.push(fieldname_raw);
+
             } else {
+                let fieldname ;
+
+                let quoted_fieldname;
                 fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { #fieldname };
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
+                fields_names.push(quoted_fieldname);
             }
 
-            fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
-            fields_names.push(quoted_fieldname);
         }
 
 
     }
-    let mut idx = 0;
 
     (fields_names,fields)
 }
@@ -1081,12 +1088,14 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         };
                         let (fields_names,fields) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
+
                         variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names,)*) => { #(#fields;)* } )
                         );
                         value_variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => { stringify!(#name::#variant_name_spanned).to_string() } )
                         );
+
                     }
                     &syn::Fields::Unit => {
                         //No fields
@@ -1173,7 +1182,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
                         fn child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
-                            let _ = stringify!(#(#fields1;)*);
+                            #(#fields1;)*
                             return None;
                         }
                     }
