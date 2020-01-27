@@ -144,7 +144,7 @@ pub fn test_vec() {
 
 
 #[derive(Savefile,Debug,PartialEq)]
-struct GenericWrapper<T:Serialize+Deserialize+WithSchema+Debug+PartialEq> {
+struct GenericWrapper<T:Serialize+Deserialize+WithSchema+Debug+PartialEq+Introspect> {
     something : T
 }
 

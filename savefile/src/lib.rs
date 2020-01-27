@@ -1154,6 +1154,11 @@ pub trait Serialize : WithSchema {
 
 }
 
+pub trait Introspect {
+    fn value(&self) -> String;
+    fn child(&self,index:usize) -> Option<(String,&dyn Introspect)>;
+}
+
 /// This trait must be implemented for all data structures you wish to
 /// be able to deserialize.
 ///
@@ -1618,6 +1623,7 @@ impl WithSchema for Field {
         Schema::Undefined
     }    
 }
+
 impl Serialize for Field {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError>{
         serializer.write_string(&self.name)?;
@@ -1874,6 +1880,15 @@ impl WithSchema for String {
     }    
 }
 
+impl Introspect for String {
+    fn value(&self) -> String {
+        self.to_string()
+    }
+
+    fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {
+        None
+    }
+}
 impl Serialize for String {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         serializer.write_string(self)
@@ -2171,6 +2186,23 @@ impl Serialize for bit_vec::BitVec {
         Ok(())            
     }
 }
+impl Introspect for bit_vec::BitVec {
+    fn value(&self) -> String {
+        let mut ret = String::new();
+        for i in 0..self.len() {
+            if self[i] {
+                ret.push('1');
+            } else {
+                ret.push('0');
+            }
+        }
+        ret
+    }
+
+    fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {
+        unimplemented!()
+    }
+}
 impl Deserialize for bit_vec::BitVec {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let numbits = deserializer.read_usize()?;
@@ -2255,6 +2287,19 @@ fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) 
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version:u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
+    }
+}
+
+impl<T: Introspect> Introspect for Vec<T> {
+    fn value(&self) -> String {
+        return "vec[]".to_string();
+    }
+
+    fn child(&self, index: usize) -> Option<(String, &Introspect)> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some((index.to_string(), &self[index]));
     }
 }
 
@@ -2375,7 +2420,8 @@ fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer)
     Ok(ret)
 }
 
-    
+
+
 unsafe impl ReprC for bool {fn repr_c_optimization_safe(_version:u32) -> bool {false}} //Hard to know if bool will always be represented by single byte. Seems to depend on a lot of stuff.
 unsafe impl ReprC for u8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for i8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
@@ -2776,11 +2822,98 @@ impl Serialize for () {
         Ok(())
     }
 }
+impl Introspect for () {
+    fn value(&self) -> String {
+        "()".to_string()
+    }
+    fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {
+        None
+    }
+}
 impl Deserialize for () {
     fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         Ok(())
     }
 }
+
+impl<T:Introspect> Introspect for (T,) {
+    fn value(&self) -> String {
+        return "1-tuple".to_string();
+    }
+
+    fn child(&self, index: usize) -> Option<(String, &Introspect)> {
+        if index == 0 {
+            return Some(("0".to_string(), &self.0));
+        }
+        return None;
+    }
+}
+impl<T1:Introspect,T2:Introspect> Introspect for (T1,T2) {
+    fn value(&self) -> String {
+        return "2-tuple".to_string();
+    }
+
+    fn child(&self, index: usize) -> Option<(String, &Introspect)> {
+        if index == 0 {
+            return Some(("0".to_string(), &self.0));
+        }
+        if index == 1 {
+            return Some(("1".to_string(), &self.1));
+        }
+        return None;
+    }
+}
+impl<T1:Introspect,T2:Introspect,T3:Introspect> Introspect for (T1,T2,T3) {
+    fn value(&self) -> String {
+        return "3-tuple".to_string();
+    }
+
+    fn child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if index == 0 {
+            return Some(("0".to_string(), &self.0));
+        }
+        if index == 1 {
+            return Some(("1".to_string(), &self.1));
+        }
+        if index == 2 {
+            return Some(("2".to_string(), &self.2));
+        }
+        return None;
+    }
+}
+impl<T1:Introspect,T2:Introspect,T3:Introspect,T4:Introspect> Introspect for (T1,T2,T3,T4) {
+    fn value(&self) -> String {
+        return "4-tuple".to_string();
+    }
+
+    fn child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if index == 0 {
+            return Some(("0".to_string(), &self.0));
+        }
+        if index == 1 {
+            return Some(("1".to_string(), &self.1));
+        }
+        if index == 2 {
+            return Some(("2".to_string(), &self.2));
+        }
+        if index == 3 {
+            return Some(("3".to_string(), &self.3));
+        }
+        return None;
+    }
+}
+
+impl Introspect for AtomicBool {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicU8 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicI8 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicU16 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicI16 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicU32 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicI32 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicU64 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicI64 {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicUsize {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicIsize {fn value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
 
 
 
@@ -2834,6 +2967,25 @@ impl WithSchema for isize {fn schema(_version:u32) -> Schema {
 }}
 impl WithSchema for f32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f32)}}
 impl WithSchema for f64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f64)}}
+
+
+impl Introspect for u8 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for u16 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for u32 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for u64 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for u128 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for i8 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for i16 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for i32 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for i64 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for i128 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for f32 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for f64 {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for usize {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for isize {fn value(&self) -> String {self.to_string()}fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {None}}
+
+
+
 
 impl Serialize for u8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
@@ -3104,6 +3256,16 @@ impl Canary1 {
         Canary1 {}
     }
 }
+impl Introspect for Canary1 {
+    fn value(&self) -> String {
+        "Canary1".to_string()
+    }
+
+    fn child(&self, index: usize) -> Option<(String,&dyn Introspect)> {
+        None
+    }
+}
+
 impl Deserialize for Canary1 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let magic = deserializer.read_u32()?;

@@ -1,7 +1,6 @@
 use ::savefile::prelude::*;
 
 
-
 #[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
 struct Inner {
 	misaligner : u8, 

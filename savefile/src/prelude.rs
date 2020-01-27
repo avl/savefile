@@ -1,5 +1,5 @@
 pub use {Deserialize, Removed, ReprC, 
-    Serialize, WithSchema, Serializer, Deserializer,
+    Serialize, WithSchema, Serializer, Deserializer, Introspect,
     SavefileError, load, save, load_noschema, save_noschema,
 Schema, SchemaStruct, SchemaPrimitive, SchemaEnum,
     Variant, Field, CryptoWriter, CryptoReader,

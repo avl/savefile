@@ -10,7 +10,7 @@ extern crate quote;
 extern crate syn;
 use proc_macro2::TokenStream;
 use proc_macro2::Span;
-use syn::DeriveInput;
+use syn::{DeriveInput, Ident};
 use std::iter::IntoIterator;
 
 #[derive(Debug)]
@@ -599,7 +599,9 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let d=deserialize(input.clone());
 
-    let w=withschema(input);
+    let w=withschema(input.clone());
+
+    let i=introspect(input);
 
     let expanded=quote! {
         #s
@@ -607,6 +609,8 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #d
 
         #w
+
+        #i
     };
 
     expanded.into()
@@ -956,6 +960,243 @@ pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[allow(non_snake_case)]
+fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<TokenStream>,Vec<TokenStream>) {
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::call_site();
+
+    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
+    let fields1=quote_spanned! { defspan => fields1 };
+    let index1=quote_spanned! { defspan => index };
+
+    let mut fields = Vec::new();
+    let mut fields_names = Vec::new();
+
+    for (idx,ref field) in field_infos.iter().enumerate() {
+
+        let field_name = field.ident.clone();
+        let removed=check_is_remove(&field.ty);
+        let field_type = &field.ty;
+        if !removed {
+            if need_self {
+                let fieldname ;
+
+                let quoted_fieldname;
+                fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
+                quoted_fieldname = quote! { &self.#fieldname };
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
+                fields_names.push(quoted_fieldname);
+
+            } else {
+                let fieldname ;
+
+                let quoted_fieldname;
+                fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
+                quoted_fieldname = quote! { #fieldname };
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
+                fields_names.push(quoted_fieldname);
+            }
+
+        }
+
+
+    }
+
+    (fields_names,fields)
+}
+
+
+#[allow(non_snake_case)]
+fn introspect(input: DeriveInput) -> TokenStream {
+
+    let name = input.ident;
+
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let span = proc_macro2::Span::call_site();
+    let defspan = proc_macro2::Span::call_site();
+    let introspect = quote_spanned! {defspan=>
+        _savefile::prelude::Introspect
+    };
+    let uses = quote_spanned! { defspan =>
+            extern crate savefile as _savefile;
+        };
+
+    let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
+    let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
+    let Schema = quote_spanned! { defspan => _savefile::prelude::Schema };
+    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
+
+    let magic=format!("_IMPL_SAVEFILE_INTROSPECT_FOR_{}", &name).to_string();
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+
+    let expanded = match &input.data {
+        &syn::Data::Enum(ref enum1) => {
+
+            let mut variants = Vec::new();
+            let mut value_variants = Vec::new();
+            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
+                if var_idx > 255 {
+                    panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
+                }
+                let var_idx = var_idx as u8;
+                let var_ident = variant.ident.clone();
+                let variant_name = quote!{ #var_ident };
+                let variant_name_spanned = quote_spanned! { span => #variant_name};
+
+                let mut field_infos=Vec::new();
+
+                match &variant.fields {
+                    &syn::Fields::Named(ref fields_named) => {
+                        for f in fields_named.named.iter() {
+                            field_infos.push(FieldInfo {
+                                ident:Some(f.ident.clone().unwrap()),
+                                ty:&f.ty,
+                                attrs:&f.attrs
+                            });
+                        };
+                        let (fields_names,fields) = implement_introspect(field_infos, false);
+                        let fields_names2 = fields_names.clone();
+                        variants.push(
+                            quote!( #name::#variant_name_spanned{#(#fields_names,)*} => {
+                                #(#fields;)*
+                            } )
+                        );
+                        value_variants.push(
+                            quote!( #name::#variant_name_spanned{#(#fields_names2,)*} => {
+                                stringify!(#name::#variant_name_spanned).to_string()
+                            } )
+                        )
+
+                    }
+                    &syn::Fields::Unnamed(ref fields_unnamed) => {
+
+                        for f in fields_unnamed.unnamed.iter() {
+                            field_infos.push(FieldInfo {
+                                ident:None,
+                                ty:&f.ty,
+                                attrs:&f.attrs
+                            });
+                        };
+                        let (fields_names,fields) = implement_introspect(field_infos, false);
+                        let fields_names2 = fields_names.clone();
+
+                        variants.push(
+                            quote!( #name::#variant_name_spanned(#(#fields_names,)*) => { #(#fields;)* } )
+                        );
+                        value_variants.push(
+                            quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => { stringify!(#name::#variant_name_spanned).to_string() } )
+                        );
+
+
+                    }
+                    &syn::Fields::Unit => {
+                        //No fields
+                        variants.push(quote!{
+                            #name::#variant_name_spanned => {}
+                        });
+                        value_variants.push(
+                            quote!( #name::#variant_name_spanned => { stringify!(#name::#variant_name_spanned).to_string() } )
+                        );
+                    }
+                }
+
+
+                //variants.push(quote!{})
+
+
+
+            }
+            quote! {
+                #[allow(non_upper_case_globals)]
+                const #dummy_const: () = {
+                    #uses
+
+                    impl #impl_generics #introspect for #name #ty_generics #where_clause {
+
+                        #[allow(unused_mut)]
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn value(&self) -> String {
+                            match self {
+                                #(#value_variants,)*
+                            }
+                        }
+                        #[allow(unused_mut)]
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn child(&self, index:usize) -> Option<(String, &dyn #introspect)> {
+                            match self {
+                                #(#variants,)*
+                            }
+                            return None;
+                        }
+                    }
+                };
+            }
+        }
+        &syn::Data::Struct(ref struc) => {
+            let fields:Vec<TokenStream>;
+            match &struc.fields {
+
+                &syn::Fields::Named(ref namedfields) => {
+
+                    let field_infos:Vec<FieldInfo> = namedfields.named.iter().map(
+                        |field| FieldInfo {
+                            ident : Some(field.ident.clone().unwrap()),
+                            ty : &field.ty,
+                            attrs: &field.attrs
+                        }).collect();
+
+                    //fields = implement_introspect(field_infos, true).1;
+                    fields = Vec::new();
+                }
+                &syn::Fields::Unnamed(ref fields_unnamed) => {
+                    let field_infos:Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|f| {
+                        FieldInfo {
+                            ident:None,
+                            ty:&f.ty,
+                            attrs:&f.attrs
+                        }}).collect();
+
+                    //fields = implement_introspect(field_infos, true).1;
+                    fields = Vec::new();
+                }
+                _ => panic!("Unsupported struct type."),
+            }
+            let fields1 = fields;
+            quote! {
+                #[allow(non_upper_case_globals)]
+                const #dummy_const: () = {
+                    #uses
+
+                    impl #impl_generics #introspect for #name #ty_generics #where_clause {
+                        #[allow(unused_comparisons)]
+                        #[allow(unused_mut, unused_variables)]
+                        fn value(&self) -> String {
+                            stringify!(#name).to_string()
+                        }
+                        #[allow(unused_comparisons)]
+                        #[allow(unused_mut, unused_variables)]
+                        fn child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
+
+                            return None;
+                        }
+                    }
+                };
+            }
+        },
+        _ => {
+            panic!("Unsupported datatype");
+        }
+    };
+
+    expanded
+
+}
+
+
+#[allow(non_snake_case)]
 fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -966,7 +1207,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
 
     let mut fields = Vec::new();
     for (idx,ref field) in field_infos.iter().enumerate() {
-        
+
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
         if verinfo.ignore {
             continue;
@@ -984,12 +1225,12 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
         if field_from_version == 0 && field_to_version == std::u32::MAX {
             if removed {
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
-            }                            
+            }
             fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
-            
+
         } else {
-            
-            let mut version_mappings=Vec::new();            
+
+            let mut version_mappings=Vec::new();
             for dt in verinfo.deserialize_types.iter() {
                 let dt_from = dt.from;
                 let dt_to = dt.to;
@@ -1002,19 +1243,18 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
             }
 
 
-            fields.push(quote_spanned!( span => 
+            fields.push(quote_spanned!( span =>
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
                     #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
                 }
                 ));
-                                        
-        }        
+
+        }
     }
     fields
 }
-
 
 #[allow(non_snake_case)]
 fn withschema(input: DeriveInput) -> TokenStream {
