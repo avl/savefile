@@ -974,33 +974,33 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
     for (idx,ref field) in field_infos.iter().enumerate() {
 
+        /*let field_name=if let Some(name) = field.ident.clone() {
+            (&name).to_string()
+        } else {
+            idx.to_string()
+        };*/
         let field_name = field.ident.clone();
         let removed=check_is_remove(&field.ty);
         let field_type = &field.ty;
         if !removed {
-            if need_self {
-                let fieldname ;
+            let fieldname ;
 
-                let quoted_fieldname;
+            let quoted_fieldname;
+            if need_self {
                 fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { &self.#fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
-                fields_names.push(quoted_fieldname);
-
             } else {
-                let fieldname ;
-
-                let quoted_fieldname;
                 fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
-                fields_names.push(quoted_fieldname);
             }
 
+            fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
+            fields_names.push(quoted_fieldname);
         }
 
 
     }
+    let mut idx = 0;
 
     (fields_names,fields)
 }
@@ -1072,7 +1072,6 @@ fn introspect(input: DeriveInput) -> TokenStream {
 
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-
                         for f in fields_unnamed.unnamed.iter() {
                             field_infos.push(FieldInfo {
                                 ident:None,
@@ -1082,15 +1081,12 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         };
                         let (fields_names,fields) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
-
                         variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names,)*) => { #(#fields;)* } )
                         );
                         value_variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => { stringify!(#name::#variant_name_spanned).to_string() } )
                         );
-
-
                     }
                     &syn::Fields::Unit => {
                         //No fields
@@ -1136,7 +1132,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
             }
         }
         &syn::Data::Struct(ref struc) => {
-            let fields:Vec<TokenStream>;
+            let fields;
             match &struc.fields {
 
                 &syn::Fields::Named(ref namedfields) => {
@@ -1148,8 +1144,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                             attrs: &field.attrs
                         }).collect();
 
-                    //fields = implement_introspect(field_infos, true).1;
-                    fields = Vec::new();
+                    fields = implement_introspect(field_infos, true);
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos:Vec<FieldInfo> = fields_unnamed.unnamed.iter().map(|f| {
@@ -1159,12 +1154,11 @@ fn introspect(input: DeriveInput) -> TokenStream {
                             attrs:&f.attrs
                         }}).collect();
 
-                    //fields = implement_introspect(field_infos, true).1;
-                    fields = Vec::new();
+                    fields = implement_introspect(field_infos, true);
                 }
                 _ => panic!("Unsupported struct type."),
             }
-            let fields1 = fields;
+            let fields1 = fields.1;
             quote! {
                 #[allow(non_upper_case_globals)]
                 const #dummy_const: () = {
@@ -1179,7 +1173,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
                         fn child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
-
+                            let _ = stringify!(#(#fields1;)*);
                             return None;
                         }
                     }
