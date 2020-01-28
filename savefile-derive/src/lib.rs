@@ -455,7 +455,10 @@ fn serialize(input: DeriveInput) -> TokenStream {
                     fields_serialize = t.0;
                     _field_names = t.1;
                 },
-                _ => panic!("Unsupported struct type"),
+                &syn::Fields::Unit => {
+                    _field_names=Vec::new();
+                    fields_serialize = quote!{ {} };
+                }
             }
             quote! {
                 #[allow(non_upper_case_globals)] 
@@ -742,7 +745,15 @@ fn deserialize(input: DeriveInput) -> TokenStream {
                                 #(#output1,)*
                             ))}
                 },
-                _ => panic!("Only regular structs supported, not tuple structs."),
+                &syn::Fields::Unit => {
+                    let output1=implement_deserialize(Vec::new());
+
+                    quote!{Ok(#name (
+                                #(#output1,)*
+                            ))}
+
+                }
+                //_ => panic!("Only regular structs supported, not tuple structs."),
             };
             quote! {
                 #[allow(non_upper_case_globals)] 
@@ -949,7 +960,20 @@ pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
                 implement_reprc(field_infos, input.generics, name)
             }
-            _ => panic!("Unsupported struct type."),
+            &syn::Fields::Unnamed(ref fields_unnamed) => {
+                let field_infos : Vec<FieldInfo> = fields_unnamed.unnamed.iter().enumerate().map(|(idx,field)|
+                    FieldInfo {
+                        ident:Some(syn::Ident::new(&("x".to_string() + &idx.to_string()),Span::call_site())),
+                        ty:&field.ty,
+                        attrs:&field.attrs
+                    }).collect();
+
+                implement_reprc(field_infos, input.generics, name)
+            }
+            &syn::Fields::Unit => {
+                implement_reprc(Vec::new(), input.generics, name)
+            }
+
         },
         _ => {
             panic!("Unsupported data type");
@@ -964,46 +988,52 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
-    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
-    let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
-    let fields1=quote_spanned! { defspan => fields1 };
+    //let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    //let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
+    //let fields1=quote_spanned! { defspan => fields1 };
     let index1=quote_spanned! { defspan => index };
 
     let mut fields = Vec::new();
     let mut fields_names = Vec::new();
 
     for (idx,ref field) in field_infos.iter().enumerate() {
+        if need_self {
 
-        let field_name = field.ident.clone();
-        let removed=check_is_remove(&field.ty);
-        let field_type = &field.ty;
-        if !removed {
-            if need_self {
+            let fieldname;
+            let fieldname_raw;
 
-                let fieldname;
-                let fieldname_raw;
+            if let Some(id) = field.ident.clone() {
+                fieldname = quote!{&self.#id};
+                fieldname_raw = quote!{#id};
+            } else {
+                let idd = syn::Index::from(idx);
+                fieldname = quote! {&self.#idd};
+                fieldname_raw = quote!{#idd};
+            }
+            fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname_raw).to_string(), #fieldname))}));
+            fields_names.push(fieldname_raw);
 
-                if let Some(id) = field.ident.clone() {
-                    fieldname = quote!{&self.#id};
-                    fieldname_raw = quote!{#id};
-                } else {
-                    let idd = syn::Index::from(idx);
-                    fieldname = quote! {&self.#idd};
-                    fieldname_raw = quote!{#idd};
-                }
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname_raw).to_string(), #fieldname))}));
-                fields_names.push(fieldname_raw);
+        } else {
+
+            if let Some(id) = field.ident.clone() {
+                let fieldname ;
+                let quoted_fieldname;
+                let raw_fieldname = id.to_string();
+                fieldname = id; //field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
+                quoted_fieldname = quote! { #fieldname };
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields_names.push(quoted_fieldname);
 
             } else {
                 let fieldname ;
-
                 let quoted_fieldname;
-                fieldname = field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
+                let raw_fieldname = idx.to_string();
+                fieldname = Ident::new(&format!("v{}",idx),span);
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname).to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
-            }
 
+            }
         }
 
 
@@ -1030,11 +1060,11 @@ fn introspect(input: DeriveInput) -> TokenStream {
             extern crate savefile as _savefile;
         };
 
-    let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
-    let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
-    let Schema = quote_spanned! { defspan => _savefile::prelude::Schema };
-    let Field = quote_spanned! { defspan => _savefile::prelude::Field };
-    let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
+    //let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
+    //let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
+    //let Schema = quote_spanned! { defspan => _savefile::prelude::Schema };
+    //let Field = quote_spanned! { defspan => _savefile::prelude::Field };
+    //let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
 
     let magic=format!("_IMPL_SAVEFILE_INTROSPECT_FOR_{}", &name).to_string();
     let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
@@ -1044,17 +1074,19 @@ fn introspect(input: DeriveInput) -> TokenStream {
 
             let mut variants = Vec::new();
             let mut value_variants = Vec::new();
+            let mut len_variants = Vec::new();
             for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
                 if var_idx > 255 {
                     panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
                 }
-                let var_idx = var_idx as u8;
+                //let var_idx = var_idx as u8;
                 let var_ident = variant.ident.clone();
                 let variant_name = quote!{ #var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
 
                 let mut field_infos=Vec::new();
 
+                let return_value_name = format!("{}::{}",name,var_ident.to_string());
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         for f in fields_named.named.iter() {
@@ -1066,6 +1098,8 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         };
                         let (fields_names,fields) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
+                        let fields_names3 = fields_names.clone();
+                        let num_fields = fields_names3.len();
                         variants.push(
                             quote!( #name::#variant_name_spanned{#(#fields_names,)*} => {
                                 #(#fields;)*
@@ -1073,9 +1107,14 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         );
                         value_variants.push(
                             quote!( #name::#variant_name_spanned{#(#fields_names2,)*} => {
-                                stringify!(#name::#variant_name_spanned).to_string()
+                                #return_value_name.to_string()
                             } )
-                        )
+                        );
+                        len_variants.push(
+                            quote!( #name::#variant_name_spanned{#(#fields_names3,)*} => {
+                                #num_fields
+                            } )
+                        );
 
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
@@ -1088,12 +1127,19 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         };
                         let (fields_names,fields) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
+                        let fields_names3 = fields_names.clone();
+                        let num_fields = fields_names3.len();
 
                         variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names,)*) => { #(#fields;)* } )
                         );
                         value_variants.push(
-                            quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => { stringify!(#name::#variant_name_spanned).to_string() } )
+                            quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => #return_value_name.to_string() )
+                        );
+                        len_variants.push(
+                            quote!( #name::#variant_name_spanned(#(#fields_names3,)*) => {
+                                #num_fields
+                            } )
                         );
 
                     }
@@ -1103,8 +1149,12 @@ fn introspect(input: DeriveInput) -> TokenStream {
                             #name::#variant_name_spanned => {}
                         });
                         value_variants.push(
-                            quote!( #name::#variant_name_spanned => { stringify!(#name::#variant_name_spanned).to_string() } )
+                            quote!( #name::#variant_name_spanned => #return_value_name.to_string() )
                         );
+                        len_variants.push(
+                            quote!( #name::#variant_name_spanned => 0)
+                        );
+
                     }
                 }
 
@@ -1123,19 +1173,27 @@ fn introspect(input: DeriveInput) -> TokenStream {
 
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
-                        fn value(&self) -> String {
+                        fn introspect_value(&self) -> String {
                             match self {
                                 #(#value_variants,)*
                             }
                         }
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
-                        fn child(&self, index:usize) -> Option<(String, &dyn #introspect)> {
+                        fn introspect_child(&self, index:usize) -> Option<(String, &dyn #introspect)> {
                             match self {
                                 #(#variants,)*
                             }
                             return None;
                         }
+                        #[allow(unused_mut)]
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn introspect_len(&self) -> usize {
+                            match self {
+                                #(#len_variants,)*
+                            }
+                        }
+
                     }
                 };
             }
@@ -1165,9 +1223,12 @@ fn introspect(input: DeriveInput) -> TokenStream {
 
                     fields = implement_introspect(field_infos, true);
                 }
-                _ => panic!("Unsupported struct type."),
+                &syn::Fields::Unit => {
+                    fields=(Vec::new(),Vec::new());
+                }
             }
             let fields1 = fields.1;
+            let field_count = fields1.len();
             quote! {
                 #[allow(non_upper_case_globals)]
                 const #dummy_const: () = {
@@ -1176,14 +1237,17 @@ fn introspect(input: DeriveInput) -> TokenStream {
                     impl #impl_generics #introspect for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
-                        fn value(&self) -> String {
+                        fn introspect_value(&self) -> String {
                             stringify!(#name).to_string()
                         }
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
-                        fn child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
+                        fn introspect_child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
                             #(#fields1;)*
                             return None;
+                        }
+                        fn introspect_len(&self) -> usize {
+                            #field_count
                         }
                     }
                 };
@@ -1396,8 +1460,10 @@ fn withschema(input: DeriveInput) -> TokenStream {
                             attrs:&f.attrs
                         }}).collect();                    
                     fields = implement_withschema(field_infos);
-                }                
-                _ => panic!("Unsupported struct type."),
+                }
+                &syn::Fields::Unit => {
+                    fields = Vec::new();
+                }
             }            
             quote! {
                 #[allow(non_upper_case_globals)] 

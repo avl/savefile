@@ -1,3 +1,4 @@
+
 use ::savefile::prelude::*;
 
 #[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
@@ -39,4 +40,26 @@ fn test_not_raw_memcpy2() {
     let misaligner=1;
     let inner=4;
     assert_eq!(f_internal_size, version + vec_overhead + misaligner + inner ); //3 bytes padding also because of ReprC-optimization
+}
+
+
+#[derive(Savefile,Clone,Copy,ReprC)]
+struct MyUnitStruct {
+
+}
+
+#[derive(Savefile,Clone,Copy,ReprC)]
+struct UnnamedFieldsStruct(usize);
+
+
+#[test]
+fn test_various_types_for_reprc() {
+
+    assert_eq!(<() as ReprC>::repr_c_optimization_safe(0), true);
+    assert_eq!(<u8>::repr_c_optimization_safe(0),true);
+
+    assert_eq!(<MyUnitStruct>::repr_c_optimization_safe(0), true);
+    assert_eq!(UnnamedFieldsStruct::repr_c_optimization_safe(0), true);
+
+
 }

@@ -1,6 +1,8 @@
 #![feature(integer_atomics)]
 #![allow(unused_imports)]
 #![feature(test)]
+#![deny(warnings)]
+
 extern crate test;
 extern crate savefile;
 #[macro_use]
@@ -16,6 +18,7 @@ use std::io::Write;
 use savefile::prelude::*;
 extern crate arrayvec;
 mod test_versioning;
+mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
 
