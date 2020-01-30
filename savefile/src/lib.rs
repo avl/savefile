@@ -1931,6 +1931,16 @@ impl Deserialize for String {
     }
 }
 
+impl<T:Introspect> Introspect for Mutex<T> {
+    fn introspect_value(&self) -> String {
+        format!("Mutex<{}> (un-inspectable)",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+        None
+    }
+}
+compile_error!("Finish HashMap, and other types.")
 
 impl<T:WithSchema> WithSchema for Mutex<T> {
     fn schema(version:u32) -> Schema {
@@ -1970,7 +1980,17 @@ impl<T:Deserialize> Deserialize for RwLock<T> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
+for HashMap<K, V, S> {
+    fn introspect_value(&self) -> String {
+        compile_error!("Fix this")
+        "HashMap(Introspect yet Unimplemented)".to_string()
+    }
 
+    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+        None
+    }
+}
 
 impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
     for HashMap<K, V, S> {
@@ -2039,6 +2059,37 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
     }        
 }
 
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
+for IndexMap<K, V, S> {
+    fn introspect_value(&self) -> String {
+        format!("IndexMap<{},{}>",
+            std::any::type_name::<K>(),
+            std::any::type_name::<V>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+
+        let bucket = index/2;
+        let off = index%2;
+        if let Some((k,v)) = self.get_index(bucket) {
+            if off == 0 {
+                Some((format!("Key #{}",bucket),
+                      k
+                ))
+            } else {
+                Some((format!("Value #{}",bucket),
+                 v
+                ))
+            }
+        } else {
+            None
+        }
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
 
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
     for IndexMap<K, V, S>
@@ -2149,6 +2200,15 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
 }
 
 
+impl<T> Introspect for PhantomData<T> {
+    fn introspect_value(&self) -> String {
+        "PhantomData".to_string()
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+        None
+    }
+}
 impl<T> WithSchema for std::marker::PhantomData<T> {
     fn schema(_version:u32) -> Schema {
         Schema::ZeroSize
@@ -2315,7 +2375,29 @@ impl<T: Deserialize+Ord> Deserialize for BinaryHeap<T> {
         Ok(ret)
     }
 }
-    
+
+impl<T:smallvec::Array> Introspect for smallvec::SmallVec<T> where
+    T::Item : Introspect
+{
+    fn introspect_value(&self) -> String {
+        format!("SmallVec<{}>",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if let Some(val) = self.get(index) {
+            Some((
+                 index.to_string(),
+                val
+                ))
+        } else {
+            None
+        }
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
 
 impl<T:smallvec::Array> WithSchema for smallvec::SmallVec<T> 
     where T::Item : WithSchema {
@@ -2374,6 +2456,9 @@ impl<T: Introspect> Introspect for Vec<T> {
             return None;
         }
         return Some((index.to_string(), &self[index]));
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
     }
 }
 
@@ -2864,6 +2949,7 @@ impl<T:Deserialize> Deserialize for Arc<T> {
 use std::cell::RefCell;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 
 impl<T:WithSchema> WithSchema for RefCell<T> {
     fn schema(version:u32) -> Schema {
@@ -2937,6 +3023,7 @@ impl<T:Introspect> Introspect for (T,) {
         return None;
     }
 }
+
 impl<T1:Introspect,T2:Introspect> Introspect for (T1,T2) {
     fn introspect_value(&self) -> String {
         return "2-tuple".to_string();
