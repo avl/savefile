@@ -1,5 +1,5 @@
 use savefile::prelude::*;
-use savefile::{Introspector, IntrospectorNavCommand};
+use savefile::{Introspector, IntrospectorNavCommand, IntrospectedElementKey, IntrospectionError};
 
 
 #[derive(Savefile)]
@@ -24,7 +24,8 @@ pub struct SimpleStruct {
 
 #[derive(Savefile)]
 pub struct ComplexStruct {
-    simple: SimpleStruct,
+    simple1: SimpleStruct,
+    simple2: SimpleStruct,
     an_int: u32
 }
 
@@ -68,7 +69,8 @@ pub fn do_test1() {
     };
 
     let x = (&test).introspect_value();
-    println!("X: {:?}",x);
+    assert_eq!(x, "SimpleStruct");
+
     assert_eq!(test.introspect_len(), 1);
     assert_eq!(test.introspect_child(0).unwrap().0, "item1");
     assert_eq!(test.introspect_child(0).unwrap().1.introspect_value(), "342");
@@ -90,18 +92,137 @@ pub fn func_to_do_stuff() {
 
 
 #[test]
-pub fn test_introspector() {
+pub fn test_introspector_simple_case() {
     let comp = ComplexStruct {
-        simple: SimpleStruct {
+        simple1: SimpleStruct {
             item1 : 37
+        },
+        simple2: SimpleStruct {
+            item1 : 38
         },
         an_int: 4
     };
 
+    let mut base_introspector = Introspector::new();
+
+    {
+        base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing).unwrap();
+
+
+        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::Up).unwrap_err(),IntrospectionError::AlreadyAtTop);
+        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth(3)).unwrap_err(),IntrospectionError::IndexOutOfRange);
+        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+            IntrospectedElementKey{
+                key: "simple1".into(),
+                key_disambiguator: 0,
+                depth: 1
+            }
+        )).unwrap_err(),IntrospectionError::BadDepth);
+        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+            IntrospectedElementKey{
+                key: "simple3".into(),
+                key_disambiguator: 0,
+                depth: 0
+            }
+        )).unwrap_err(),IntrospectionError::UnknownKey);
+
+        assert_eq!(base_introspector.impl_get_frames(&0u32, IntrospectorNavCommand::SelectNth(
+            0
+        )).unwrap_err(),IntrospectionError::NoChildren);
+    }
+
+    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth(0)).unwrap();
+    assert_eq!(result.frames.len(),2);
+
+
+
+    {
+        let mut introspector = base_introspector.clone();
+        let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing).unwrap();
+        assert_eq!(result.frames.len(),2);
+
+        let disp = format!("{}",result);
+
+        assert!(disp.contains ("*simple1 = SimpleStruct"));
+        assert!(disp.contains (">simple2 = SimpleStruct"));
+        assert!(disp.contains ("   item1 = 37"));
+        assert!(!disp.contains("   item1 = 38")); //Not expanded
+        assert!(disp.contains (" an_int = 4"));
+
+        let result3 = introspector.impl_get_frames(&comp,IntrospectorNavCommand::Up).unwrap();
+        assert_eq!(result3.frames.len(),1);
+    }
+
+    {
+        let mut introspector = base_introspector.clone();
+        let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+            IntrospectedElementKey{
+                depth: 0,
+                key: "simple2".to_string(),
+                .. Default::default()
+            })).unwrap();
+        let disp = format!("{}",result);
+        assert_eq!(result.frames.len(),2);
+        assert!(disp.contains(">simple1 = SimpleStruct"));
+        assert!(disp.contains("*simple2 = SimpleStruct"));
+        assert!(!disp.contains("   item1 = 37")); //Now expanded
+        assert!(disp.contains("   item1 = 38")); //Now expanded
+
+    }
+}
+
+#[derive(Savefile)]
+struct NestableStruct {
+    a: Option<Box<NestableStruct>>,
+    b: Option<Box<NestableStruct>>,
+    c: u32,
+}
+
+#[test]
+pub fn test_introspector_deeply_nested_case() {
+    let sample = NestableStruct {
+        a: Some(Box::new(NestableStruct {
+            a: Some(Box::new(NestableStruct {
+                a:None,b:None,c:1
+            })),
+            b: Some(Box::new(NestableStruct {
+                a:None,b:None,c:2
+            })),
+            c:3
+        })),
+        b: Some(Box::new(NestableStruct {
+            a: Some(Box::new(NestableStruct {
+                a:None,b:None,c:4
+            })),
+            b: Some(Box::new(NestableStruct {
+                a:None,b:None,c:5
+            })),
+            c:6
+        })),
+        c:7
+    };
+
     let mut introspector = Introspector::new();
 
-    let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth(0));
-    println!("Result1: {:?}",result);
-    let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing);
-    println!("Result2: {:?}",result);
+
+    let _ = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth(0)).unwrap();
+    let result = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth(0)).unwrap();
+    assert_eq!(result.frames[0].keyvals[0].key.key,"a");
+    assert_eq!(result.frames[0].keyvals[1].key.key,"b");
+    assert_eq!(result.frames[0].keyvals[2].key.key,"c");
+    assert_eq!(result.frames[0].keyvals[2].value,"7");
+
+    let disp = format!("{}",result);
+    assert_eq!(disp,"Introspectionresult:
+*a = Some(NestableStruct)
+  *a = Some(NestableStruct)
+     a = None
+     b = None
+     c = 1
+  >b = Some(NestableStruct)
+   c = 3
+>b = Some(NestableStruct)
+ c = 7
+");
+
 }
