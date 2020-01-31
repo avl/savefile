@@ -1940,7 +1940,7 @@ impl<T:Introspect> Introspect for Mutex<T> {
         None
     }
 }
-compile_error!("Finish HashMap, and other types.")
+
 
 impl<T:WithSchema> WithSchema for Mutex<T> {
     fn schema(version:u32) -> Schema {
@@ -1980,15 +1980,46 @@ impl<T:Deserialize> Deserialize for RwLock<T> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
+
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
 for HashMap<K, V, S> {
-    fn introspect_value(&self) -> String {
-        compile_error!("Fix this")
-        "HashMap(Introspect yet Unimplemented)".to_string()
+    default fn introspect_value(&self) -> String {
+        format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
-        None
+    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        let bucket = index/2;
+        let off = index%2;
+        if let Some((key,val)) = self.iter().skip(bucket).next() {
+            if off == 0 {
+                Some((format!("Key #{}",index),key))
+            } else {
+                Some((format!("Value #{}",index),val))
+            }
+        } else {
+            None
+        }
+    }
+    default fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
+for HashMap<K, V, S> where K:ToString{
+    default fn introspect_value(&self) -> String {
+        format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
+    }
+
+    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+
+        if let Some((key,val)) = self.iter().skip(index).next() {
+            Some((key.to_string(),val))
+        } else {
+            None
+        }
+    }
+    default fn introspect_len(&self) -> usize {
+        self.len()
     }
 }
 
@@ -2061,13 +2092,13 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
 
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
 for IndexMap<K, V, S> {
-    fn introspect_value(&self) -> String {
+    default fn introspect_value(&self) -> String {
         format!("IndexMap<{},{}>",
             std::any::type_name::<K>(),
             std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
 
         let bucket = index/2;
         let off = index%2;
@@ -2086,11 +2117,34 @@ for IndexMap<K, V, S> {
         }
     }
 
-    fn introspect_len(&self) -> usize {
+    default fn introspect_len(&self) -> usize {
         self.len()
     }
 }
 
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
+for IndexMap<K, V, S> where K:ToString {
+    fn introspect_value(&self) -> String {
+        format!("IndexMap<{},{}>",
+                std::any::type_name::<K>(),
+                std::any::type_name::<V>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+
+        if let Some((k,v)) = self.get_index(index) {
+            Some((k.to_string(),
+                  v
+            ))
+        } else {
+            None
+        }
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
     for IndexMap<K, V, S>
 {
@@ -2115,6 +2169,26 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> 
         Ok(ret)
     }
 }
+
+impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect
+for IndexSet<K, S> {
+    fn introspect_value(&self) -> String {
+        format!("IndexSet<{}>",std::any::type_name::<K>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if let Some(val) = self.get_index(index) {
+            Some((format!("#{}",index),val))
+        } else {
+            None
+        }
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+
 
 impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema
     for IndexSet<K, S> {
