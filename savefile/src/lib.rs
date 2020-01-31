@@ -507,7 +507,7 @@ use std::sync::atomic::{
 
 use self::byteorder::{LittleEndian};
 use std::mem::MaybeUninit;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::collections::VecDeque;
 use std::collections::BinaryHeap;
 use std::hash::Hash;
@@ -1961,6 +1961,19 @@ impl<T:Deserialize> Deserialize for Mutex<T> {
     }
 }
 
+impl<T:Introspect> Introspect for RwLock<T> {
+    fn introspect_value(&self) -> String {
+        format!("RwLock<{}>(non-introspectable)",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+        None
+    }
+
+    fn introspect_len(&self) -> usize {
+        0
+    }
+}
 
 impl<T:WithSchema> WithSchema for RwLock<T> {
     fn schema(version:u32) -> Schema {
@@ -2004,6 +2017,25 @@ for HashMap<K, V, S> {
         self.len()
     }
 }
+
+impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect
+for HashSet<K, S> {
+    default fn introspect_value(&self) -> String {
+        format!("HashSet<{}>",std::any::type_name::<K>())
+    }
+
+    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if let Some(key) = self.iter().skip(index).next() {
+            Some((format!("#{}",index),key))
+        } else {
+            None
+        }
+    }
+    default fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
 for HashMap<K, V, S> where K:ToString{
     default fn introspect_value(&self) -> String {
@@ -2613,6 +2645,23 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     }
 }
 
+impl<T: Introspect> Introspect for VecDeque<T> {
+    fn introspect_value(&self) -> String {
+        format!("VecDeque<{}>",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        if let Some(val) = self.get(index) {
+            Some((index.to_string(), val))
+        } else {
+            None
+        }
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
     fn schema(version:u32) -> Schema {
@@ -3003,6 +3052,20 @@ impl<T:Deserialize> Deserialize for Rc<T> {
 
 
 use std::sync::Arc;
+
+impl<T:Introspect> Introspect for Arc<T> {
+    fn introspect_value(&self) -> String {
+        format!("Arc({})",self.deref().introspect_value())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+        self.deref().introspect_child(index)
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.deref().introspect_len()
+    }
+}
 
 impl<T:WithSchema> WithSchema for Arc<T> {
     fn schema(version:u32) -> Schema {
@@ -3540,10 +3603,17 @@ impl WithSchema for Canary1 {
     }    
 }
 
+#[derive(Clone)]
+pub struct PathElement {
+    key: String,
+    key_disambiguator: usize,
+    max_children: usize,
+}
 
 #[derive(Clone)]
 pub struct Introspector {
-    path: Vec<(String,usize)>,
+    path: Vec<PathElement>,
+    child_load_count: usize,
 }
 
 #[derive(Debug,PartialEq,Eq,Clone)]
@@ -3612,6 +3682,7 @@ pub enum IntrospectionError {
 pub struct IntrospectionFrame {
     pub selected: Option<usize>,
     pub keyvals: Vec<IntrospectedElement>,
+    pub limit_reached: bool,
 }
 
 #[derive(Debug)]
@@ -3679,9 +3750,17 @@ impl Display for IntrospectedElementKey {
 
 
 impl Introspector {
+
     pub fn new() -> Introspector {
         Introspector {
-            path : vec![]
+            path : vec![],
+            child_load_count: std::usize::MAX
+        }
+    }
+    pub fn new_with(child_load_count:usize) -> Introspector {
+        Introspector {
+            path : vec![],
+            child_load_count
         }
     }
 
@@ -3716,7 +3795,8 @@ impl Introspector {
                     let maybe_key = if idx<self.path.len() { Some(&self.path[idx]) } else { None };
                     let mut cur_row = IntrospectionFrame {
                         selected: None,
-                        keyvals: Vec::new()
+                        keyvals: Vec::new(),
+                        limit_reached: false
                     };
                     child_references.clear();
                     key_disambig_map.clear();
@@ -3729,9 +3809,9 @@ impl Introspector {
                             let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
 
                             child_references.push(childref);
-                            if let Some((path_key, path_key_disambiguator)) = maybe_key {
-                                if key == *path_key {
-                                    if *path_key_disambiguator == *disambig_counter {
+                            if let Some(path_element) = maybe_key {
+                                if key == path_element.key {
+                                    if path_element.key_disambiguator == *disambig_counter {
                                         next_child = Some(childref);
                                         cur_row.selected = Some(field);
                                     }
@@ -3745,7 +3825,14 @@ impl Introspector {
                             break;
                         }
                         field += 1;
-                        if field >= MAX_CHILDREN {
+                        let limit;
+                        if let Some(path_element) = maybe_key {
+                              limit = path_element.max_children;
+                        } else {
+                            limit = self.child_load_count;
+                        }
+                        if field >= limit {
+                            cur_row.limit_reached = true;
                             break;
                         }
                     }
@@ -3758,7 +3845,8 @@ impl Introspector {
                 } else {
                     retval.push(IntrospectionFrame {
                         selected: None,
-                        keyvals: Vec::new()
+                        keyvals: Vec::new(),
+                        limit_reached: false
                     });
                     idx+=1;
 
@@ -3787,7 +3875,11 @@ impl Introspector {
                                     return Err(IntrospectionError::NoChildren);
                                 }
                                 if let Some(col) = last.keyvals.get(index) {
-                                    self.path.push((col.key.key.clone(),col.key.key_disambiguator));
+                                    self.path.push(PathElement {
+                                        key:col.key.key.clone(),
+                                        key_disambiguator:col.key.key_disambiguator,
+                                        max_children: self.child_load_count
+                                    });
                                     idx = retval.len() - 1;
                                     retval.pop().unwrap();
                                 } else {
@@ -3808,7 +3900,11 @@ impl Introspector {
                                     self.path.drain(new_key.depth..);
                                     assert!(self.path.len() >= new_key.depth);
                                     self.path.push(
-                                        (new_key.key.clone(),new_key.key_disambiguator)
+                                        PathElement {
+                                            key:new_key.key.clone(),
+                                            key_disambiguator:new_key.key_disambiguator,
+                                            max_children: self.child_load_count
+                                        }
                                     );
                                     idx = self.path.len() - 1;
                                     child_ref_stack.drain(idx+1 ..);
