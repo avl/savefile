@@ -618,6 +618,19 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     expanded.into()
 }
+#[proc_macro_derive(SavefileIntrospectOnly, attributes(savefile_versions, savefile_versions_as, savefile_ignore, savefile_default_val, savefile_default_fn))]
+pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse(input).unwrap();
+
+    let i=introspect(input);
+
+    let expanded=quote! {
+        #i
+    };
+
+    expanded.into()
+}
+
 fn deserialize(input: DeriveInput) -> TokenStream {
 
 
@@ -1010,7 +1023,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 fieldname = quote! {&self.#idd};
                 fieldname_raw = quote!{#idd};
             }
-            fields.push(quote_spanned!( span => if #index1 == #idx { return Some((stringify!(#fieldname_raw).to_string(), #fieldname))}));
+            fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
             fields_names.push(fieldname_raw);
 
         } else {
@@ -1021,7 +1034,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 let raw_fieldname = id.to_string();
                 fieldname = id; //field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
 
             } else {
@@ -1030,7 +1043,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 let raw_fieldname = idx.to_string();
                 fieldname = Ident::new(&format!("v{}",idx),span);
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some((#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
 
             }
@@ -1180,7 +1193,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
-                        fn introspect_child(&self, index:usize) -> Option<(String, &dyn #introspect)> {
+                        fn introspect_child(&self, index:usize) -> Option<Box<dyn IntrospectItem+'_>> {
                             match self {
                                 #(#variants,)*
                             }
@@ -1242,7 +1255,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
-                        fn introspect_child(&self, index: usize) -> Option<(String,&dyn #introspect)> {
+                        fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
                             #(#fields1;)*
                             return None;
                         }

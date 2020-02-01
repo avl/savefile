@@ -6,7 +6,7 @@
 #![feature(core_intrinsics)]
 #![feature(integer_atomics)]
 #![feature(const_generics)]
-#![deny(warnings)]
+//#![deny(warnings)]
 
 /*!
 This is the documentation for `savefile`
@@ -1154,6 +1154,11 @@ pub trait Serialize : WithSchema {
 
 }
 
+pub trait IntrospectItem<'a> {
+    fn key(&self) -> &str;
+    fn val(&self) -> &dyn Introspect;
+}
+
 pub const MAX_CHILDREN: usize = 10000;
 pub trait Introspect {
 
@@ -1172,7 +1177,7 @@ pub trait Introspect {
     /// all though there isn't really anything stopping the user of the trait to have
     /// any arbitrary index strategy, consecutive numbering 0, 1, 2, ... etc is strongly
     /// encouraged.
-    fn introspect_child(&self, index:usize) -> Option<(String,&dyn Introspect)>;
+    fn introspect_child<'a>(&'a self, index:usize) -> Option<Box<dyn IntrospectItem<'a>+'a>>;
 
     /// Returns the total number of children.
     /// The default implementation simply tries higher and higher numbers.
@@ -1186,8 +1191,9 @@ pub trait Introspect {
         }
         return MAX_CHILDREN;
     }
-
 }
+
+
 
 /// This trait must be implemented for all data structures you wish to
 /// be able to deserialize.
@@ -1915,7 +1921,7 @@ impl Introspect for String {
         self.to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
         None
     }
 }
@@ -1936,7 +1942,7 @@ impl<T:Introspect> Introspect for Mutex<T> {
         format!("Mutex<{}> (un-inspectable)",std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -1966,7 +1972,7 @@ impl<T:Introspect> Introspect for RwLock<T> {
         format!("RwLock<{}>(non-introspectable)",std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 
@@ -1993,6 +1999,26 @@ impl<T:Deserialize> Deserialize for RwLock<T> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
+pub struct IntrospectItemSimple<'a> {
+    key: String,
+    val: &'a dyn Introspect
+}
+
+impl<'a> IntrospectItem<'a> for IntrospectItemSimple<'a> {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        self.val
+    }
+}
+pub fn introspect_item<'a>(key:String,val: &'a dyn Introspect) -> Box<dyn IntrospectItem<'a>+'a> {
+    Box::new(IntrospectItemSimple {
+        key: key,
+        val:val
+    })
+}
 
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
 for HashMap<K, V, S> {
@@ -2000,14 +2026,14 @@ for HashMap<K, V, S> {
         format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         let bucket = index/2;
         let off = index%2;
         if let Some((key,val)) = self.iter().skip(bucket).next() {
             if off == 0 {
-                Some((format!("Key #{}",index),key))
+                Some(introspect_item(format!("Key #{}",index),key))
             } else {
-                Some((format!("Value #{}",index),val))
+                Some(introspect_item(format!("Value #{}",index),val))
             }
         } else {
             None
@@ -2024,9 +2050,9 @@ for HashSet<K, S> {
         format!("HashSet<{}>",std::any::type_name::<K>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if let Some(key) = self.iter().skip(index).next() {
-            Some((format!("#{}",index),key))
+            Some(introspect_item(format!("#{}",index),key))
         } else {
             None
         }
@@ -2042,10 +2068,10 @@ for HashMap<K, V, S> where K:ToString{
         format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
 
         if let Some((key,val)) = self.iter().skip(index).next() {
-            Some((key.to_string(),val))
+            Some(introspect_item(key.to_string(),val))
         } else {
             None
         }
@@ -2130,17 +2156,17 @@ for IndexMap<K, V, S> {
             std::any::type_name::<V>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
 
         let bucket = index/2;
         let off = index%2;
         if let Some((k,v)) = self.get_index(bucket) {
             if off == 0 {
-                Some((format!("Key #{}",bucket),
+                Some(introspect_item(format!("Key #{}",bucket),
                       k
                 ))
             } else {
-                Some((format!("Value #{}",bucket),
+                Some(introspect_item(format!("Value #{}",bucket),
                  v
                 ))
             }
@@ -2162,10 +2188,10 @@ for IndexMap<K, V, S> where K:ToString {
                 std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
 
         if let Some((k,v)) = self.get_index(index) {
-            Some((k.to_string(),
+            Some(introspect_item(k.to_string(),
                   v
             ))
         } else {
@@ -2208,9 +2234,9 @@ for IndexSet<K, S> {
         format!("IndexSet<{}>",std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if let Some(val) = self.get_index(index) {
-            Some((format!("#{}",index),val))
+            Some(introspect_item(format!("#{}",index),val))
         } else {
             None
         }
@@ -2287,7 +2313,7 @@ impl<T:Introspect> Introspect for Removed<T> {
         format!("Removed<{}>",std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -2311,7 +2337,7 @@ impl<T> Introspect for PhantomData<T> {
         "PhantomData".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -2338,7 +2364,7 @@ impl<T:Introspect> Introspect for Box<T> {
     fn introspect_value(&self) -> String {
         self.deref().introspect_value()
     }
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         self.deref().introspect_child(index)
     }
     fn introspect_len(&self) -> usize {
@@ -2354,7 +2380,7 @@ impl<T:Introspect> Introspect for Option<T> {
         }
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if let Some(cont) = self {
             cont.introspect_child(index)
         } else {
@@ -2439,7 +2465,7 @@ impl Introspect for bit_vec::BitVec {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -2489,9 +2515,9 @@ impl<T:smallvec::Array> Introspect for smallvec::SmallVec<T> where
         format!("SmallVec<{}>",std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if let Some(val) = self.get(index) {
-            Some((
+            Some(introspect_item(
                  index.to_string(),
                 val
                 ))
@@ -2557,11 +2583,11 @@ impl<T: Introspect> Introspect for Vec<T> {
         return "vec[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index >= self.len() {
             return None;
         }
-        return Some((index.to_string(), &self[index]));
+        return Some(introspect_item(index.to_string(), &self[index]));
     }
     fn introspect_len(&self) -> usize {
         self.len()
@@ -2650,9 +2676,9 @@ impl<T: Introspect> Introspect for VecDeque<T> {
         format!("VecDeque<{}>",std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if let Some(val) = self.get(index) {
-            Some((index.to_string(), val))
+            Some(introspect_item(index.to_string(), val))
         } else {
             None
         }
@@ -2732,11 +2758,11 @@ impl<T: Introspect, const N:usize> Introspect for [T; N] {
         format!("[{}; {}]",std::any::type_name::<T>(), N)
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index >= self.len() {
             None
         } else {
-            Some((index.to_string(), &self[index]))
+            Some(introspect_item(index.to_string(), &self[index]))
         }
     }
 }
@@ -3058,7 +3084,7 @@ impl<T:Introspect> Introspect for Arc<T> {
         format!("Arc({})",self.deref().introspect_value())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         self.deref().introspect_child(index)
     }
 
@@ -3138,7 +3164,7 @@ impl Introspect for () {
     fn introspect_value(&self) -> String {
         "()".to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -3153,9 +3179,9 @@ impl<T:Introspect> Introspect for (T,) {
         return "1-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index == 0 {
-            return Some(("0".to_string(), &self.0));
+            return Some(introspect_item("0".to_string(), &self.0));
         }
         return None;
     }
@@ -3166,12 +3192,12 @@ impl<T1:Introspect,T2:Introspect> Introspect for (T1,T2) {
         return "2-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index == 0 {
-            return Some(("0".to_string(), &self.0));
+            return Some(introspect_item("0".to_string(), &self.0));
         }
         if index == 1 {
-            return Some(("1".to_string(), &self.1));
+            return Some(introspect_item("1".to_string(), &self.1));
         }
         return None;
     }
@@ -3181,15 +3207,15 @@ impl<T1:Introspect,T2:Introspect,T3:Introspect> Introspect for (T1,T2,T3) {
         return "3-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index == 0 {
-            return Some(("0".to_string(), &self.0));
+            return Some(introspect_item("0".to_string(), &self.0));
         }
         if index == 1 {
-            return Some(("1".to_string(), &self.1));
+            return Some(introspect_item("1".to_string(), &self.1));
         }
         if index == 2 {
-            return Some(("2".to_string(), &self.2));
+            return Some(introspect_item("2".to_string(), &self.2));
         }
         return None;
     }
@@ -3199,34 +3225,34 @@ impl<T1:Introspect,T2:Introspect,T3:Introspect,T4:Introspect> Introspect for (T1
         return "4-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<(String, &dyn Introspect)> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         if index == 0 {
-            return Some(("0".to_string(), &self.0));
+            return Some(introspect_item("0".to_string(), &self.0));
         }
         if index == 1 {
-            return Some(("1".to_string(), &self.1));
+            return Some(introspect_item("1".to_string(), &self.1));
         }
         if index == 2 {
-            return Some(("2".to_string(), &self.2));
+            return Some(introspect_item("2".to_string(), &self.2));
         }
         if index == 3 {
-            return Some(("3".to_string(), &self.3));
+            return Some(introspect_item("3".to_string(), &self.3));
         }
         return None;
     }
 }
 
-impl Introspect for AtomicBool {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicU8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicI8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicU16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicI16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicU32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicI32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicU64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicI64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicUsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for AtomicIsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for AtomicBool {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicU8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicI8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicU16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicI16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicU32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicI32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicU64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicI64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicUsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicIsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
 
 
 
@@ -3282,21 +3308,21 @@ impl WithSchema for f32 {fn schema(_version:u32) -> Schema {Schema::Primitive(Sc
 impl WithSchema for f64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f64)}}
 
 
-impl Introspect for bool {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for u8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for u16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for u32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for u64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for u128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for i8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for i16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for i32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for i64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for i128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for f32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for f64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for usize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
-impl Introspect for isize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {None}}
+impl Introspect for bool {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for u8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for u16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for u32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for u64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for u128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for i8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for i16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for i32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for i64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for i128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for f32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for f64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for usize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for isize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
 
 
 
@@ -3575,7 +3601,7 @@ impl Introspect for Canary1 {
         "Canary1".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<(String,&dyn Introspect)> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
         None
     }
 }
@@ -3748,6 +3774,21 @@ impl Display for IntrospectedElementKey {
     }
 }
 
+struct OuterIntrospectItem<'a> {
+    key: String,
+    val: &'a dyn Introspect
+}
+
+impl<'a> IntrospectItem<'a> for OuterIntrospectItem<'a> {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        self.val
+    }
+}
+
 
 impl Introspector {
 
@@ -3768,17 +3809,115 @@ impl Introspector {
         self.path.len()
     }
 
+    fn dive<'a>(&mut self, depth:usize, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand, accum: &mut IntrospectionResult) -> Result<(),IntrospectionError> {
+
+        compile_error!("Test this new stuff!");
+        let mut navigation_command = Some(navigation_command);
+        let mut cur_path = self.path.get(depth).cloned();
+        let mut index = 0;
+        let mut row = IntrospectionFrame {
+            selected: None,
+            keyvals: vec![],
+            limit_reached: false
+        };
+        let mut key_disambig_map = HashMap::new();
+
+        let mut do_select_nth = None;
+
+        if let Some(navigation_command) = navigation_command.as_ref() {
+            match navigation_command {
+                IntrospectorNavCommand::ExpandElement(elem) => {
+
+                },
+                IntrospectorNavCommand::SelectNth(nth) => {
+                    if depth == self.path.len() {
+                        do_select_nth = Some(*nth);
+                        return Ok(());
+                    }
+
+                },
+                IntrospectorNavCommand::Nothing => {
+
+                },
+                IntrospectorNavCommand::Up => {
+                    if depth + 1 == self.path.len() {
+                        self.path.pop();
+                        return Ok(());
+                    }
+                },
+            }
+        }
+
+        loop {
+            if let Some(child_item) = object.introspect_child(index) {
+                let key:String = child_item.key().into();
+                let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
+                let has_children = child_item.val().introspect_child(0).is_some();
+                row.keyvals.push(IntrospectedElement {
+                    key: IntrospectedElementKey{
+                        depth,
+                        key: key.clone(),
+                        key_disambiguator: *disambig_counter
+                    },
+                    value: child_item.val().introspect_value(),
+                    has_children
+                });
+
+                if Some(index) == do_select_nth {
+                    self.path.push(PathElement{
+                        key: key.clone(),
+                        key_disambiguator: *disambig_counter,
+                        max_children: self.child_load_count
+                    });
+
+                    cur_path = self.path.last().cloned();
+                }
+
+                if let Some(cur_path_obj) = &cur_path {
+                    if row.selected.is_none() && cur_path_obj.key == key && cur_path_obj.key_disambiguator == *disambig_counter {
+                        if has_children {
+                            self.dive(depth+1, child_item.val(), navigation_command.take().unwrap(), accum)?;
+                        }
+                        row.selected = Some(index);
+                    }
+                }
+
+                *disambig_counter += 1;
+            }
+
+            index+=1;
+            if index >= cur_path.as_ref().map(|x|x.max_children).unwrap_or(self.child_load_count) {
+                row.limit_reached = true;
+                break;
+            }
+        }
+        accum.frames.push(row);
+        Err(IntrospectionError::BadDepth)
+    }
 
 
-    pub fn impl_get_frames(&mut self, object: &dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
+    pub fn new_get_frames<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
 
-        let mut child_references = Vec::new();
+        let mut accum = IntrospectionResult {
+            frames: vec![]
+        };
+        self.dive(0, object, navigation_command,&mut accum)?;
+
+        Ok(accum)
+    }
+
+/*
+    pub fn impl_get_frames<'c,'b:'c,'a:'b>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
+
 
         let mut retval = Vec::new();
         let mut key_disambig_map = HashMap::new();
 
-        let mut child_ref_stack: Vec<&dyn Introspect> = Vec::new();
-        child_ref_stack.push(object);
+        let mut child_ref_stack: Vec<Box<dyn IntrospectItem<'b>+'b>> = Vec::new();
+        child_ref_stack.push(Box::new(OuterIntrospectItem{
+            key: "<top>".to_string(),
+            val: object
+        }));
         let mut nav_command2 = Some(navigation_command);
         /*
         let iter_a = self.path.iter().cloned().map(|x|Some(x));
@@ -3791,35 +3930,41 @@ impl Introspector {
             if idx <= self.path.len()
             {
                 if idx < child_ref_stack.len() {
-                    let current = child_ref_stack[idx];
+
                     let maybe_key = if idx<self.path.len() { Some(&self.path[idx]) } else { None };
                     let mut cur_row = IntrospectionFrame {
                         selected: None,
                         keyvals: Vec::new(),
                         limit_reached: false
                     };
-                    child_references.clear();
+                    let mut child_references:Vec<Box<dyn IntrospectItem<'c>+'c>>  = Vec::new();
                     key_disambig_map.clear();
-                    let mut next_child = None;
+                    let mut next_child :Option<usize> = None;
 
                     let mut field = 0;
 
                     loop {
-                        if let Some((key,childref)) = current.introspect_child(field) {
+                        if let Some(key_childref) = child_ref_stack[idx].val().introspect_child(field) {
+                            //let key_childref : Box<dyn IntrospectItem<'b>+'b> = unimplemented!();
+                            let key = key_childref.key();
+                            //let childref = key_childref.val();
+
                             let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
 
-                            child_references.push(childref);
+                            child_references.push(key_childref);
                             if let Some(path_element) = maybe_key {
                                 if key == path_element.key {
                                     if path_element.key_disambiguator == *disambig_counter {
-                                        next_child = Some(childref);
+                                        next_child = Some(child_references.len()-1);//Some(key_childref);
                                         cur_row.selected = Some(field);
                                     }
                                 }
 
                             }
-                            let has_children = childref.introspect_child(0).is_some();
-                            cur_row.keyvals.push(IntrospectedElement{key:IntrospectedElementKey{key:key,depth:idx,key_disambiguator: *disambig_counter}, value:childref.introspect_value(), has_children});
+                            let has_children = key_childref.val().introspect_child(0).is_some();
+                            cur_row.keyvals.push(IntrospectedElement{
+                                key:IntrospectedElementKey{key:key.to_string(),depth:idx,key_disambiguator: *disambig_counter},
+                                value:key_childref.val().introspect_value(), has_children});
                             *disambig_counter += 1;
                         } else {
                             break;
@@ -3840,7 +3985,8 @@ impl Introspector {
                     retval.push(cur_row);
                     idx+=1;
                     if let Some(next_child_obj) = next_child {
-                        child_ref_stack.push(next_child_obj);
+                        let key_childref  = child_references.remove(next_child_obj);
+                        child_ref_stack.push(key_childref);
                     }
                 } else {
                     retval.push(IntrospectionFrame {
@@ -3929,6 +4075,7 @@ impl Introspector {
 
         Ok(IntrospectionResult{frames:retval})
     }
+    */
 
 }
 

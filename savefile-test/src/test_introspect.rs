@@ -35,19 +35,19 @@ pub struct ComplexStruct {
 pub fn test_simple_enum() {
     let val1 = SimpleEnum::VariantA(11,12,13);
     assert_eq!(val1.introspect_len(), 3);
-    assert_eq!(val1.introspect_child(0).unwrap().0, "0");
-    assert_eq!(val1.introspect_child(0).unwrap().1.introspect_value(), "11");
-    assert_eq!(val1.introspect_child(1).unwrap().0, "1");
-    assert_eq!(val1.introspect_child(1).unwrap().1.introspect_value(), "12");
-    assert_eq!(val1.introspect_child(2).unwrap().0, "2");
-    assert_eq!(val1.introspect_child(2).unwrap().1.introspect_value(), "13");
+    assert_eq!(val1.introspect_child(0).unwrap().key(), "0");
+    assert_eq!(val1.introspect_child(0).unwrap().val().introspect_value(), "11");
+    assert_eq!(val1.introspect_child(1).unwrap().key(), "1");
+    assert_eq!(val1.introspect_child(1).unwrap().val().introspect_value(), "12");
+    assert_eq!(val1.introspect_child(2).unwrap().key(), "2");
+    assert_eq!(val1.introspect_child(2).unwrap().val().introspect_value(), "13");
 
     let val2 = SimpleEnum::VariantB{x:74,y:32};
     assert_eq!(val2.introspect_len(), 2);
-    assert_eq!(val2.introspect_child(0).unwrap().0, "x");
-    assert_eq!(val2.introspect_child(0).unwrap().1.introspect_value(), "74");
-    assert_eq!(val2.introspect_child(1).unwrap().0, "y");
-    assert_eq!(val2.introspect_child(1).unwrap().1.introspect_value(), "32");
+    assert_eq!(val2.introspect_child(0).unwrap().key(), "x");
+    assert_eq!(val2.introspect_child(0).unwrap().val().introspect_value(), "74");
+    assert_eq!(val2.introspect_child(1).unwrap().key(), "y");
+    assert_eq!(val2.introspect_child(1).unwrap().val().introspect_value(), "32");
 
     let val3 = SimpleEnum::VariantC;
     assert_eq!(val3.introspect_len(), 0);
@@ -72,8 +72,8 @@ pub fn do_test1() {
     assert_eq!(x, "SimpleStruct");
 
     assert_eq!(test.introspect_len(), 1);
-    assert_eq!(test.introspect_child(0).unwrap().0, "item1");
-    assert_eq!(test.introspect_child(0).unwrap().1.introspect_value(), "342");
+    assert_eq!(test.introspect_child(0).unwrap().key(), "item1");
+    assert_eq!(test.introspect_child(0).unwrap().val().introspect_value(), "342");
 
 }
 
@@ -84,10 +84,10 @@ pub fn func_to_do_stuff() {
     let os = OtherStruct(43,32);
 
     assert_eq!(os.introspect_len(), 2);
-    assert_eq!(os.introspect_child(0).unwrap().0, "0");
-    assert_eq!(os.introspect_child(0).unwrap().1.introspect_value(), "43");
-    assert_eq!(os.introspect_child(1).unwrap().0, "1");
-    assert_eq!(os.introspect_child(1).unwrap().1.introspect_value(), "32");
+    assert_eq!(os.introspect_child(0).unwrap().key(), "0");
+    assert_eq!(os.introspect_child(0).unwrap().val().introspect_value(), "43");
+    assert_eq!(os.introspect_child(1).unwrap().key(), "1");
+    assert_eq!(os.introspect_child(1).unwrap().val().introspect_value(), "32");
 }
 
 
