@@ -7,6 +7,7 @@
 #![feature(integer_atomics)]
 #![feature(const_generics)]
 #![deny(warnings)]
+#![deny(missing_docs)]
 
 /*!
 This is the documentation for `savefile`
@@ -484,6 +485,7 @@ fn main() {
 #[macro_use] 
 extern crate failure;
 
+/// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
 extern crate byteorder;
 extern crate alloc;
@@ -523,25 +525,60 @@ extern crate bit_vec;
 /// an item.
 #[derive(Debug, Fail)]
 #[must_use]
+#[non_exhaustive]
 pub enum SavefileError {
+
+    /// Error given when the schema stored in a file, does not match
+    /// the schema given by the data structures in the code, taking into account
+    /// versions.
     #[fail(display = "Incompatible schema detected: {}", message)]
     IncompatibleSchema {
+        /// A short description of the incompatibility
         message: String,
     },
+    /// Some sort of IO failure. Permissions, broken media etc ...
     #[fail(display = "IO Error: {}",io_error)]
-    IOError{io_error:std::io::Error},
+    IOError{
+        /// Cause
+        io_error:std::io::Error
+    },
+    /// The binary data which is being deserialized, contained an invalid utf8 sequence
+    /// where a String was expected. If this occurs, it is either a bug in savefile,
+    /// a bug in an implementation of Deserialize, Serialize or WithSchema, or
+    /// a corrupt data file.
     #[fail(display = "Invalid utf8 character {}",msg)]
-    InvalidUtf8{msg:String},
+    InvalidUtf8{
+        /// descriptive message
+        msg:String
+    },
+    /// Savefile failed to allocate enough memory. Either you have too little memory,
+    /// or the file is corrupt somehow.
     #[fail(display = "Out of memory: {}",err)]
-    OutOfMemory{err:std::alloc::AllocErr},
+    OutOfMemory{
+        /// Cause
+        err:std::alloc::AllocErr
+    },
+    /// Unexpected error with regards to memory layout requirements.
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
     MemoryAllocationLayoutError,
     #[fail(display = "Arrayvec: {}",msg)]
-    ArrayvecCapacityError{msg:String},
+    /// An Arrayvec had smaller capacity than the size of the data in the binary file.
+    ArrayvecCapacityError{
+        /// Descriptive message
+        msg:String
+    },
+    /// The reader returned fewer bytes than expected
     #[fail(display = "ShortRead")]
     ShortRead,
+    /// Cryptographic checksum mismatch. Probably due to a corrupt file.
     #[fail(display = "CryptographyError")]
     CryptographyError,
+    /// A persisted value of isize or usize was greater than the maximum for the machine.
+    /// This can happen if a file saved by a 64-bit machine contains an usize or isize which
+    /// does not fit in a 32 bit word.
+    #[fail(display = "SizeOverflow")]
+    SizeOverflow,
+
 }
 
 
@@ -551,6 +588,7 @@ pub enum SavefileError {
 /// and a file protocol version number.
 pub struct Serializer<'a> {
     writer: &'a mut dyn Write,
+    /// The version of the data structures in memory which are being serialized.
     pub version: u32,
 }
 
@@ -560,7 +598,9 @@ pub struct Serializer<'a> {
 /// current version number of the data structures in memory.
 pub struct Deserializer<'a> {
     reader: &'a mut dyn Read,
+    /// The version of the input file
     pub file_version: u32,
+    /// The version of the data structures in memory
     pub memory_version: u32,
 }
 
@@ -672,13 +712,19 @@ impl NonceSequence for RandomNonceSequence {
     }
 }
 
-
+/// A cryptographic stream wrapper.
+/// Wraps a plain dyn Write, and itself implements Write, encrypting
+/// all data written.
 pub struct CryptoWriter<'a> {
     writer : &'a mut dyn Write,
     buf: Vec<u8>,
     sealkey : SealingKey<RandomNonceSequence>,
     failed: bool
 }
+
+/// A cryptographic stream wrapper.
+/// Wraps a plain dyn Read, and itself implements Read, decrypting
+/// and verifying all data read.
 pub struct CryptoReader<'a> {
     reader : &'a mut dyn Read,
     buf: Vec<u8>,
@@ -687,6 +733,9 @@ pub struct CryptoReader<'a> {
 }
 
 impl<'a> CryptoReader<'a> {
+    /// Create a new CryptoReader, wrapping the given Read . Decrypts using the given
+    /// 32 byte cryptographic key.
+    /// Crypto is 256 bit AES GCM
     pub fn new(reader:&'a mut dyn Read, key_bytes: [u8;32]) -> Result<CryptoReader<'a>,SavefileError> {
 
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
@@ -712,6 +761,9 @@ impl<'a> Drop for CryptoWriter<'a> {
     }
 }
 impl<'a> CryptoWriter<'a> {
+    /// Create a new CryptoWriter, wrapping the given Write . Encrypts using the given
+    /// 32 byte cryptographic key.
+    /// Crypto is 256 bit AES GCM
     pub fn new(writer:&'a mut dyn Write, key_bytes: [u8;32]) -> Result<CryptoWriter<'a>,SavefileError> {
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
         let nonce_sequence = RandomNonceSequence::new();
@@ -724,6 +776,9 @@ impl<'a> CryptoWriter<'a> {
             failed: false
         })
     }
+    /// Data is encrypted in chunks. Calling this unconditionally finalizes a chunk, actually emitting
+    /// data to the underlying dyn Write. When later reading data, an entire chunk must be read
+    /// from file before any plaintext is produced.
     pub fn flush_final(mut self) -> Result<(),SavefileError> {
         if self.failed {
             panic!("Call to failed CryptoWriter");
@@ -827,58 +882,74 @@ impl<'a> Write for CryptoWriter<'a> {
 
 
 impl<'a> Serializer<'a> {
+    /// Writes a binary bool to the dyn Write
     pub fn write_bool(&mut self, v: bool)  -> Result<(),SavefileError> {
         Ok(self.writer.write_u8( if v {1} else {0})?)
     }
+    /// Writes a binary u8 to the dyn Write
     pub fn write_u8(&mut self, v: u8)  -> Result<(),SavefileError> {
         Ok(self.writer.write_all(&[v])?)
     }
+    /// Writes a binary i8 to the dyn Write
     pub fn write_i8(&mut self, v: i8) -> Result<(),SavefileError> {
         Ok(self.writer.write_i8(v)?)
     }
 
+    /// Writes a binary little endian u16 to the dyn Write
     pub fn write_u16(&mut self, v: u16) -> Result<(),SavefileError> {
         Ok(self.writer.write_u16::<LittleEndian>(v)?)
     }
+    /// Writes a binary little endian i16 to the dyn Write
     pub fn write_i16(&mut self, v: i16) -> Result<(),SavefileError> {
         Ok(self.writer.write_i16::<LittleEndian>(v)?)
     }
 
+    /// Writes a binary little endian u32 to the dyn Write
     pub fn write_u32(&mut self, v: u32) -> Result<(),SavefileError> {
         Ok(self.writer.write_u32::<LittleEndian>(v)?)
     }
+    /// Writes a binary little endian i32 to the dyn Write
     pub fn write_i32(&mut self, v: i32) -> Result<(),SavefileError> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
+    /// Writes a binary little endian f32 to the dyn Write
     pub fn write_f32(&mut self, v: f32) -> Result<(),SavefileError> {
         Ok(self.writer.write_f32::<LittleEndian>(v)?)
     }
+    /// Writes a binary little endian f64 to the dyn Write
     pub fn write_f64(&mut self, v: f64) -> Result<(),SavefileError> {
         Ok(self.writer.write_f64::<LittleEndian>(v)?)
     }
 
+    /// Writes a binary little endian u64 to the dyn Write
     pub fn write_u64(&mut self, v: u64) -> Result<(),SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
     }
+    /// Writes a binary little endian i64 to the dyn Write
     pub fn write_i64(&mut self, v: i64) -> Result<(),SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v)?)
     }
 
+    /// Writes a binary little endian usize as u64 to the dyn Write
     pub fn write_usize(&mut self, v: usize) -> Result<(),SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
     }
+    /// Writes a binary little endian isize as i64 to the dyn Write
     pub fn write_isize(&mut self, v: isize) -> Result<(),SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
     }
+    /// Writes a binary u8 array to the dyn Write
     pub fn write_buf(&mut self, v: &[u8]) -> Result<(),SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
+    /// Writes as a string as 64 bit length + utf8 data
     pub fn write_string(&mut self, v: &str) -> Result<(),SavefileError> {
         let asb = v.as_bytes();
         self.write_usize(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
+    /// Writes a binary u8 array to the dyn Write. Synonym of write_buf.
     pub fn write_bytes(&mut self, v: &[u8]) -> Result<(),SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
@@ -916,48 +987,70 @@ impl<'a> Serializer<'a> {
 }
 
 impl<'a> Deserializer<'a> {
+    /// Reads a u8 and return true if equal to 1
     pub fn read_bool(&mut self) -> Result<bool,SavefileError> {
         Ok(self.reader.read_u8()? == 1)
     }
+    /// Reads an u8
     pub fn read_u8(&mut self) -> Result<u8,SavefileError> {
         let mut buf = [0u8];
         self.reader.read_exact(&mut buf)?;
         Ok(buf[0])
     }
+    /// Reads a little endian u16
     pub fn read_u16(&mut self) -> Result<u16,SavefileError> {
         Ok(self.reader.read_u16::<LittleEndian>()?)
     }
+    /// Reads a little endian u32
     pub fn read_u32(&mut self) -> Result<u32,SavefileError> {
         Ok(self.reader.read_u32::<LittleEndian>()?)
     }
+    /// Reads a little endian u64
     pub fn read_u64(&mut self) -> Result<u64,SavefileError> {
         Ok(self.reader.read_u64::<LittleEndian>()?)
     }
 
+    /// Reads an i8
     pub fn read_i8(&mut self) -> Result<i8,SavefileError> {
         Ok(self.reader.read_i8()?)
     }
+    /// Reads a little endian i16
     pub fn read_i16(&mut self) -> Result<i16,SavefileError> {
         Ok(self.reader.read_i16::<LittleEndian>()?)
     }
+    /// Reads a little endian i32
     pub fn read_i32(&mut self) -> Result<i32,SavefileError> {
         Ok(self.reader.read_i32::<LittleEndian>()?)
     }
+    /// Reads a little endian i64
     pub fn read_i64(&mut self) -> Result<i64,SavefileError> {
         Ok(self.reader.read_i64::<LittleEndian>()?)
     }
+    /// Reads a little endian f32
     pub fn read_f32(&mut self) -> Result<f32,SavefileError> {
         Ok(self.reader.read_f32::<LittleEndian>()?)
     }
+    /// Reads a little endian f64
     pub fn read_f64(&mut self) -> Result<f64,SavefileError> {
         Ok(self.reader.read_f64::<LittleEndian>()?)
     }
+    /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
     pub fn read_isize(&mut self) -> Result<isize,SavefileError> {
-        Ok(self.reader.read_i64::<LittleEndian>()? as isize)
+        if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()? as isize) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
     }
+    /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
     pub fn read_usize(&mut self) -> Result<usize,SavefileError> {
-        Ok(self.reader.read_u64::<LittleEndian>()? as usize)
+        if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()? as usize) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
     }
+    /// Reads a 64 bit length followed by an utf8 encoded string. Fails if data is not valid utf8
     pub fn read_string(&mut self) -> Result<String,SavefileError> {
         let l = self.read_usize()?;
         let mut v = Vec::with_capacity(l);
@@ -965,13 +1058,17 @@ impl<'a> Deserializer<'a> {
         self.reader.read_exact(&mut v)?;
         Ok(String::from_utf8(v)?)
     }
+
+    /// Reads 'len' raw u8 bytes as a Vec<u8>
     pub fn read_bytes(&mut self, len:usize) -> Result<Vec<u8>,SavefileError> {
         let mut v = Vec::with_capacity(len);
         v.resize(len, 0); //TODO: Optimize this
         self.reader.read_exact(&mut v)?;
         Ok(v)        
     }
-    pub fn read_bytes_to_buf(&mut self, _len:usize, buf:&mut [u8]) -> Result<(),SavefileError> {
+    /// Reads raw u8 bytes into the given buffer. The buffer size must be
+    /// equal to the number of bytes desired to be read.
+    pub fn read_bytes_to_buf(&mut self, buf:&mut [u8]) -> Result<(),SavefileError> {
         self.reader.read_exact(buf)?;
         Ok(())        
     }
@@ -1154,12 +1251,24 @@ pub trait Serialize : WithSchema {
 
 }
 
+/// A child of an object implementing Introspect. Is a key-value pair. The only reason this is not
+/// simply (String, &dyn Introspect) is that Mutex wouldn't be introspectable in that case.
+/// Mutex needs something like (String, MutexGuard<T>). By having this a trait,
+/// different types can have whatever reference holder needed (MutexGuard, RefMut etc).
 pub trait IntrospectItem<'a> {
+    /// Should return a descriptive string for the given child. For structures,
+    /// this would be the field name, for instance.
     fn key(&self) -> &str;
+    /// The introspectable value of the child.
     fn val(&self) -> &dyn Introspect;
 }
 
+/// As a sort of guard against infinite loops, the default 'len'-implementation only
+/// ever iterates this many times. This is so that broken 'introspect_child'-implementations
+/// won't case introspect_len to iterate forever.
 pub const MAX_CHILDREN: usize = 10000;
+
+/// Gives the ability to look into an object, inspecting any children (fields).
 pub trait Introspect {
 
     /// Returns the value of the object, excluding children, as a string.
@@ -1214,7 +1323,9 @@ pub trait Deserialize : WithSchema + Sized {
 /// The name is just for diagnostics.
 #[derive(Debug,PartialEq)]
 pub struct Field {
+    /// Field name
     pub name : String,
+    /// Field type
     pub value : Box<Schema>
 }
 
@@ -1223,7 +1334,9 @@ pub struct Field {
 /// The dbg_name is just for diagnostics.
 #[derive(Debug,PartialEq)]
 pub struct SchemaArray {
+    /// Type of array elements
     pub item_type : Box<Schema>,
+    /// Length of array
     pub count: usize,
 }
 
@@ -1238,7 +1351,9 @@ impl SchemaArray {
 /// The dbg_name is just for diagnostics.
 #[derive(Debug,PartialEq)]
 pub struct SchemaStruct {
+    /// Diagnostic value
     pub dbg_name : String,
+    /// Fields of struct
     pub fields : Vec<Field>
 }
 fn maybe_add(a:Option<usize>,b:Option<usize>) -> Option<usize> {
@@ -1262,8 +1377,11 @@ impl SchemaStruct {
 /// without any padding.
 #[derive(Debug,PartialEq)]
 pub struct Variant {
+    /// Name of variant
     pub name : String,
+    /// Discriminator in binary file-format
     pub discriminator : u8,
+    /// Fields of variant
     pub fields : Vec<Field>
 }
 impl Variant {
@@ -1280,7 +1398,9 @@ impl Variant {
 /// the enum (the discriminator), is significant.
 #[derive(Debug, PartialEq)]
 pub struct SchemaEnum {
+    /// Diagnostic name
     pub dbg_name : String,
+    /// Variants of enum
     pub variants : Vec<Variant>
 }
 
@@ -1311,18 +1431,31 @@ impl SchemaEnum {
 #[allow(non_camel_case_types)]
 #[derive(Copy,Clone,Debug,PartialEq)]
 pub enum SchemaPrimitive {
+    /// i8
     schema_i8,
+    /// u8
     schema_u8,
+    /// i16
     schema_i16,
+    /// u16
     schema_u16,
+    /// i32
     schema_i32,
+    /// u32
     schema_u32,
+    /// i64
     schema_i64,
+    /// u64
     schema_u64,
+    /// string
     schema_string,
+    /// f32
     schema_f32,
+    /// f64
     schema_f64,
+    /// bool
     schema_bool,
+    /// canary
     schema_canary1,
 }
 impl SchemaPrimitive {
@@ -1400,6 +1533,7 @@ pub enum Schema {
 }
 
 impl Schema {
+    /// Create a 1-element tuple
     pub fn new_tuple1<T1:WithSchema>(version:u32) -> Schema {
         Schema::Struct(
             SchemaStruct {
@@ -1410,6 +1544,7 @@ impl Schema {
             })
     }
 
+    /// Create a 2-element tuple
     pub fn new_tuple2<T1:WithSchema,T2:WithSchema>(version:u32) -> Schema {
         Schema::Struct(
             SchemaStruct {
@@ -1420,6 +1555,7 @@ impl Schema {
                 ]
             })
     }
+    /// Create a 3-element tuple
     pub fn new_tuple3<T1:WithSchema,T2:WithSchema,T3:WithSchema>(version:u32) -> Schema {
         Schema::Struct(
             SchemaStruct {
@@ -1431,6 +1567,7 @@ impl Schema {
                 ]
             })
     }
+    /// Create a 4-element tuple
     pub fn new_tuple4<T1:WithSchema,T2:WithSchema,T3:WithSchema,T4:WithSchema>(version:u32) -> Schema {
         Schema::Struct(
             SchemaStruct {
@@ -1443,6 +1580,7 @@ impl Schema {
                 ]
             })
     }
+    /// Size
     pub fn serialized_size(&self) -> Option<usize> {
         match *self {
             Schema::Struct(ref schema_struct) => {
@@ -1937,6 +2075,7 @@ impl Deserialize for String {
     }
 }
 
+/// Type of single child of introspector for Mutex
 pub struct IntrospectItemMutex<'a,T> {
     g: MutexGuard<'a,T>,
 }
@@ -1985,6 +2124,7 @@ impl<T:Deserialize> Deserialize for Mutex<T> {
     }
 }
 
+/// Type of single child of introspector for RwLock
 pub struct IntrospectItemRwLock<'a,T> {
     g: RwLockReadGuard<'a,T>,
 }
@@ -2049,6 +2189,8 @@ impl<T:Deserialize> Deserialize for RwLock<T> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
+
+/// Standard child for Introspect trait. Simply owned key string and reference to dyn Introspect
 pub struct IntrospectItemSimple<'a> {
     key: String,
     val: &'a dyn Introspect
@@ -2063,6 +2205,8 @@ impl<'a> IntrospectItem<'a> for IntrospectItemSimple<'a> {
         self.val
     }
 }
+
+/// Create a default IntrospectItem with the given key and Introspect.
 pub fn introspect_item<'a>(key:String,val: &'a dyn Introspect) -> Box<dyn IntrospectItem<'a>+'a> {
     Box::new(IntrospectItemSimple {
         key: key,
@@ -2340,12 +2484,14 @@ impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
 }
 
 
+/// Helper struct which represents a field which has been removed
 #[derive(Debug, PartialEq)]
 pub struct Removed<T> {
     phantom: std::marker::PhantomData<T>,
 }
 
 impl<T> Removed<T> {
+    /// Helper to create an instance of Removed<T>. Removed<T> has no data.
     pub fn new() -> Removed<T> {
         Removed {
             phantom: std::marker::PhantomData,
@@ -3149,6 +3295,7 @@ use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::convert::TryFrom;
 
 impl<T:WithSchema> WithSchema for RefCell<T> {
     fn schema(version:u32) -> Schema {
@@ -3624,10 +3771,14 @@ impl Deserialize for AtomicIsize {
     }
 }
 
+/// Useful zero-sized marker. It serializes to a magic value,
+/// and verifies this value on deserialization. Does not consume memory
+/// data structure. Useful to troubleshoot broken Serialize/Deserialize implementations.
 #[derive(Clone,Copy,Eq,PartialEq,Default,Debug)]
 pub struct Canary1 {
 }
 impl Canary1 {
+    /// Create a new Canary1 object. Object has no contents.
     pub fn new() -> Canary1 {
         Canary1 {}
     }
@@ -3666,30 +3817,50 @@ impl WithSchema for Canary1 {
 }
 
 #[derive(Clone,Debug)]
-pub struct PathElement {
+struct PathElement {
     key: String,
     key_disambiguator: usize,
     max_children: usize,
 }
 
+/// A helper which allows navigating an introspected object.
+/// It remembers a path down into the guts of the object.
 #[derive(Clone,Debug)]
 pub struct Introspector {
     path: Vec<PathElement>,
     child_load_count: usize,
 }
 
+/// A command to navigate within an introspected object
 #[derive(Debug,PartialEq,Eq,Clone)]
 pub enum IntrospectorNavCommand {
+    /// Select the given object and expand its children.
+    /// Use this when you know the string name of the key you wish to expand.
     ExpandElement(IntrospectedElementKey),
-    SelectNth{select_depth:usize, select_index:usize},
+    /// Select the Nth object at the given depth in the tree.
+    /// Use this when you know the index of the field you wish to expand.
+    SelectNth{
+        /// Depth of item to select and expand
+        select_depth:usize,
+        /// Index of item to select and expand
+        select_index:usize
+    },
+    /// Don't navigate
     Nothing,
+    /// Navigate one level up
     Up,
 }
 
+/// Identifies an introspected element somewhere in the introspection tree
+/// of an object.
 #[derive(PartialEq,Eq,Clone)]
 pub struct IntrospectedElementKey {
+    /// Depth in the tree. Fields on top level struct are at depth 0.
     pub depth: usize,
+    /// The name of the field
     pub key: String,
+    /// If several fields have the same name, the key_disambiguator is 0 for the first field,
+    /// 1 for the next, etc.
     pub key_disambiguator: usize,
 }
 impl Default for IntrospectedElementKey {
@@ -3702,10 +3873,15 @@ impl Default for IntrospectedElementKey {
     }
 
 }
+
+/// A node in the introspection tree
 #[derive(PartialEq,Eq,Clone)]
 pub struct IntrospectedElement {
+    /// Identifying key
     pub key: IntrospectedElementKey,
+    /// Value of node
     pub value: String,
+    /// Flag which tells if there are children below this node
     pub has_children: bool,
 }
 
@@ -3729,26 +3905,41 @@ impl Display for IntrospectedElement {
 }
 
 
+/// Ways in which introspection may fail
 #[derive(Debug,PartialEq,Eq,Clone,Copy)]
 pub enum IntrospectionError {
+    /// The given depth value is invalid. At start of introspection,
+    /// max depth value is 0, and fields of the root object are introspected. If a field
+    /// is selected, a new level is expanded and max depth value is 1.
     BadDepth,
+    /// The given key was not found
     UnknownKey,
-    BadPath,
+    /// An attempt was made to select/expand a node which has no children.
     NoChildren,
+    /// An attempt was made to select/expand a child with an index greater or equal to the number of children.
     IndexOutOfRange,
+    /// An attempt was made to back up when already at the top.
     AlreadyAtTop
 
 }
 
+/// All fields at a specific depth in the introspection tree
 #[derive(Debug)]
 pub struct IntrospectionFrame {
+    /// The index of the expanded child, if any
     pub selected: Option<usize>,
+    /// All fields at this level
     pub keyvals: Vec<IntrospectedElement>,
+    /// True if there may have been more children, but expansion was stopped
+    /// because the limit given to the Introspector was reached.
     pub limit_reached: bool,
-}
 
+}
+/// An introspection tree. Note that each node in the tree can only have
+/// one expanded field, and thus at most one child (a bit of a boring 'tree' :-) ).
 #[derive(Debug)]
 pub struct IntrospectionResult {
+    /// The levels in the tree
     pub frames: Vec<IntrospectionFrame>,
 }
 
@@ -3828,12 +4019,16 @@ impl<'a> IntrospectItem<'a> for OuterIntrospectItem<'a> {
 
 impl Introspector {
 
+    /// Returns a new Introspector with no limit to the number of fields introspected per level
     pub fn new() -> Introspector {
         Introspector {
             path : vec![],
             child_load_count: std::usize::MAX
         }
     }
+    /// Returns a new Introspector which will not enumerate more than 'child_load_count'
+    /// elements on each level (useful for performance reasons to stop a 1 megabyte byte array
+    /// from overwhelming the user of the introspector).
     pub fn new_with(child_load_count:usize) -> Introspector {
         Introspector {
             path : vec![],
@@ -3841,6 +4036,7 @@ impl Introspector {
         }
     }
 
+    /// The current number of nodes in the tree.
     pub fn num_frames(&self) -> usize {
         self.path.len()
     }
@@ -3957,7 +4153,8 @@ impl Introspector {
         Ok(result_vec)
     }
 
-
+    /// Navigate the introspection tree using the given navigation_command, and also
+    /// return the tree as an IntrospectionResult.
     pub fn impl_get_frames<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
 
         match &navigation_command {
