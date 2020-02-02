@@ -6,7 +6,7 @@
 #![feature(core_intrinsics)]
 #![feature(integer_atomics)]
 #![feature(const_generics)]
-//#![deny(warnings)]
+#![deny(warnings)]
 
 /*!
 This is the documentation for `savefile`
@@ -490,7 +490,7 @@ extern crate alloc;
 extern crate arrayvec;
 extern crate smallvec;
 extern crate parking_lot;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 use parking_lot::{RwLock, RwLockReadGuard};
 use std::io::{Write, Error, ErrorKind};
 use std::io::Read;
@@ -1937,14 +1937,31 @@ impl Deserialize for String {
     }
 }
 
-impl<T:Introspect> Introspect for Mutex<T> {
-    fn introspect_value(&self) -> String {
-        compile_error!("Implement, copy pattern for RwLock");
-        format!("Mutex<{}> (un-inspectable)",std::any::type_name::<T>())
+pub struct IntrospectItemMutex<'a,T> {
+    g: MutexGuard<'a,T>,
+}
+
+impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a,T> {
+    fn key(&self) -> &str {
+        "0"
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        None
+    fn val(&self) -> &dyn Introspect {
+        self.g.deref()
+    }
+}
+
+impl<T:Introspect> Introspect for Mutex<T> {
+    fn introspect_value(&self) -> String {
+        format!("Mutex<{}>",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        if index == 0 {
+            Some(Box::new(IntrospectItemMutex{g:self.lock()}))
+        } else {
+            None
+        }
     }
 }
 
@@ -1967,73 +1984,11 @@ impl<T:Deserialize> Deserialize for Mutex<T> {
         Ok(Mutex::new(T::deserialize(deserializer)?))
     }
 }
-/*
-pub struct IntrospectItemRwLock<'a,T:Introspect+'a> {
-    g: RwLockReadGuard<'a,T>,
-    data: Option<Box<dyn IntrospectItem<'a> + 'a>>,
-}
-
-static FALLBACK :() = ();
-impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
-    fn key(&self) -> &str {
-        "RwLock"
-    }
-
-    fn val<'b>(&'b self) -> &'b dyn Introspect
-
-    {
-        unimplemented!();
-        //let _ = self.g.introspect_child(0);
-        /*
-        if let Some(r) = &self.data {
-            r.val()
-        } else {
-            &FALLBACK //This can only happen if lock contents change while we inspect things. We fallback to yield a () instead of crashing.
-        }
-        */
-
-        //&FALLBACK
-    }
-}
-
-*/
-/*
-pub trait RwLockable : Introspect {
-    type T;
-}
-
-impl<T> Introspect for RwLock<T> {
-    fn introspect_value(&self) -> String {
-        unimplemented!()
-    }
-
-    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<IntrospectItem<'a>>> {
-        unimplemented!()
-    }
-}
-
-impl<T1> RwLockable for RwLock<T1> {
-    type T = T1;
-}
-pub struct IntrospectItemRwLock<'a,T> {
-    g: RwLockReadGuard<'a,T>
-}
-impl<'a,R:RwLockable> IntrospectItem<'a> for IntrospectItemRwLock<R> {
-    fn key(&self) -> &str {
-        "0"
-    }
-
-    fn val(&self) -> &dyn Introspect {
-
-    }
-}
-use std::sync::{Arc};
-*/
 
 pub struct IntrospectItemRwLock<'a,T> {
     g: RwLockReadGuard<'a,T>,
 }
-static FALLBACK :() = ();
+
 impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
     fn key(&self) -> &str {
         "0"
@@ -2061,37 +2016,19 @@ impl<T:Introspect> Introspect for RwLock<T> {
         format!("RwLock<{}>",std::any::type_name::<T>())
     }
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-
-        Some(Box::new(IntrospectItemRwLock{
-            g:self.read()
-        }))
+        if index == 0 {
+            Some(Box::new(IntrospectItemRwLock{
+                g:self.read()
+            }))
+        } else {
+            None
+        }
     }
 
     fn introspect_len(&self) -> usize {
         1
     }
 }
-/*
-impl<A> Introspect for Arc<A> where
-        A:RwLockable,
-        A::T : Introspect {
-    fn introspect_value(&self) -> String {
-        format!("RwLock<{}>",std::any::type_name::<A::T>())
-    }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        if index != 0 {
-            return None;
-        }
-        Some(Box::new(IntrospectItemRwLock{
-            g:self.read()
-        }))
-    }
-
-    fn introspect_len(&self) -> usize {
-        0
-    }
-}
-*/
 
 
 impl<T:WithSchema> WithSchema for RwLock<T> {

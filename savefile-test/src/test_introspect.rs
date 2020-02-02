@@ -1,6 +1,6 @@
 use savefile::prelude::*;
 use savefile::{Introspector, IntrospectorNavCommand, IntrospectedElementKey, IntrospectionError};
-use parking_lot::RwLock;
+use parking_lot::{RwLock, Mutex};
 
 
 #[derive(Savefile)]
@@ -96,6 +96,27 @@ pub fn do_test_rwlock() {
     let subchild = temp2.val();
     assert_eq!(subchild.introspect_len(), 0);
     assert_eq!(subchild.introspect_value(), "342");
+
+}
+
+#[test]
+pub fn do_test_mutex() {
+    let test = Mutex::new(SimpleStruct {
+        item1: 343
+    });
+
+    let _x = (&test).introspect_value();
+
+    assert_eq!(test.introspect_len(), 1);
+    assert_eq!(test.introspect_child(0).unwrap().key(), "0");
+    assert_eq!(test.introspect_child(0).unwrap().val().introspect_value(), "SimpleStruct");
+
+    let temp = test.introspect_child(0).unwrap();
+    let temp2 = temp.val().introspect_child(0).unwrap();
+    assert_eq!(temp2.key(),"item1");
+    let subchild = temp2.val();
+    assert_eq!(subchild.introspect_len(), 0);
+    assert_eq!(subchild.introspect_value(), "343");
 
 }
 
