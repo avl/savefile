@@ -3941,7 +3941,10 @@ pub struct IntrospectionFrame {
 pub struct IntrospectionResult {
     /// The levels in the tree
     pub frames: Vec<IntrospectionFrame>,
+    cached_total_len: usize,
 }
+
+
 
 impl Display for IntrospectionResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -3950,6 +3953,46 @@ impl Display for IntrospectionResult {
 }
 
 impl IntrospectionResult {
+    /// Indexes the result with a single index, which will reach all levels in the tree.
+    /// Printing all elements in the order returned here, with indentation equal to
+    /// item.key.depth, will yield a readable tree.
+    pub fn total_index(&self, index:usize) -> Option<IntrospectedElement> {
+        let mut cur = 0;
+        self.total_index_impl(index, 0, &mut cur)
+    }
+    fn total_index_impl(&self, index:usize, depth:usize, cur: &mut usize) -> Option<IntrospectedElement> {
+
+        if depth >= self.frames.len() {
+            return None;
+        }
+        let frame = &self.frames[depth];
+        {
+            let mut offset = 0;
+            if let Some(selection) = frame.selected {
+                if index <= *cur + selection {
+                    return Some(frame.keyvals[index - *cur].clone());
+                }
+                *cur  += selection+1;
+                if let Some(result) = self.total_index_impl(index, depth+1, cur) {
+                    return Some(result);
+                }
+                offset = selection + 1;
+            }
+            if (index - *cur) + offset < frame.keyvals.len() {
+                return Some(frame.keyvals[(index - *cur) + offset].clone());
+            }
+            *cur += frame.keyvals.len() - offset;
+        }
+        return None;
+    }
+
+    /// The total number of nodes in the tree.
+    /// The value returns is the exclusive upper bound of valid
+    /// indexes to the 'total_index'-method.
+    pub fn total_len(&self) -> usize {
+        self.cached_total_len
+    }
+
     fn format_result_row(self:&IntrospectionResult, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
 
         if self.frames.len() == 0 {
@@ -4155,7 +4198,7 @@ impl Introspector {
 
     /// Navigate the introspection tree using the given navigation_command, and also
     /// return the tree as an IntrospectionResult.
-    pub fn impl_get_frames<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
+    pub fn do_introspect<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
 
         match &navigation_command {
             IntrospectorNavCommand::ExpandElement(_) => {},
@@ -4170,182 +4213,17 @@ impl Introspector {
         }
         let frames = self.dive(0, object, navigation_command)?;
 
+        let mut total = 0;
+        for frame in &frames {
+            total += frame.keyvals.len();
+        }
         let accum = IntrospectionResult {
-            frames: frames
+            frames: frames,
+            cached_total_len: total
         };
         Ok(accum)
     }
 
-/*
-    pub fn impl_get_frames<'c,'b:'c,'a:'b>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
-
-
-        let mut retval = Vec::new();
-        let mut key_disambig_map = HashMap::new();
-
-        let mut child_ref_stack: Vec<Box<dyn IntrospectItem<'b>+'b>> = Vec::new();
-        child_ref_stack.push(Box::new(OuterIntrospectItem{
-            key: "<top>".to_string(),
-            val: object
-        }));
-        let mut nav_command2 = Some(navigation_command);
-        /*
-        let iter_a = self.path.iter().cloned().map(|x|Some(x));
-        let iter_b = [None].iter().cloned();
-        let mut frame_iterator = iter_a.chain(iter_b).enumerate();
-        */
-        let mut idx = 0;
-        loop  {
-
-            if idx <= self.path.len()
-            {
-                if idx < child_ref_stack.len() {
-
-                    let maybe_key = if idx<self.path.len() { Some(&self.path[idx]) } else { None };
-                    let mut cur_row = IntrospectionFrame {
-                        selected: None,
-                        keyvals: Vec::new(),
-                        limit_reached: false
-                    };
-                    let mut child_references:Vec<Box<dyn IntrospectItem<'c>+'c>>  = Vec::new();
-                    key_disambig_map.clear();
-                    let mut next_child :Option<usize> = None;
-
-                    let mut field = 0;
-
-                    loop {
-                        if let Some(key_childref) = child_ref_stack[idx].val().introspect_child(field) {
-                            //let key_childref : Box<dyn IntrospectItem<'b>+'b> = unimplemented!();
-                            let key = key_childref.key();
-                            //let childref = key_childref.val();
-
-                            let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
-
-                            child_references.push(key_childref);
-                            if let Some(path_element) = maybe_key {
-                                if key == path_element.key {
-                                    if path_element.key_disambiguator == *disambig_counter {
-                                        next_child = Some(child_references.len()-1);//Some(key_childref);
-                                        cur_row.selected = Some(field);
-                                    }
-                                }
-
-                            }
-                            let has_children = key_childref.val().introspect_child(0).is_some();
-                            cur_row.keyvals.push(IntrospectedElement{
-                                key:IntrospectedElementKey{key:key.to_string(),depth:idx,key_disambiguator: *disambig_counter},
-                                value:key_childref.val().introspect_value(), has_children});
-                            *disambig_counter += 1;
-                        } else {
-                            break;
-                        }
-                        field += 1;
-                        let limit;
-                        if let Some(path_element) = maybe_key {
-                              limit = path_element.max_children;
-                        } else {
-                            limit = self.child_load_count;
-                        }
-                        if field >= limit {
-                            cur_row.limit_reached = true;
-                            break;
-                        }
-                    }
-
-                    retval.push(cur_row);
-                    idx+=1;
-                    if let Some(next_child_obj) = next_child {
-                        let key_childref  = child_references.remove(next_child_obj);
-                        child_ref_stack.push(key_childref);
-                    }
-                } else {
-                    retval.push(IntrospectionFrame {
-                        selected: None,
-                        keyvals: Vec::new(),
-                        limit_reached: false
-                    });
-                    idx+=1;
-
-                }
-
-
-            } else {
-                if let Some(nav_command) = nav_command2.take() {
-                    match nav_command {
-                        IntrospectorNavCommand::Nothing => {
-                        }
-                        IntrospectorNavCommand::Up => {
-                            if self.path.pop().is_none() {
-                                return Err(IntrospectionError::AlreadyAtTop);
-                            }
-                            retval.pop();
-                        }
-                        IntrospectorNavCommand::SelectNth(index) => {
-                            if retval.len() != self.path.len() + 1 {
-                                return Err(IntrospectionError::BadPath);
-                            }
-                            debug_assert_eq!(retval.len(), idx);
-
-                            if let Some(last) = retval.last() {
-                                if last.keyvals.len() == 0 {
-                                    return Err(IntrospectionError::NoChildren);
-                                }
-                                if let Some(col) = last.keyvals.get(index) {
-                                    self.path.push(PathElement {
-                                        key:col.key.key.clone(),
-                                        key_disambiguator:col.key.key_disambiguator,
-                                        max_children: self.child_load_count
-                                    });
-                                    idx = retval.len() - 1;
-                                    retval.pop().unwrap();
-                                } else {
-                                    return Err(IntrospectionError::IndexOutOfRange);
-                                }
-                            } else {
-                                unreachable!("There's always a last frame");
-                            }
-                            continue;
-                        }
-                        IntrospectorNavCommand::ExpandElement(new_key) => {
-                            if new_key.depth >= retval.len() {
-                                return Err(IntrospectionError::BadDepth);
-                            }
-                            let mut found = false;
-                            for item in &retval[new_key.depth].keyvals {
-                                if item.key == new_key {
-                                    self.path.drain(new_key.depth..);
-                                    assert!(self.path.len() >= new_key.depth);
-                                    self.path.push(
-                                        PathElement {
-                                            key:new_key.key.clone(),
-                                            key_disambiguator:new_key.key_disambiguator,
-                                            max_children: self.child_load_count
-                                        }
-                                    );
-                                    idx = self.path.len() - 1;
-                                    child_ref_stack.drain(idx+1 ..);
-                                    retval.drain(idx..);
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if !found {
-                                return Err(IntrospectionError::UnknownKey);
-                            }
-                            continue;
-                        },
-                    }
-                }
-                break;
-            }
-
-        }
-
-
-
-        Ok(IntrospectionResult{frames:retval})
-    }
-    */
 
 }
 

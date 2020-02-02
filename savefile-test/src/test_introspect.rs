@@ -222,8 +222,18 @@ pub fn test_introspector_simple_case() {
     println!("Base introspector : {:?}",base_introspector);
 
     let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
+    println!("Result: {:?}",result);
     assert_eq!(result.frames.len(),2);
-
+    assert_eq!(result.total_len(), 4);
+    assert_eq!(result.total_index(0).unwrap().key.key, "simple1");
+    assert_eq!(result.total_index(0).unwrap().value, "SimpleStruct");
+    assert_eq!(result.total_index(1).unwrap().key.key, "item1");
+    assert_eq!(result.total_index(1).unwrap().value, "37");
+    assert_eq!(result.total_index(2).unwrap().key.key, "simple2");
+    assert_eq!(result.total_index(2).unwrap().value, "SimpleStruct");
+    assert_eq!(result.total_index(3).unwrap().key.key, "an_int");
+    assert_eq!(result.total_index(3).unwrap().value, "4");
+    assert_eq!(result.total_index(4),None);
 
     {
         let mut introspector = base_introspector.clone();
