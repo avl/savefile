@@ -17,6 +17,8 @@ use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
 extern crate arrayvec;
+extern crate parking_lot;
+
 mod test_versioning;
 mod test_introspect;
 mod test_nested_non_repr_c;
@@ -209,11 +211,13 @@ pub struct BenchStruct {
     pad4:u32,
 }
 
+#[cfg(not(miri))]
 use test::{Bencher, black_box};
 
 
 
 #[bench]
+#[cfg(not(miri))]
 fn bench_savefile_serialize(b: &mut Bencher) {
 
     let mut f = Cursor::new(Vec::with_capacity(100));
@@ -247,6 +251,7 @@ fn bench_savefile_serialize(b: &mut Bencher) {
 }
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_bench_struct() {
     assert_roundtrip(
         vec![
@@ -274,10 +279,41 @@ pub fn test_bench_struct() {
                 z:black_box(3),
                 pad1:0,pad2:0,pad3:0,pad4:0,
             }
-            ]
-        );
+        ]
+    );
 }
 
+#[test]
+pub fn test_bench_struct_miri_compat() {
+    assert_roundtrip(
+        vec![
+            BenchStruct {
+                x:1,
+                y:2,
+                z:3,
+                pad1:0,pad2:0,pad3:0,pad4:0,
+            },
+            BenchStruct {
+                x:4,
+                y:5,
+                z:6,
+                pad1:0,pad2:0,pad3:0,pad4:0,
+            },
+            BenchStruct {
+                x:7,
+                y:8,
+                z:9,
+                pad1:0,pad2:0,pad3:0,pad4:0,
+            },
+            BenchStruct {
+                x:10,
+                y:11,
+                z:12,
+                pad1:0,pad2:0,pad3:0,pad4:0,
+            }
+        ]
+    );
+}
 #[test]
 pub fn test_u16_vec() {
     assert_roundtrip(Vec::<u16>::new());
@@ -684,6 +720,7 @@ pub fn test_canary1() {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto1() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -708,6 +745,7 @@ pub fn test_crypto1() {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto_big1() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -735,6 +773,7 @@ pub fn test_crypto_big1() {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto_big2() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -774,6 +813,7 @@ pub fn test_crypto_big2() {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto_big3() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -813,6 +853,7 @@ pub fn test_crypto_big3() {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto_big4() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -850,6 +891,7 @@ pub fn test_crypto_big4() {
     }
 }
 #[test]
+#[cfg(not(miri))]
 pub fn test_crypto_big5() {
     use byteorder::{LittleEndian};
     use byteorder::WriteBytesExt;
@@ -922,6 +964,7 @@ pub fn test_crypto_big5() {
 }
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_encrypted_file1() {
     save_encrypted_file("test.bin",1,&47usize,"mypassword").unwrap();
     let result : usize = load_encrypted_file("test.bin",1,"mypassword").unwrap();
@@ -929,6 +972,7 @@ pub fn test_encrypted_file1() {
 }
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_encrypted_file_bad_password() {
     save_encrypted_file("test2.bin",1,&47usize,"mypassword").unwrap();
     let result = load_encrypted_file::<usize>("test2.bin",1,"mypassword2");
@@ -936,6 +980,7 @@ pub fn test_encrypted_file_bad_password() {
 }
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_decrypt_junk_file() {
     {
         use std::fs::File;

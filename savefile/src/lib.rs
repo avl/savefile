@@ -491,7 +491,7 @@ extern crate arrayvec;
 extern crate smallvec;
 extern crate parking_lot;
 use parking_lot::Mutex;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, RwLockReadGuard};
 use std::io::{Write, Error, ErrorKind};
 use std::io::Read;
 use std::fs::File;
@@ -1966,20 +1966,132 @@ impl<T:Deserialize> Deserialize for Mutex<T> {
         Ok(Mutex::new(T::deserialize(deserializer)?))
     }
 }
+/*
+pub struct IntrospectItemRwLock<'a,T:Introspect+'a> {
+    g: RwLockReadGuard<'a,T>,
+    data: Option<Box<dyn IntrospectItem<'a> + 'a>>,
+}
 
-impl<T:Introspect> Introspect for RwLock<T> {
-    fn introspect_value(&self) -> String {
-        format!("RwLock<{}>(non-introspectable)",std::any::type_name::<T>())
+static FALLBACK :() = ();
+impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
+    fn key(&self) -> &str {
+        "RwLock"
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        None
+    fn val<'b>(&'b self) -> &'b dyn Introspect
+
+    {
+        unimplemented!();
+        //let _ = self.g.introspect_child(0);
+        /*
+        if let Some(r) = &self.data {
+            r.val()
+        } else {
+            &FALLBACK //This can only happen if lock contents change while we inspect things. We fallback to yield a () instead of crashing.
+        }
+        */
+
+        //&FALLBACK
+    }
+}
+
+*/
+/*
+pub trait RwLockable : Introspect {
+    type T;
+}
+
+impl<T> Introspect for RwLock<T> {
+    fn introspect_value(&self) -> String {
+        unimplemented!()
+    }
+
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<IntrospectItem<'a>>> {
+        unimplemented!()
+    }
+}
+
+impl<T1> RwLockable for RwLock<T1> {
+    type T = T1;
+}
+pub struct IntrospectItemRwLock<'a,T> {
+    g: RwLockReadGuard<'a,T>
+}
+impl<'a,R:RwLockable> IntrospectItem<'a> for IntrospectItemRwLock<R> {
+    fn key(&self) -> &str {
+        "0"
+    }
+
+    fn val(&self) -> &dyn Introspect {
+
+    }
+}
+use std::sync::{Arc};
+*/
+
+pub struct IntrospectItemRwLock<'a,T> {
+    g: RwLockReadGuard<'a,T>,
+}
+static FALLBACK :() = ();
+impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
+    fn key(&self) -> &str {
+        "0"
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        self.g.deref()
+    }
+}
+impl<T:Introspect> Introspect for Arc<T> {
+    default fn introspect_value(&self) -> String {
+        format!("Arc({})",self.deref().introspect_value())
+    }
+
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        self.deref().introspect_child(index)
+    }
+
+    default fn introspect_len(&self) -> usize {
+        self.deref().introspect_len()
+    }
+}
+impl<T:Introspect> Introspect for RwLock<T> {
+    fn introspect_value(&self) -> String {
+        format!("RwLock<{}>",std::any::type_name::<T>())
+    }
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+
+        Some(Box::new(IntrospectItemRwLock{
+            g:self.read()
+        }))
+    }
+
+    fn introspect_len(&self) -> usize {
+        1
+    }
+}
+/*
+impl<A> Introspect for Arc<A> where
+        A:RwLockable,
+        A::T : Introspect {
+    fn introspect_value(&self) -> String {
+        format!("RwLock<{}>",std::any::type_name::<A::T>())
+    }
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        if index != 0 {
+            return None;
+        }
+        Some(Box::new(IntrospectItemRwLock{
+            g:self.read()
+        }))
     }
 
     fn introspect_len(&self) -> usize {
         0
     }
 }
+*/
+
 
 impl<T:WithSchema> WithSchema for RwLock<T> {
     fn schema(version:u32) -> Schema {
@@ -2829,10 +2941,10 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
             };
 
             {
-                let ptr = data.as_ptr();
-                let num_bytes = std::mem::size_of::<T>() * N;
-                let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
-                deserializer.reader.read_exact(slice)?;
+                let ptr = data.as_mut_ptr();
+                let num_bytes:usize = std::mem::size_of::<T>() * N;
+                let slice: &mut [MaybeUninit<u8>] = unsafe { std::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, num_bytes) };
+                deserializer.reader.read_exact(unsafe{std::mem::transmute(slice)})?;
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
@@ -3077,21 +3189,6 @@ impl<T:Deserialize> Deserialize for Rc<T> {
 }
 
 
-use std::sync::Arc;
-
-impl<T:Introspect> Introspect for Arc<T> {
-    fn introspect_value(&self) -> String {
-        format!("Arc({})",self.deref().introspect_value())
-    }
-
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        self.deref().introspect_child(index)
-    }
-
-    fn introspect_len(&self) -> usize {
-        self.deref().introspect_len()
-    }
-}
 
 impl<T:WithSchema> WithSchema for Arc<T> {
     fn schema(version:u32) -> Schema {
@@ -3113,6 +3210,7 @@ use std::cell::RefCell;
 use std::cell::Cell;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 impl<T:WithSchema> WithSchema for RefCell<T> {
     fn schema(version:u32) -> Schema {
@@ -3629,14 +3727,14 @@ impl WithSchema for Canary1 {
     }    
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct PathElement {
     key: String,
     key_disambiguator: usize,
     max_children: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Introspector {
     path: Vec<PathElement>,
     child_load_count: usize,
@@ -3645,7 +3743,7 @@ pub struct Introspector {
 #[derive(Debug,PartialEq,Eq,Clone)]
 pub enum IntrospectorNavCommand {
     ExpandElement(IntrospectedElementKey),
-    SelectNth(usize),
+    SelectNth{select_depth:usize, select_index:usize},
     Nothing,
     Up,
 }
@@ -3809,9 +3907,9 @@ impl Introspector {
         self.path.len()
     }
 
-    fn dive<'a>(&mut self, depth:usize, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand, accum: &mut IntrospectionResult) -> Result<(),IntrospectionError> {
+    fn dive<'a>(&mut self, depth:usize, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<Vec<IntrospectionFrame>,IntrospectionError> {
 
-        compile_error!("Test this new stuff!");
+        let mut result_vec = Vec::new();
         let mut navigation_command = Some(navigation_command);
         let mut cur_path = self.path.get(depth).cloned();
         let mut index = 0;
@@ -3824,31 +3922,41 @@ impl Introspector {
 
         let mut do_select_nth = None;
 
+        let mut err_if_key_not_found = false;
         if let Some(navigation_command) = navigation_command.as_ref() {
             match navigation_command {
                 IntrospectorNavCommand::ExpandElement(elem) => {
-
-                },
-                IntrospectorNavCommand::SelectNth(nth) => {
-                    if depth == self.path.len() {
-                        do_select_nth = Some(*nth);
-                        return Ok(());
+                    if elem.depth > self.path.len() {
+                        return Err(IntrospectionError::BadDepth);
                     }
-
+                    if depth == elem.depth {
+                        self.path.drain(depth..);
+                        self.path.push(PathElement {
+                            key: elem.key.clone(),
+                            key_disambiguator: elem.key_disambiguator,
+                            max_children: self.child_load_count
+                        });
+                        cur_path = self.path.get(depth).cloned();
+                        err_if_key_not_found = true;
+                    }
+                },
+                IntrospectorNavCommand::SelectNth{select_depth,select_index} => {
+                    if depth == *select_depth {
+                        println!("set dosn: {}",*select_index);
+                        do_select_nth = Some(*select_index);
+                    }
                 },
                 IntrospectorNavCommand::Nothing => {
 
                 },
                 IntrospectorNavCommand::Up => {
-                    if depth + 1 == self.path.len() {
-                        self.path.pop();
-                        return Ok(());
-                    }
                 },
             }
         }
 
         loop {
+
+
             if let Some(child_item) = object.introspect_child(index) {
                 let key:String = child_item.key().into();
                 let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
@@ -3869,20 +3977,25 @@ impl Introspector {
                         key_disambiguator: *disambig_counter,
                         max_children: self.child_load_count
                     });
-
+                    do_select_nth = None;
                     cur_path = self.path.last().cloned();
                 }
 
                 if let Some(cur_path_obj) = &cur_path {
                     if row.selected.is_none() && cur_path_obj.key == key && cur_path_obj.key_disambiguator == *disambig_counter {
                         if has_children {
-                            self.dive(depth+1, child_item.val(), navigation_command.take().unwrap(), accum)?;
+                            let mut subresult = self.dive(depth+1, child_item.val(), navigation_command.take().unwrap())?;
+                            debug_assert_eq!(result_vec.len(), 0);
+                            std::mem::swap(&mut result_vec, &mut subresult);
                         }
                         row.selected = Some(index);
                     }
                 }
 
+
                 *disambig_counter += 1;
+            } else {
+                break;
             }
 
             index+=1;
@@ -3891,18 +4004,40 @@ impl Introspector {
                 break;
             }
         }
-        accum.frames.push(row);
-        Err(IntrospectionError::BadDepth)
+        println!("dosn: {:?}",do_select_nth);
+        if do_select_nth.is_some() {
+            if index == 0 {
+                return Err(IntrospectionError::NoChildren);
+            }
+            return Err(IntrospectionError::IndexOutOfRange);
+        }
+        if err_if_key_not_found && row.selected.is_none() {
+            self.path.pop().unwrap();
+            return Err(IntrospectionError::UnknownKey);
+        }
+        result_vec.insert(0, row);
+        Ok(result_vec)
     }
 
 
-    pub fn new_get_frames<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
+    pub fn impl_get_frames<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
 
-        let mut accum = IntrospectionResult {
-            frames: vec![]
+        match &navigation_command {
+            IntrospectorNavCommand::ExpandElement(_) => {},
+            IntrospectorNavCommand::SelectNth{..} => {},
+            IntrospectorNavCommand::Nothing => {},
+            IntrospectorNavCommand::Up => {
+                if self.path.len() == 0 {
+                    return Err(IntrospectionError::AlreadyAtTop);
+                }
+                self.path.pop();
+            },
+        }
+        let frames = self.dive(0, object, navigation_command)?;
+
+        let accum = IntrospectionResult {
+            frames: frames
         };
-        self.dive(0, object, navigation_command,&mut accum)?;
-
         Ok(accum)
     }
 

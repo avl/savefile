@@ -1005,6 +1005,9 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
     //let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
     //let fields1=quote_spanned! { defspan => fields1 };
     let index1=quote_spanned! { defspan => index };
+    let introspect_item = quote_spanned! {defspan=>
+        _savefile::prelude::introspect_item
+    };
 
     let mut fields = Vec::new();
     let mut fields_names = Vec::new();
@@ -1023,7 +1026,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 fieldname = quote! {&self.#idd};
                 fieldname_raw = quote!{#idd};
             }
-            fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
+            fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
             fields_names.push(fieldname_raw);
 
         } else {
@@ -1034,7 +1037,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 let raw_fieldname = id.to_string();
                 fieldname = id; //field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
 
             } else {
@@ -1043,7 +1046,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 let raw_fieldname = idx.to_string();
                 fieldname = Ident::new(&format!("v{}",idx),span);
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
 
             }
@@ -1068,6 +1071,9 @@ fn introspect(input: DeriveInput) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
     let introspect = quote_spanned! {defspan=>
         _savefile::prelude::Introspect
+    };
+    let introspect_item_type = quote_spanned! {defspan=>
+        _savefile::prelude::IntrospectItem
     };
     let uses = quote_spanned! { defspan =>
             extern crate savefile as _savefile;
@@ -1193,7 +1199,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
-                        fn introspect_child(&self, index:usize) -> Option<Box<dyn IntrospectItem+'_>> {
+                        fn introspect_child(&self, index:usize) -> Option<Box<dyn #introspect_item_type+'_>> {
                             match self {
                                 #(#variants,)*
                             }
@@ -1255,7 +1261,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
-                        fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+                        fn introspect_child(&self, index: usize) -> Option<Box<dyn #introspect_item_type+'_>> {
                             #(#fields1;)*
                             return None;
                         }

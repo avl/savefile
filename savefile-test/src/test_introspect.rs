@@ -1,5 +1,6 @@
 use savefile::prelude::*;
 use savefile::{Introspector, IntrospectorNavCommand, IntrospectedElementKey, IntrospectionError};
+use parking_lot::RwLock;
 
 
 #[derive(Savefile)]
@@ -77,6 +78,26 @@ pub fn do_test1() {
 
 }
 
+#[test]
+pub fn do_test_rwlock() {
+    let test = RwLock::new(SimpleStruct {
+        item1: 342
+    });
+
+    let _x = (&test).introspect_value();
+
+    assert_eq!(test.introspect_len(), 1);
+    assert_eq!(test.introspect_child(0).unwrap().key(), "0");
+    assert_eq!(test.introspect_child(0).unwrap().val().introspect_value(), "SimpleStruct");
+
+    let temp = test.introspect_child(0).unwrap();
+    let temp2 = temp.val().introspect_child(0).unwrap();
+    assert_eq!(temp2.key(),"item1");
+    let subchild = temp2.val();
+    assert_eq!(subchild.introspect_len(), 0);
+    assert_eq!(subchild.introspect_value(), "342");
+
+}
 
 #[test]
 pub fn func_to_do_stuff() {
@@ -90,6 +111,56 @@ pub fn func_to_do_stuff() {
     assert_eq!(os.introspect_child(1).unwrap().val().introspect_value(), "32");
 }
 
+
+#[test]
+pub fn test_introspect_no_children() {
+    let mut base_introspector = Introspector::new();
+    assert_eq!(base_introspector.impl_get_frames(&0u32, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}
+    ).unwrap_err(),IntrospectionError::NoChildren);
+}
+#[test]
+pub fn test_introspector_simpler_case0() {
+    let comp = ComplexStruct {
+        simple1: SimpleStruct {
+            item1: 37
+        },
+        simple2: SimpleStruct {
+            item1: 38
+        },
+        an_int: 4
+    };
+
+    let mut base_introspector = Introspector::new();
+
+    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
+    assert_eq!(result.frames.len(),2);
+
+}
+#[test]
+pub fn test_introspector_simpler_case1() {
+    let comp = ComplexStruct {
+        simple1: SimpleStruct {
+            item1: 37
+        },
+        simple2: SimpleStruct {
+            item1: 38
+        },
+        an_int: 4
+    };
+
+    let mut base_introspector = Introspector::new();
+
+    let result = base_introspector.impl_get_frames(&comp,
+                                                   IntrospectorNavCommand::ExpandElement(
+                                                       IntrospectedElementKey {
+                                                           key_disambiguator: 0,
+                                                           key: "simple2".to_string(),
+                                                           depth: 0,
+                                                       }
+                                                   )).unwrap();
+    assert_eq!(result.frames.len(),2);
+
+}
 
 #[test]
 pub fn test_introspector_simple_case() {
@@ -110,7 +181,7 @@ pub fn test_introspector_simple_case() {
 
 
         assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::Up).unwrap_err(),IntrospectionError::AlreadyAtTop);
-        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth(3)).unwrap_err(),IntrospectionError::IndexOutOfRange);
+        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:3}).unwrap_err(),IntrospectionError::IndexOutOfRange);
         assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
             IntrospectedElementKey{
                 key: "simple1".into(),
@@ -126,14 +197,11 @@ pub fn test_introspector_simple_case() {
             }
         )).unwrap_err(),IntrospectionError::UnknownKey);
 
-        assert_eq!(base_introspector.impl_get_frames(&0u32, IntrospectorNavCommand::SelectNth(
-            0
-        )).unwrap_err(),IntrospectionError::NoChildren);
     }
+    println!("Base introspector : {:?}",base_introspector);
 
-    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth(0)).unwrap();
+    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
     assert_eq!(result.frames.len(),2);
-
 
 
     {
@@ -141,8 +209,10 @@ pub fn test_introspector_simple_case() {
         let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing).unwrap();
         assert_eq!(result.frames.len(),2);
 
+        println!("Result debug: {:?}", result);
         let disp = format!("{}",result);
 
+        println!("Distp: {:?}",disp);
         assert!(disp.contains ("*simple1 = SimpleStruct"));
         assert!(disp.contains (">simple2 = SimpleStruct"));
         assert!(disp.contains ("   item1 = 37"));
@@ -205,8 +275,8 @@ pub fn test_introspector_deeply_nested_case() {
     let mut introspector = Introspector::new();
 
 
-    let _ = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth(0)).unwrap();
-    let result = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth(0)).unwrap();
+    let _ = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
+    let result = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
     assert_eq!(result.frames[0].keyvals[0].key.key,"a");
     assert_eq!(result.frames[0].keyvals[1].key.key,"b");
     assert_eq!(result.frames[0].keyvals[2].key.key,"c");
