@@ -1939,6 +1939,7 @@ impl Deserialize for String {
 
 impl<T:Introspect> Introspect for Mutex<T> {
     fn introspect_value(&self) -> String {
+        compile_error!("Implement, copy pattern for RwLock");
         format!("Mutex<{}> (un-inspectable)",std::any::type_name::<T>())
     }
 
