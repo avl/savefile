@@ -29,6 +29,7 @@ struct AttrsResult {
     default_fn: Option<syn::Ident>,
     default_val: Option<TokenStream>,
     deserialize_types : Vec<VersionRange>,
+    introspect_key: bool
 }
 
 fn check_is_remove(field_type: &syn::Type) -> bool {
@@ -72,6 +73,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     let mut default_fn = None;
     let mut default_val = None;
     let mut ignore = false;
+    let mut introspect_key = false;
     let mut deser_types = Vec::new();
     for attr in attrs.iter() {
         if let Some(ref meta) = attr.interpret_meta() {
@@ -80,7 +82,9 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     if x.to_string() == "savefile_ignore" {
                         ignore=true;
                     }
-
+                    if x.to_string() == "savefile_introspect_key" {
+                        introspect_key=true;
+                    }
                 }
                 &syn::Meta::List(ref _x) => {
 
@@ -241,7 +245,8 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
         default_fn: default_fn,
         default_val: default_val,
         ignore: ignore,
-        deserialize_types : deser_types
+        deserialize_types : deser_types,
+        introspect_key
     }
 }
 
@@ -594,7 +599,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
     output
 }
 
-#[proc_macro_derive(Savefile, attributes(savefile_versions, savefile_versions_as, savefile_ignore, savefile_default_val, savefile_default_fn))]
+#[proc_macro_derive(Savefile, attributes(savefile_versions, savefile_versions_as, savefile_introspect_key, savefile_ignore, savefile_default_val, savefile_default_fn))]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -997,7 +1002,7 @@ pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[allow(non_snake_case)]
-fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<TokenStream>,Vec<TokenStream>) {
+fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<TokenStream>,Vec<TokenStream>, Option<TokenStream>) {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
@@ -1011,8 +1016,15 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
     let mut fields = Vec::new();
     let mut fields_names = Vec::new();
-
+    let mut introspect_key = None;
     for (idx,ref field) in field_infos.iter().enumerate() {
+
+        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        if verinfo.introspect_key {
+            if (introspect_key.is_some()) {
+                panic!("Type had more than one field with savefile_introspect_key - attribute");
+            }
+        }
         if need_self {
 
             let fieldname;
@@ -1027,9 +1039,17 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 fieldname_raw = quote!{#idd};
             }
             fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
+            if verinfo.introspect_key {
+                let fieldname_raw2 = fieldname_raw.clone();
+                introspect_key = Some(quote!{self.#fieldname_raw2});
+            }
             fields_names.push(fieldname_raw);
 
+
         } else {
+            if verinfo.introspect_key {
+                panic!("savefile_introspect_key not supported in this context. This is not a fundamental limitation, it may be lifted in the future.");
+            }
 
             if let Some(id) = field.ident.clone() {
                 let fieldname ;
@@ -1048,14 +1068,14 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
                 quoted_fieldname = quote! { #fieldname };
                 fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
-
             }
+
         }
 
 
     }
 
-    (fields_names,fields)
+    (fields_names,fields, introspect_key)
 }
 
 
@@ -1115,7 +1135,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                                 attrs:&f.attrs
                             });
                         };
-                        let (fields_names,fields) = implement_introspect(field_infos, false);
+                        let (fields_names,fields,introspect_key) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
                         let num_fields = fields_names3.len();
@@ -1144,7 +1164,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                                 attrs:&f.attrs
                             });
                         };
-                        let (fields_names,fields) = implement_introspect(field_infos, false);
+                        let (fields_names,fields, introspect_key) = implement_introspect(field_infos, false);
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
                         let num_fields = fields_names3.len();
@@ -1243,11 +1263,18 @@ fn introspect(input: DeriveInput) -> TokenStream {
                     fields = implement_introspect(field_infos, true);
                 }
                 &syn::Fields::Unit => {
-                    fields=(Vec::new(),Vec::new());
+                    fields=(Vec::new(),Vec::new(),None);
                 }
             }
             let fields1 = fields.1;
+            let introspect_key:Option<TokenStream> = fields.2;
             let field_count = fields1.len();
+            let value_name;
+            if let Some(introspect_key) = introspect_key {
+                value_name = quote!{ #introspect_key.to_string()};
+            } else {
+                value_name = quote! { stringify!(#name).to_string() };
+            }
             quote! {
                 #[allow(non_upper_case_globals)]
                 const #dummy_const: () = {
@@ -1257,7 +1284,7 @@ fn introspect(input: DeriveInput) -> TokenStream {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
                         fn introspect_value(&self) -> String {
-                            stringify!(#name).to_string()
+                            #value_name
                         }
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]

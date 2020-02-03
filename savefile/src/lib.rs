@@ -3883,6 +3883,8 @@ pub struct IntrospectedElement {
     pub value: String,
     /// Flag which tells if there are children below this node
     pub has_children: bool,
+    /// Flag which tells if this child is selected
+    pub selected: bool,
 }
 
 impl Debug for IntrospectedElementKey {
@@ -4135,7 +4137,8 @@ impl Introspector {
 
 
             if let Some(child_item) = object.introspect_child(index) {
-                let key:String = child_item.key().into();
+                let key : String = child_item.key().into();
+
                 let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
                 let has_children = child_item.val().introspect_child(0).is_some();
                 row.keyvals.push(IntrospectedElement {
@@ -4145,7 +4148,8 @@ impl Introspector {
                         key_disambiguator: *disambig_counter
                     },
                     value: child_item.val().introspect_value(),
-                    has_children
+                    has_children,
+                    selected: false
                 });
 
                 if Some(index) == do_select_nth {
@@ -4160,12 +4164,13 @@ impl Introspector {
 
                 if let Some(cur_path_obj) = &cur_path {
                     if row.selected.is_none() && cur_path_obj.key == key && cur_path_obj.key_disambiguator == *disambig_counter {
+                        row.selected = Some(index);
+                        row.keyvals.last_mut().unwrap().selected = true;
                         if has_children {
                             let mut subresult = self.dive(depth+1, child_item.val(), navigation_command.take().unwrap())?;
                             debug_assert_eq!(result_vec.len(), 0);
                             std::mem::swap(&mut result_vec, &mut subresult);
                         }
-                        row.selected = Some(index);
                     }
                 }
 

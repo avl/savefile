@@ -30,7 +30,21 @@ pub struct ComplexStruct {
     an_int: u32
 }
 
-
+#[derive(Savefile)]
+pub struct StructWithName {
+    #[savefile_introspect_key]
+    name: String,
+    value: String
+}
+#[test]
+pub fn test_simple_with_key() {
+    let val1 = StructWithName {
+        name: "Apple".into(),
+        value: "Orange".into()
+    };
+    assert_eq!(val1.introspect_len(), 2);
+    assert_eq!(val1.introspect_value(), "Apple");
+}
 
 #[test]
 pub fn test_simple_enum() {
@@ -136,7 +150,7 @@ pub fn func_to_do_stuff() {
 #[test]
 pub fn test_introspect_no_children() {
     let mut base_introspector = Introspector::new();
-    assert_eq!(base_introspector.impl_get_frames(&0u32, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}
+    assert_eq!(base_introspector.do_introspect(&0u32, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}
     ).unwrap_err(),IntrospectionError::NoChildren);
 }
 #[test]
@@ -153,8 +167,13 @@ pub fn test_introspector_simpler_case0() {
 
     let mut base_introspector = Introspector::new();
 
-    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
+    let result = base_introspector.do_introspect(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
     assert_eq!(result.frames.len(),2);
+    let result = base_introspector.do_introspect(&comp, IntrospectorNavCommand::SelectNth{select_depth:1,select_index:0}).expect("Leafs should also be selectable");
+
+    assert_eq!(result.frames.len(),2);
+    assert_eq!(result.frames[1].keyvals[0].selected,true);
+
 
 }
 #[test]
@@ -171,7 +190,7 @@ pub fn test_introspector_simpler_case1() {
 
     let mut base_introspector = Introspector::new();
 
-    let result = base_introspector.impl_get_frames(&comp,
+    let result = base_introspector.do_introspect(&comp,
                                                    IntrospectorNavCommand::ExpandElement(
                                                        IntrospectedElementKey {
                                                            key_disambiguator: 0,
@@ -198,19 +217,19 @@ pub fn test_introspector_simple_case() {
     let mut base_introspector = Introspector::new();
 
     {
-        base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing).unwrap();
+        base_introspector.do_introspect(&comp, IntrospectorNavCommand::Nothing).unwrap();
 
 
-        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::Up).unwrap_err(),IntrospectionError::AlreadyAtTop);
-        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:3}).unwrap_err(),IntrospectionError::IndexOutOfRange);
-        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+        assert_eq!(base_introspector.do_introspect(&comp, IntrospectorNavCommand::Up).unwrap_err(),IntrospectionError::AlreadyAtTop);
+        assert_eq!(base_introspector.do_introspect(&comp, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:3}).unwrap_err(),IntrospectionError::IndexOutOfRange);
+        assert_eq!(base_introspector.do_introspect(&comp, IntrospectorNavCommand::ExpandElement(
             IntrospectedElementKey{
                 key: "simple1".into(),
                 key_disambiguator: 0,
                 depth: 1
             }
         )).unwrap_err(),IntrospectionError::BadDepth);
-        assert_eq!(base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+        assert_eq!(base_introspector.do_introspect(&comp, IntrospectorNavCommand::ExpandElement(
             IntrospectedElementKey{
                 key: "simple3".into(),
                 key_disambiguator: 0,
@@ -221,7 +240,7 @@ pub fn test_introspector_simple_case() {
     }
     println!("Base introspector : {:?}",base_introspector);
 
-    let result = base_introspector.impl_get_frames(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
+    let result = base_introspector.do_introspect(&comp, IntrospectorNavCommand::SelectNth{select_depth:0,select_index:0}).unwrap();
     println!("Result: {:?}",result);
     assert_eq!(result.frames.len(),2);
     assert_eq!(result.total_len(), 4);
@@ -237,7 +256,7 @@ pub fn test_introspector_simple_case() {
 
     {
         let mut introspector = base_introspector.clone();
-        let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::Nothing).unwrap();
+        let result = introspector.do_introspect(&comp, IntrospectorNavCommand::Nothing).unwrap();
         assert_eq!(result.frames.len(),2);
 
         println!("Result debug: {:?}", result);
@@ -250,13 +269,13 @@ pub fn test_introspector_simple_case() {
         assert!(!disp.contains("   item1 = 38")); //Not expanded
         assert!(disp.contains (" an_int = 4"));
 
-        let result3 = introspector.impl_get_frames(&comp,IntrospectorNavCommand::Up).unwrap();
+        let result3 = introspector.do_introspect(&comp,IntrospectorNavCommand::Up).unwrap();
         assert_eq!(result3.frames.len(),1);
     }
 
     {
         let mut introspector = base_introspector.clone();
-        let result = introspector.impl_get_frames(&comp, IntrospectorNavCommand::ExpandElement(
+        let result = introspector.do_introspect(&comp, IntrospectorNavCommand::ExpandElement(
             IntrospectedElementKey{
                 depth: 0,
                 key: "simple2".to_string(),
@@ -306,8 +325,8 @@ pub fn test_introspector_deeply_nested_case() {
     let mut introspector = Introspector::new();
 
 
-    let _ = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
-    let result = introspector.impl_get_frames(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
+    let _ = introspector.do_introspect(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
+    let result = introspector.do_introspect(&sample, IntrospectorNavCommand::SelectNth{select_depth:0, select_index:0}).unwrap();
     assert_eq!(result.frames[0].keyvals[0].key.key,"a");
     assert_eq!(result.frames[0].keyvals[1].key.key,"b");
     assert_eq!(result.frames[0].keyvals[2].key.key,"c");
