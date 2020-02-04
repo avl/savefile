@@ -328,7 +328,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "savefile"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "arrayvec 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -338,13 +338,13 @@ dependencies = [
  "parking_lot 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ring 0.16.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "savefile-derive 0.4.2",
+ "savefile-derive 0.5.0",
  "smallvec 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "savefile-derive"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)",

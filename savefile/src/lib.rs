@@ -490,6 +490,9 @@ through the trait [Introspect](crate::Introspect). Any type implementing this ca
 
 The savefile-derive crate supports automatically generating an implementation for most types.
 
+The introspection is purely 'read only'. There is no provision for using the framework to mutate
+data.
+
 Here is an example of using the trait directly:
 
 
