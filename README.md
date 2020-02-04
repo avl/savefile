@@ -17,6 +17,12 @@ It is provided here as open source in the hope that it may prove useful to other
 there are no guarantees and there may be bugs!
 
 
+Cargo.toml:
+````
+savefile="0.5.0"
+savefile-derive="0.5.0"
+````
+
 # Sample 
 
 ```rust
