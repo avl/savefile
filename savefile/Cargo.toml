@@ -31,7 +31,6 @@ indexmap ="1.0"
 parking_lot= { version = "0.5" }
 ring = "0.16.9"
 rand="0.7"
-rental="0.5"
 
 [dev-dependencies]
 savefile-derive = { path = "../savefile-derive", version="0.4.0" }

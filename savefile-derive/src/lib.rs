@@ -1,7 +1,5 @@
 #![recursion_limit="128"]
 
-//#![feature(proc_macro)]
-
 extern crate proc_macro;
 
 extern crate proc_macro2;
@@ -1021,7 +1019,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
         if verinfo.introspect_key {
-            if (introspect_key.is_some()) {
+            if introspect_key.is_some() {
                 panic!("Type had more than one field with savefile_introspect_key - attribute");
             }
         }
@@ -1047,27 +1045,34 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
 
         } else {
-            if verinfo.introspect_key {
-                panic!("savefile_introspect_key not supported in this context. This is not a fundamental limitation, it may be lifted in the future.");
-            }
 
             if let Some(id) = field.ident.clone() {
                 let fieldname ;
                 let quoted_fieldname;
                 let raw_fieldname = id.to_string();
+                let id2 = id.clone();
                 fieldname = id; //field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
                 quoted_fieldname = quote! { #fieldname };
                 fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
+                if verinfo.introspect_key {
+                    introspect_key = Some(quote!(#id2))
+                }
+
 
             } else {
                 let fieldname ;
                 let quoted_fieldname;
                 let raw_fieldname = idx.to_string();
                 fieldname = Ident::new(&format!("v{}",idx),span);
+                let fieldname2 = fieldname.clone();
                 quoted_fieldname = quote! { #fieldname };
                 fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
+                if verinfo.introspect_key {
+                    introspect_key = Some(quote!(#fieldname2))
+                }
+
             }
 
         }
@@ -1125,7 +1130,8 @@ fn introspect(input: DeriveInput) -> TokenStream {
 
                 let mut field_infos=Vec::new();
 
-                let return_value_name = format!("{}::{}",name,var_ident.to_string());
+                let return_value_name_str = format!("{}::{}",name,var_ident.to_string());
+                let return_value_name = quote!(#return_value_name_str);
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         for f in fields_named.named.iter() {
@@ -1136,17 +1142,27 @@ fn introspect(input: DeriveInput) -> TokenStream {
                             });
                         };
                         let (fields_names,fields,introspect_key) = implement_introspect(field_infos, false);
+                        let fields_names1 = fields_names.clone();
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
                         let num_fields = fields_names3.len();
-                        variants.push(
-                            quote!( #name::#variant_name_spanned{#(#fields_names,)*} => {
-                                #(#fields;)*
-                            } )
-                        );
-                        value_variants.push(
-                            quote!( #name::#variant_name_spanned{#(#fields_names2,)*} => {
+                        if let Some(introspect_key) = introspect_key {
+                            value_variants.push(
+                                quote!(#name::#variant_name_spanned{#(#fields_names,)*} => {
+                                    #introspect_key.to_string()
+                                }
+                                ));
+                        } else {
+                            value_variants.push(
+                                quote!( #name::#variant_name_spanned{#(#fields_names2,)*} => {
                                 #return_value_name.to_string()
+                            } )
+                            );
+
+                        }
+                        variants.push(
+                            quote!( #name::#variant_name_spanned{#(#fields_names1,)*} => {
+                                #(#fields;)*
                             } )
                         );
                         len_variants.push(
@@ -1165,15 +1181,24 @@ fn introspect(input: DeriveInput) -> TokenStream {
                             });
                         };
                         let (fields_names,fields, introspect_key) = implement_introspect(field_infos, false);
+                        let fields_names1 = fields_names.clone();
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
                         let num_fields = fields_names3.len();
 
+                        if let Some(introspect_key) = introspect_key {
+                            value_variants.push(
+                                quote!( #name::#variant_name_spanned(#(#fields_names1,)*) => {
+                                        #introspect_key.to_string()
+                                }));
+                        } else {
+                            value_variants.push(
+                                quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => #return_value_name.to_string() )
+                            );
+                        }
+
                         variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names,)*) => { #(#fields;)* } )
-                        );
-                        value_variants.push(
-                            quote!( #name::#variant_name_spanned(#(#fields_names2,)*) => #return_value_name.to_string() )
                         );
                         len_variants.push(
                             quote!( #name::#variant_name_spanned(#(#fields_names3,)*) => {

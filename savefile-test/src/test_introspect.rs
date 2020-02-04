@@ -36,7 +36,32 @@ pub struct StructWithName {
     name: String,
     value: String
 }
+
+#[derive(Savefile)]
+pub enum EnumWithName {
+    Variant1(
+        #[savefile_introspect_key]
+        String
+    ),
+    Variant2{#[savefile_introspect_key] name:String, value: String},
+    Variant3
+}
+
 #[test]
+pub fn test_simple_enum_with_key() {
+    let var1 = EnumWithName::Variant1("Hejsan".into());
+    let var2 = EnumWithName::Variant2 { name:"James".into(), value: "IV".into() };
+    let var3 = EnumWithName::Variant3;
+    assert_eq!(var1.introspect_len(), 1);
+    assert_eq!(var2.introspect_len(), 2);
+    assert_eq!(var3.introspect_len(), 0);
+    assert_eq!(var1.introspect_value(), "Hejsan");
+    assert_eq!(var2.introspect_value(), "James");
+    assert_eq!(var3.introspect_value(), "EnumWithName::Variant3");
+
+}
+
+    #[test]
 pub fn test_simple_with_key() {
     let val1 = StructWithName {
         name: "Apple".into(),
@@ -45,6 +70,7 @@ pub fn test_simple_with_key() {
     assert_eq!(val1.introspect_len(), 2);
     assert_eq!(val1.introspect_value(), "Apple");
 }
+
 
 #[test]
 pub fn test_simple_enum() {
@@ -198,6 +224,7 @@ pub fn test_introspector_simpler_case1() {
                                                            depth: 0,
                                                        }
                                                    )).unwrap();
+
     assert_eq!(result.frames.len(),2);
 
 }

@@ -118,7 +118,7 @@ fn main() {
 # Behind the scenes
 
 For Savefile to be able to load and save a type T, that type must implement traits 
-[savefile::WithSchema], [savefile::Serialize] and [savefile::Deserialize] . The custom derive macro Savefile derives
+[crate::WithSchema], [crate::Serialize] and [crate::Deserialize] . The custom derive macro Savefile derives
 all of these.
 
 You can also implement these traits manually. Manual implementation can be good for:
@@ -135,17 +135,17 @@ by the WithSchema trait for the type.
 
 ## WithSchema
 
-The [savefile::WithSchema] trait represents a type which knows which data layout it will have
+The [crate::WithSchema] trait represents a type which knows which data layout it will have
 when saved. 
 
 ## Serialize
 
-The [savefile::Serialize] trait represents a type which knows how to write instances of itself to
+The [crate::Serialize] trait represents a type which knows how to write instances of itself to
 a `Serializer`.
 
 ## Deserialize
 
-The [savefile::Deserialize] trait represents a type which knows how to read instances of itself from a `Deserializer`.
+The [crate::Deserialize] trait represents a type which knows how to read instances of itself from a `Deserializer`.
 
 
 
@@ -164,7 +164,7 @@ The Serialize trait implementation only needs to support the latest version.
 The derive macro used by Savefile supports multiple versions of structs. To make this work,
 you have to add attributes whenever fields are removed, added or have their types changed.
 
-When adding or removing fields, use the #[savefile_versions] attribute.
+When adding or removing fields, use the #\[savefile_versions] attribute.
 
 The syntax is one of the following:
 
@@ -182,7 +182,7 @@ Savefile tries to validate that the `Removed<T>` type is used correctly. This va
 matching, so it may trigger false positives for other types named Removed. Please avoid using a type with
 such a name. If this becomes a problem, please file an issue on github.
 
-Using the #[savefile_versions] tag is critically important. If this is messed up, data corruption is likely.
+Using the #\[savefile_versions] tag is critically important. If this is messed up, data corruption is likely.
 
 When a field is added, its type must implement the Default trait (unless the default_val or default_fn attributes
 are used).
@@ -191,7 +191,7 @@ There also exists a savefile_default_val, a default_fn and a savefile_versions_a
 
 ## The versions attribute
 
-Rules for using the #[savefile_versions] attribute:
+Rules for using the #\[savefile_versions] attribute:
 
  * You must keep track of what the current version of your data is. Let's call this version N.
  * You may only save data using version N (supply this number when calling `save`)
@@ -199,13 +199,13 @@ Rules for using the #[savefile_versions] attribute:
    still adapt the deserialization operation to the version of the serialized data.
  * The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version. 
  * Whenever changes to the data are to be made, the global version number N must be increased.
- * You may add a new field to your structs, iff you also give it a #[savefile_versions = "N.."] attribute. N must be the new version of your data.
- * You may remove a field from your structs. If previously it had no #[savefile_versions] attribute, you must
-   add a #[savefile_versions = "..N-1"] attribute. If it already had an attribute #[savefile_versions = "M.."], you must close
-   its version interval using the current version of your data: #[savefile_versions = "M..N-1"]. Whenever a field is removed,
+ * You may add a new field to your structs, iff you also give it a #\[savefile_versions = "N.."] attribute. N must be the new version of your data.
+ * You may remove a field from your structs. If previously it had no #\[savefile_versions] attribute, you must
+   add a #\[savefile_versions = "..N-1"] attribute. If it already had an attribute #[savefile_versions = "M.."], you must close
+   its version interval using the current version of your data: #\[savefile_versions = "M..N-1"]. Whenever a field is removed,
    its type must simply be changed to Removed<T> where T is its previous type. You may never completely remove 
    items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
-   For example, if you remove a field in version 3, you should add a #[savefile_versions="..2"] attribute.
+   For example, if you remove a field in version 3, you should add a #\[savefile_versions="..2"] attribute.
  * You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
 
 
@@ -378,7 +378,7 @@ so that we can provide a instant-replay function to our game. The list can becom
 really long, so we want to make sure that the overhead when serializing this is
 as low as possible.
 
-Savefile has an unsafe trait [savefile::ReprC] that you can implement for a type T. This instructs
+Savefile has an unsafe trait [crate::ReprC] that you can implement for a type T. This instructs
 Savefile to optimize serialization of Vec<T> into being a very fast, raw memory copy.
 
 This is dangerous. You, as implementor of the `ReprC` trait take full responsibility
@@ -391,10 +391,10 @@ that all the following rules are upheld:
  * The type is represented in memory in an ordered, packed representation. Savefile is not
  clever enough to inspect the actual memory layout and adapt to this, so the memory representation
  has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
- that the #[repr(C)] trait does not do this - it will include padding if needed for alignment
- reasons. You should not use #[repr(packed)], since that may lead to unaligned struct fields.
- Instead, you should use #[repr(C)] combined with manual padding, if necessary.
- * If the type is an enum, it must be #[repr(u8)] .
+ that the #\[repr(C)] trait does not do this - it will include padding if needed for alignment
+ reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
+ Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
+ * If the type is an enum, it must be #\[repr(u8)] .
 
 For example, don't do:
 ```
@@ -432,7 +432,7 @@ struct Bad2 {
 This restriction may be lifted at a later time.
 
 Note that having a struct with bad alignment will be detected, at runtime, for debug-builds. It may not be
-detected in release builds. Serializing or deserializing each [savefile::ReprC] struct at least once somewhere in your test suite
+detected in release builds. Serializing or deserializing each [crate::ReprC] struct at least once somewhere in your test suite
 is recommended.
 
 
@@ -479,6 +479,158 @@ fn main() {
 	save_player("newersave.bin", &player);
 }
 ```
+
+
+
+
+# Introspection
+
+The Savefile crate also provides an introspection feature, meant for diagnostics. This is implemented
+through the trait [Introspect](crate::Introspect). Any type implementing this can be introspected.
+
+The savefile-derive crate supports automatically generating an implementation for most types.
+
+Here is an example of using the trait directly:
+
+
+````rust
+extern crate savefile;
+#[macro_use]
+extern crate savefile_derive;
+use savefile::Introspect;
+use savefile::IntrospectItem;
+#[derive(Savefile)]
+struct Weight {
+    value: u32,
+    unit: String
+}
+#[derive(Savefile)]
+struct Person {
+    name : String,
+    age: u16,
+    weight: Weight,
+}
+fn main() {
+    let a_person = Person {
+        name: "Leo".into(),
+        age: 8,
+        weight: Weight { value: 26, unit: "kg".into() }
+    };
+    assert_eq!(a_person.introspect_len(), 3); //There are three fields
+    assert_eq!(a_person.introspect_value(), "Person"); //Value of structs is the struct type, per default
+    assert_eq!(a_person.introspect_child(0).unwrap().key(), "name"); //Each child has a name and a value. The value is itself a &dyn Introspect, and can be introspected recursively
+    assert_eq!(a_person.introspect_child(0).unwrap().val().introspect_value(), "Leo"); //In this case, the child (name) is a simple string with value "Leo".
+    assert_eq!(a_person.introspect_child(1).unwrap().key(), "age");
+    assert_eq!(a_person.introspect_child(1).unwrap().val().introspect_value(), "8");
+    assert_eq!(a_person.introspect_child(2).unwrap().key(), "weight");
+    let weight = a_person.introspect_child(2).unwrap();
+    assert_eq!(weight.val().introspect_child(0).unwrap().key(), "value"); //Here the child 'weight' has an introspectable weight obj as value
+    assert_eq!(weight.val().introspect_child(0).unwrap().val().introspect_value(), "26");
+    assert_eq!(weight.val().introspect_child(1).unwrap().key(), "unit");
+    assert_eq!(weight.val().introspect_child(1).unwrap().val().introspect_value(), "kg");
+}
+````
+
+## Introspect Details
+
+By using #\[derive(SavefileIntrospectOnly)] it is possible to have only the Introspect-trait implemented,
+and not the serialization traits. This can be useful for types which aren't possible to serialize,
+but you still wish to have introspection for.
+
+By using the #\[savefile_introspect_key] attribute on a field, it is possible to make the
+generated [crate::Introspect::introspect_value] return the string representation of the field.
+This can be useful, to have the primary key (name) of an object more prominently visible in the
+introspection output.
+
+Example:
+
+````rust
+# extern crate savefile;
+# #[macro_use]
+# extern crate savefile_derive;
+# use savefile::prelude::*;
+
+#[derive(Savefile)]
+pub struct StructWithName {
+    #[savefile_introspect_key]
+    name: String,
+    value: String
+}
+# fn main(){}
+````
+
+## Higher level introspection functions
+
+There is a helper called [crate::Introspector] which allows to get a structured representation
+of parts of an introspectable object. The Introspector has a 'path' which looks in to the
+introspection tree and shows values for this tree. The advantage of using this compared to
+just using ```format!("{:#?}",mystuff)``` is that for very large data structures, unconditionally
+dumping all data may be unwieldy. The author has a state struct which becomes hundres of megabytes
+when formatted using the Debug-trait in this way.
+
+An example:
+````rust
+
+extern crate savefile;
+#[macro_use]
+extern crate savefile_derive;
+use savefile::Introspect;
+use savefile::IntrospectItem;
+use savefile::prelude::*;
+#[derive(Savefile)]
+struct Weight {
+    value: u32,
+    unit: String
+}
+#[derive(Savefile)]
+struct Person {
+    name : String,
+    age: u16,
+    weight: Weight,
+}
+fn main() {
+    let a_person = Person {
+        name: "Leo".into(),
+        age: 8,
+        weight: Weight { value: 26, unit: "kg".into() }
+    };
+
+    let mut introspector = Introspector::new();
+
+    let result = introspector.do_introspect(&a_person,
+        IntrospectorNavCommand::SelectNth{select_depth:0, select_index: 2}).unwrap();
+
+    println!("{}",result);
+    /*
+    Output is:
+
+Introspectionresult:
+ name = Leo
+ age = 8
+*weight = Weight
+   value = 26
+   unit = kg
+
+    */
+    // Note, that there is no point in using the Introspection framework just to get
+    // a debug output like above, the point is that for larger data structures, the
+    // introspection data can be programmatically used and shown in a live updating GUI,
+    // or possibly command line interface or similar. The [crate::IntrospectionResult] does
+    // implement Display, but this is just for convenience.
+
+}
+
+
+````
+
+## Navigating using the Introspector
+
+The [crate::Introspector] object can be used to navigate inside an object being introspected.
+A GUI-program could allow an operator to use arrow keys to navigate the introspected object.
+
+Every time [crate::Introspector::do_introspect] is called, a [crate::IntrospectorNavCommand] is given
+which can traverse the tree downward or upward. In the example in the previous chapter,
+SelectNth is used to select the 2nd children at the 0th level in the tree.
 
 */
 
@@ -955,12 +1107,12 @@ impl<'a> Serializer<'a> {
     }
 
     /// Creata a new serializer.
-    /// Don't use this function directly, use the [savefile::save] function instead.
+    /// Don't use this function directly, use the [crate::save] function instead.
     pub fn save<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,true)?)
     }
     /// Creata a new serializer.
-    /// Don't use this function directly, use the [savefile::save_noschema] function instead.
+    /// Don't use this function directly, use the [crate::save_noschema] function instead.
     pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
         Ok(Self::save_impl(writer,version,data,false)?)
     }
@@ -979,7 +1131,7 @@ impl<'a> Serializer<'a> {
     }
 
     /// Create a Serializer.
-    /// Don't use this method directly, use the [savefile::save] function
+    /// Don't use this method directly, use the [crate::save] function
     /// instead.
     pub fn new_raw(writer: &mut dyn Write) -> Serializer {
         Serializer { writer, version:0 }
@@ -1074,13 +1226,13 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Deserialize an object of type T from the given reader.
-    /// Don't use this method directly, use the [savefile::load] function
+    /// Don't use this method directly, use the [crate::load] function
     /// instead.
     pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,true)
     }
     /// Deserialize an object of type T from the given reader.
-    /// Don't use this method directly, use the [savefile::load_noschema] function
+    /// Don't use this method directly, use the [crate::load_noschema] function
     /// instead.
     pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,false)
@@ -1115,7 +1267,7 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Create a Deserializer.
-    /// Don't use this method directly, use the [savefile::load] function
+    /// Don't use this method directly, use the [crate::load] function
     /// instead.
     pub fn new_raw(reader: &mut dyn Read) -> Deserializer {
         Deserializer {
@@ -1141,7 +1293,7 @@ pub fn save<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: 
     Serializer::save::<T>(writer,version,data)
 }
 
-/// Like [savefile::load] , but used to open files saved without schema,
+/// Like [crate::load] , but used to open files saved without schema,
 /// by one of the _noschema versions of the save functions.
 pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
     Deserializer::load_noschema::<T>(reader,version)
@@ -1160,35 +1312,35 @@ pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u3
     Serializer::save_noschema::<T>(writer,version,data)
 }
 
-/// Like [savefile::load] , except it deserializes from the given file in the filesystem.
+/// Like [crate::load] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
 pub fn load_file<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load::<T>(&mut f, version)
 }
 
-/// Like [savefile::save] , except it opens a file on the filesystem and writes
+/// Like [crate::save] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
 pub fn save_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
     let mut f = File::create(filepath)?;
     Serializer::save::<T>(&mut f,version,data)
 }
 
-/// Like [savefile::load_noschema] , except it deserializes from the given file in the filesystem.
+/// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
 pub fn load_file_noschema<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load_noschema::<T>(&mut f,version)
 }
 
-/// Like [savefile::save_noschema] , except it opens a file on the filesystem and writes
+/// Like [crate::save_noschema] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
 pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
     let mut f = File::create(filepath)?;
     Serializer::save_noschema::<T>(&mut f,version,data)
 }
 
-/// Like [savefile::save_file], except encrypts the data with AES256, using the SHA256 hash
+/// Like [crate::save_file], except encrypts the data with AES256, using the SHA256 hash
 /// of the password as key.
 pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T, password: &str) -> Result<(),SavefileError> {
     use ring::{digest};
@@ -1207,8 +1359,8 @@ pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, 
 }
 
 
-/// Like [savefile::load_file], except it expects the file to be an encrypted file previously stored using
-/// [savefile::save_encrypted_file].
+/// Like [crate::load_file], except it expects the file to be an encrypted file previously stored using
+/// [crate::save_encrypted_file].
 pub fn load_encrypted_file<T:WithSchema+Deserialize>(filepath:&str, version: u32, password: &str) -> Result<T,SavefileError> {
     use ring::{digest};
     let actual = digest::digest(&digest::SHA256, password.as_bytes());
@@ -1244,7 +1396,7 @@ pub trait WithSchema {
 /// `#[macro_use]
 /// extern crate savefile-derive;`
 ///
-/// and the use #[derive(Serialize)]
+/// and the use #\[derive(Serialize)]
 pub trait Serialize : WithSchema {
     /// Serialize self into the given serializer.
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError>; //TODO: Do error handling
@@ -1289,7 +1441,8 @@ pub trait Introspect {
     fn introspect_child<'a>(&'a self, index:usize) -> Option<Box<dyn IntrospectItem<'a>+'a>>;
 
     /// Returns the total number of children.
-    /// The default implementation simply tries higher and higher numbers.
+    /// The default implementation calculates this by simply calling introspect_child with
+    /// higher and higher indexes until it returns None.
     /// It gives up if the count reaches 10000. If your type can be bigger
     /// and you want to be able to introspect it, override this method.
     fn introspect_len(&self) -> usize {
@@ -1311,7 +1464,7 @@ pub trait Introspect {
 /// `#[macro_use]
 /// extern crate savefile-derive;`
 ///
-/// and the use #[derive(Deserialize)]
+/// and the use #\[derive(Deserialize)]
 pub trait Deserialize : WithSchema + Sized {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError>;  //TODO: Do error handling
