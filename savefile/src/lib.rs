@@ -732,6 +732,18 @@ pub enum SavefileError {
     /// does not fit in a 32 bit word.
     #[fail(display = "SizeOverflow")]
     SizeOverflow,
+    #[fail(display = "WrongVersion: {}",msg)]
+    /// The file does not have a supported version number
+    WrongVersion{
+        /// Descriptive message
+        msg:String
+    },
+    #[fail(display = "GeneralError: {}",msg)]
+    /// The file does not have a supported version number
+    GeneralError{
+        /// Descriptive message
+        msg:String
+    },
 
 }
 
@@ -1207,6 +1219,12 @@ impl<'a> Deserializer<'a> {
     /// Reads a 64 bit length followed by an utf8 encoded string. Fails if data is not valid utf8
     pub fn read_string(&mut self) -> Result<String,SavefileError> {
         let l = self.read_usize()?;
+        #[cfg(feature = "size_sanity_checks")]
+        {
+                if l > 1_000_000 {
+                return Err(SavefileError::GeneralError {msg:format!("String too large")});
+            }
+        }
         let mut v = Vec::with_capacity(l);
         v.resize(l, 0); //TODO: Optimize this
         self.reader.read_exact(&mut v)?;
@@ -1242,10 +1260,11 @@ impl<'a> Deserializer<'a> {
     fn load_impl<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
         let file_ver = reader.read_u32::<LittleEndian>()?;
         if file_ver > version {
-            panic!(
-                "File has later version ({}) than structs in memory ({}).",
-                file_ver, version
-            );
+            return Err(SavefileError::WrongVersion {
+                msg:
+                format!("File has later version ({}) than structs in memory ({}).",
+                        file_ver, version)
+            });
         }
 
         if fetch_schema
@@ -2104,7 +2123,7 @@ impl Deserialize for SchemaPrimitive {
             11 => SchemaPrimitive::schema_f64,
             12 => SchemaPrimitive::schema_bool,
             13 => SchemaPrimitive::schema_canary1,
-            c => panic!("Corrupt schema, primitive type #{} encountered",c),
+            c => return Err(SavefileError::GeneralError {msg:format!("Corrupt schema, type {} encountered", c)}),
         };
         Ok(var)
     }
@@ -2195,7 +2214,7 @@ impl Deserialize for Schema {
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
-            c => panic!("Corrupt schema, schema variant had value {}", c),
+            c => return Err(SavefileError::GeneralError {msg:format!("Corrupt schema, schema variant {} encountered", c)}),
         };
 
         Ok(schema)
@@ -2970,6 +2989,13 @@ impl<T: Serialize + ReprC> Serialize for Vec<T> {
 
 fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Result<Vec<T>,SavefileError> {
     let l = deserializer.read_usize()?;
+
+    #[cfg(feature = "size_sanity_checks")]
+    {
+        if l > 1_000_000 {
+            return Err(SavefileError::GeneralError {msg: format!("Too many items in Vec: {}",l)});
+        }
+    }
     let mut ret = Vec::with_capacity(l);
     for _ in 0..l {
         ret.push(T::deserialize(deserializer)?);
@@ -3952,8 +3978,9 @@ impl Deserialize for Canary1 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let magic = deserializer.read_u32()?;
         if magic != 0x47566843 {
-            panic!("Encountered bad magic value when deserializing Canary1. Expected {} but got {}",
-                0x47566843,magic);            
+            return Err(SavefileError::GeneralError {msg:format!("Encountered bad magic value when deserializing Canary1. Expected {} but got {}",
+                                                     0x47566843,magic)});
+
         }
         Ok(Canary1{})
     }

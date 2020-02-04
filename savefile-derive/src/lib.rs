@@ -725,7 +725,7 @@ fn deserialize(input: DeriveInput) -> TokenStream {
                             
                             Ok(match deserializer.read_u8()? {
                                 #(#output,)*
-                                _ => panic!("Corrupt file - unknown enum variant detected.")
+                                _ => return Err(SavefileError::GeneralError{msg:format!("Corrupt file - unknown enum variant detected.")})
                             })
                         }
                     }

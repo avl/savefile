@@ -995,3 +995,23 @@ pub fn test_decrypt_junk_file() {
     let result = load_encrypted_file::<usize>("test3.bin",1,"mypassword2");
     assert!(result.is_err());
 }
+
+#[derive(Savefile)]
+struct MySimpleFuzz1 {
+    integer: i8,
+    strings: Vec<String>,
+}
+
+#[test]
+pub fn fuzz_regression1() {
+    let mut data:&[u8] = &[0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 8, 3, 0, 3, 0, 64, 0, 0, 0];
+    let _ = load_noschema::<MySimpleFuzz1>(&mut data,0);
+}
+
+#[test]
+pub fn fuzz_regression2() {
+    let mut data:&[u8] = &[0, 0, 0, 0, 3, 11, 0, 254, 2, 1, 252, 255, 254];
+    let _ = load_noschema::<MySimpleFuzz1>(&mut data,0);
+}
+
+

@@ -20,6 +20,10 @@ categories = ["encoding"]
 license = "MIT/Apache-2.0"
 
 travis-ci = { repository = "avl/savefile", branch = "master" }
+[features]
+# Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
+# This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
+size_sanity_checks = []
 
 [dependencies]
 byteorder="1.2"
