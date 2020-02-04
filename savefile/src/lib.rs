@@ -6,7 +6,6 @@
 #![feature(core_intrinsics)]
 #![feature(integer_atomics)]
 #![feature(const_generics)]
-#![deny(warnings)]
 #![deny(missing_docs)]
 
 /*!

@@ -1,5 +1,22 @@
 [![Build Status](https://travis-ci.org/avl/savefile.svg?branch=master)](https://travis-ci.org/avl/savefile)
 
+# Introduction to Savefile 
+
+Savefile is a library to effortlessly serialize rust structs and enums. It uses
+an efficient binary format. It can serialize to anything implementing the 
+Write trait, and then deserialize from anything implementing the Read trait. This 
+means that savefile can be used to easily save in-memory data structures to 
+disk for persistent storage.
+
+You may ask what savefile brings to the table that serde doesn't already do
+better. The answer is: Not that much! Savefile is less capable, and not as well tested.
+It does have versioning support built-in as a first class feature.
+
+Savefile is written by its author to solve exactly the problem the author has to solve.
+It is provided here as open source in the hope that it may prove useful to others, but
+there are no guarantees and there may be bugs!
+
+
 # Sample 
 
 ```rust
@@ -41,6 +58,11 @@ fn main() {
 
 ```
 
+## 0.5.0 Introspection
+
+Savefile now includes an introspection feature. See more in the docs.
+
+
 ## 0.4.0 Breaking Change
 
 I just realized that 'ignore' was a very bad name for a custom attribute, since this
@@ -71,20 +93,7 @@ are no users of this software except the author.
 The savefile docs are available at: https://docs.rs/crate/savefile/
 Make sure you read the docs for the correct version.
 
-# Introduction to Savefile 
-
-Savefile is a library to effortlessly serialize rust structs and enums. It uses
-an efficient binary format. It can serialize to anything implementing the 
-Write trait, and then deserialize from anything implementing the Read trait. This 
-means that savefile can be used to easily save in-memory data structures to 
-disk for persistent storage.
-
-You may ask what savefile brings to the table that serde doesn't already do
-better. The answer is: Not much! However, Savefile is much smaller and less 
-complex, which could sometimes be an advantage in itself. Savefile also
-has features to easily maintain backward compatibility as your application
-evolves.
-
+# Features and goals
 
 Features savefile has:
 
