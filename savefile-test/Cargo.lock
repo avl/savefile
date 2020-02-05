@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -389,7 +389,7 @@ dependencies = [
  "parking_lot 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "savefile 0.6.0",
- "savefile-derive 0.5.0",
+ "savefile-derive 0.6.0",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "smallvec 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
