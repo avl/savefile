@@ -113,8 +113,7 @@ are no users of this software except the author.
 
 # Docs
 
-The savefile docs are available at: https://docs.rs/crate/savefile/
-Make sure you read the docs for the correct version.
+The savefile docs are available at: https://docs.rs/savefile/0.6.1/savefile/
 
 # Features and goals
 
