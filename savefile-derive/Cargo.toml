@@ -1,6 +1,6 @@
 [package]
 name = "savefile-derive"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."

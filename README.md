@@ -64,6 +64,19 @@ fn main() {
 
 ```
 
+
+# Change log
+
+## 0.6.0 Critical fix to encryption-routines
+
+This is a breaking change. Hopefully the last one! There is now a more detailed file header, which may
+make it possible to avoid breaking changes to the base binary framework in the future.
+
+There were two bugs in how encrypted files were encrypted and decrypted. Data corruption could occur.
+
+
+
+
 ## 0.5.0 Introspection
 
 Savefile now includes an introspection feature. See more in the docs.

@@ -37,9 +37,12 @@ fn test_not_raw_memcpy2() {
 
     let vec_overhead=8;
     let version=4;
+    let savefile_header=9;
+    let savefile_lib_version = 2;
+    let is_compressed = 1;
     let misaligner=1;
     let inner=4;
-    assert_eq!(f_internal_size, version + vec_overhead + misaligner + inner ); //3 bytes padding also because of ReprC-optimization
+    assert_eq!(f_internal_size, version + vec_overhead + misaligner + inner +savefile_header+savefile_lib_version+is_compressed); //3 bytes padding also because of ReprC-optimization
 }
 
 

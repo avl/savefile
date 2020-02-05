@@ -47,7 +47,7 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, version, &sample).unwrap();
+            Serializer::save(&mut bufw, version, &sample, false).unwrap();
         }
         bufw.flush().unwrap();
     }
@@ -65,7 +65,7 @@ pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, 0, &sample).unwrap();
+            Serializer::save(&mut bufw, 0, &sample, false).unwrap();
         }
         bufw.flush().unwrap();
     }
@@ -364,7 +364,7 @@ pub fn assert_roundtrip_to_new_version<
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, version_number1, &sample_v1).unwrap();
+            Serializer::save(&mut bufw, version_number1, &sample_v1, false).unwrap();
         }
         bufw.flush().unwrap();
     }
@@ -690,6 +690,7 @@ pub fn test_terrain() {
 #[cfg(test)]
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
+use savefile::save_compressed;
 
 #[test]
 pub fn test_atomic() {
@@ -698,7 +699,7 @@ pub fn test_atomic() {
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, 1, &atom).unwrap();
+            Serializer::save(&mut bufw, 1, &atom, false).unwrap();
         }
         bufw.flush().unwrap();
     }
@@ -750,6 +751,44 @@ pub fn test_crypto1() {
     assert_eq!(end,0x01020304);
 }
 
+#[test]
+#[cfg(not(miri))]
+pub fn test_compressed_big() {
+    let mut zeros = Vec::new();
+    for _ in 0..100_000 {
+        zeros.push(0);
+    }
+    let mut buf = Vec::new();
+    save_compressed(&mut buf, 0, &zeros).unwrap();
+
+    assert!(buf.len() < 100);
+}
+
+
+#[test]
+#[cfg(not(miri))]
+pub fn test_compressed_small() {
+
+    let input = 42u8;
+    let mut buf = Vec::new();
+    save_compressed(&mut buf, 0, &input).unwrap();
+    let mut bufp = &buf[..];
+    let roundtripped :u8 = load(&mut bufp, 0).unwrap();
+
+    assert_eq!(input,roundtripped);
+}
+#[test]
+#[cfg(not(miri))]
+pub fn test_compressed_smallish() {
+
+    let input = 42u64;
+    let mut buf = Vec::new();
+    save_compressed(&mut buf, 0, &input).unwrap();
+    let mut bufp = &buf[..];
+    let roundtripped :u64 = load(&mut bufp, 0).unwrap();
+
+    assert_eq!(input,roundtripped);
+}
 
 #[test]
 #[cfg(not(miri))]
