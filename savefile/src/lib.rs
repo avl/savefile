@@ -1251,6 +1251,7 @@ impl<'a> Deserializer<'a> {
     pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
         Deserializer::load_impl::<T>(reader,version,true)
     }
+
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load_noschema] function
     /// instead.
@@ -1308,10 +1309,28 @@ pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Re
     Deserializer::load::<T>(reader,version)
 }
 
+/// Deserialize an instance of type T from the given u8 slice .
+/// The current type of T in memory must be equal to `version`.
+/// The deserializer will use the actual protocol version in the
+/// file to do the deserialization.
+pub fn load_from_mem<T:WithSchema+Deserialize>(input: &[u8], version: u32) -> Result<T,SavefileError> {
+    let mut input = input;
+    Deserializer::load::<T>(&mut input,version)
+}
+
 /// Write the given `data` to the `writer`. 
 /// The current version of data must be `version`.
 pub fn save<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
     Serializer::save::<T>(writer,version,data)
+}
+
+
+/// Serialize the given data and return as a Vec<u8>
+/// The current version of data must be `version`.
+pub fn save_to_mem<T:WithSchema+Serialize>(version: u32, data: &T) -> Result<Vec<u8>,SavefileError> {
+    let mut retval = Vec::new();
+    Serializer::save::<T>(&mut retval,version,data);
+    Ok(retval)
 }
 
 /// Like [crate::load] , but used to open files saved without schema,
@@ -3116,6 +3135,8 @@ unsafe impl ReprC for u32 {fn repr_c_optimization_safe(_version:u32) -> bool {tr
 unsafe impl ReprC for i32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for u64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for i64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for f32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for f64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
 unsafe impl ReprC for () {fn repr_c_optimization_safe(_version:u32) -> bool {true}}

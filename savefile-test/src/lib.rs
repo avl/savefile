@@ -3,6 +3,10 @@
 #![feature(test)]
 #![deny(warnings)]
 
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
 extern crate test;
 extern crate savefile;
 #[macro_use]
@@ -23,6 +27,9 @@ mod test_versioning;
 mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
+
+#[cfg(feature = "external_benchmarks")]
+mod ext_benchmark;
 
 #[derive(Debug, Savefile, PartialEq)]
 struct NonCopy {
