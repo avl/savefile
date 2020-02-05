@@ -19,6 +19,7 @@ mod savefile_test_bad_schema {
     }
 
     #[test]
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: IncompatibleSchema { message: \"Saved schema differs from in-memory schema for version 0. Error: At location [./Original/some_number]: In memory schema: vector, file schema: primitive\" }")]
     fn test_schema_mismatch_savefile() {
 
         let original = Original {
