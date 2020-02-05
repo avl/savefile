@@ -65,7 +65,11 @@ fn main() {
 ```
 
 
-# Change log
+# Changelog
+
+## 0.6.1 Fix bad reference to SavefileError
+
+If you get compilation error saying that SavefileError is not declared, you need this small fix.
 
 ## 0.6.0 Critical fix to encryption-routines
 
