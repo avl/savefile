@@ -78,6 +78,9 @@ make it possible to avoid breaking changes to the base binary framework in the f
 
 There were two bugs in how encrypted files were encrypted and decrypted. Data corruption could occur.
 
+Also, savefile now supports bzip2-compression. Like the encryption-support, this is just for convenience. It should probably,
+earnestly, belong out of tree. But I kind of like the idea of "batteries included".
+
 
 
 
