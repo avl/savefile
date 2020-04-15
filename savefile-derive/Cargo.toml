@@ -13,8 +13,6 @@ categories = ["encoding"]
 
 license = "MIT/Apache-2.0"
 
-travis-ci = { repository = "avl/savefile", branch = "master" }
-
 [lib]
 proc-macro = true
 
