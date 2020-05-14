@@ -19,8 +19,8 @@ there are no guarantees and there may be bugs!
 
 Cargo.toml:
 ````
-savefile="0.5.0"
-savefile-derive="0.5.0"
+savefile="0.6.0"
+savefile-derive="0.6.0"
 ````
 
 # Sample 
