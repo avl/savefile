@@ -1,6 +1,9 @@
 use savefile::prelude::*;
 use savefile::{Introspector, IntrospectorNavCommand, IntrospectedElementKey, IntrospectionError};
 use parking_lot::{RwLock, Mutex};
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::rc::Rc;
 
 
 #[derive(Savefile)]
@@ -116,6 +119,33 @@ pub fn do_test1() {
     assert_eq!(test.introspect_child(0).unwrap().key(), "item1");
     assert_eq!(test.introspect_child(0).unwrap().val().introspect_value(), "342");
 
+}
+#[test]
+pub fn do_test_refcell() {
+    let test = RefCell::new(32);
+
+    let x = (&test).introspect_value();
+    assert_eq!(x, "RefCell(32 (deep introspect not supported))");
+
+    assert_eq!(test.introspect_len(), 0);
+}
+#[test]
+pub fn do_test_rc() {
+    let test = Rc::new(32);
+
+    let x = (&test).introspect_value();
+    assert_eq!(x, "Rc(32)");
+
+    assert_eq!(test.introspect_len(), 0);
+}
+#[test]
+pub fn do_test_arc() {
+    let test = Arc::new(32);
+
+    let x = (&test).introspect_value();
+    assert_eq!(x, "Arc(32)");
+
+    assert_eq!(test.introspect_len(), 0);
 }
 
 #[test]

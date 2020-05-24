@@ -2412,6 +2412,37 @@ impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
         self.g.deref()
     }
 }
+
+impl<T:Introspect> Introspect for RefCell<T> {
+    default fn introspect_value(&self) -> String {
+        format!("RefCell({} (deep introspect not supported))",self.borrow().introspect_value())
+    }
+
+    default fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        // Introspect not supported
+        None
+    }
+
+    default fn introspect_len(&self) -> usize {
+        // Introspect not supported
+        0
+    }
+}
+
+impl<T:Introspect> Introspect for Rc<T> {
+    default fn introspect_value(&self) -> String {
+        format!("Rc({})",self.deref().introspect_value())
+    }
+
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        self.deref().introspect_child(index)
+    }
+
+    default fn introspect_len(&self) -> usize {
+        self.deref().introspect_len()
+    }
+}
+
 impl<T:Introspect> Introspect for Arc<T> {
     default fn introspect_value(&self) -> String {
         format!("Arc({})",self.deref().introspect_value())
@@ -3435,7 +3466,7 @@ impl<T:WithSchema> WithSchema for Rc<T> {
     }
 }
 impl<T:Serialize> Serialize for Rc<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
         self.deref().serialize(serializer)
     }
 }
@@ -3444,6 +3475,7 @@ impl<T:Deserialize> Deserialize for Rc<T> {
         Ok(Rc::new(T::deserialize(deserializer)?))
     }
 }
+
 
 
 
