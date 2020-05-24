@@ -2442,6 +2442,25 @@ impl<T:Deserialize> Deserialize for std::sync::Mutex<T> {
     }
 }
 
+impl<T:WithSchema> WithSchema for Mutex<T> {
+    fn schema(version:u32) -> Schema {
+        T::schema(version)
+    }
+}
+
+impl<T:Serialize> Serialize for Mutex<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        let data = self.lock();
+        data.serialize(serializer)
+    }
+}
+
+impl<T:Deserialize> Deserialize for Mutex<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>,SavefileError> {
+        Ok(Mutex::new(T::deserialize(deserializer)?))
+    }
+}
+
 /// Type of single child of introspector for RwLock
 pub struct IntrospectItemRwLock<'a,T> {
     g: RwLockReadGuard<'a,T>,
