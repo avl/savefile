@@ -745,6 +745,9 @@ pub enum SavefileError {
         /// Descriptive message
         msg:String
     },
+    #[fail(display = "Poisoned mutex error")]
+    /// A poisoned mutex was encountered when traversing the object being saved
+    PoisonedMutex
 
 }
 
@@ -796,6 +799,12 @@ pub unsafe trait ReprC: Copy {
 impl From<std::io::Error> for SavefileError {
     fn from(s: std::io::Error) -> SavefileError {
         SavefileError::IOError{io_error:s}
+    }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for SavefileError {
+    fn from(_: std::sync::PoisonError<T>) -> SavefileError {
+        SavefileError::PoisonedMutex
     }
 }
 
@@ -2378,23 +2387,58 @@ impl<T:Introspect> Introspect for Mutex<T> {
     }
 }
 
+/// Type of single child of introspector for std::sync::Mutex
+pub struct IntrospectItemStdMutex<'a,T> {
+    g: std::sync::MutexGuard<'a,T>,
+}
 
-impl<T:WithSchema> WithSchema for Mutex<T> {
+impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemStdMutex<'a,T> {
+    fn key(&self) -> &str {
+        "0"
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        self.g.deref()
+    }
+}
+
+impl<T:Introspect> Introspect for std::sync::Mutex<T> {
+    fn introspect_value(&self) -> String {
+        format!("Mutex<{}>",std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        match self.lock() {
+            Ok(item) => {
+                if index == 0 {
+                    Some(Box::new(IntrospectItemStdMutex{g:item}))
+                } else {
+                    None
+                }
+            },
+            Err(_) => {
+                None
+            }
+        }
+    }
+}
+
+impl<T:WithSchema> WithSchema for std::sync::Mutex<T> {
     fn schema(version:u32) -> Schema {
         T::schema(version)
     }    
 }
 
-impl<T:Serialize> Serialize for Mutex<T> {
+impl<T:Serialize> Serialize for std::sync::Mutex<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        let data = self.lock();
+        let data = self.lock()?;
         data.serialize(serializer)
     }
 }
 
-impl<T:Deserialize> Deserialize for Mutex<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>,SavefileError> {
-        Ok(Mutex::new(T::deserialize(deserializer)?))
+impl<T:Deserialize> Deserialize for std::sync::Mutex<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<std::sync::Mutex<T>,SavefileError> {
+        Ok(std::sync::Mutex::new(T::deserialize(deserializer)?))
     }
 }
 
