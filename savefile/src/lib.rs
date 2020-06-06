@@ -4196,7 +4196,7 @@ pub enum IntrospectionError {
 }
 
 /// All fields at a specific depth in the introspection tree
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntrospectionFrame {
     /// The index of the expanded child, if any
     pub selected: Option<usize>,
@@ -4209,7 +4209,7 @@ pub struct IntrospectionFrame {
 }
 /// An introspection tree. Note that each node in the tree can only have
 /// one expanded field, and thus at most one child (a bit of a boring 'tree' :-) ).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntrospectionResult {
     /// The levels in the tree
     pub frames: Vec<IntrospectionFrame>,
