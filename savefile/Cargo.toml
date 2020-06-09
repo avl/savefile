@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -38,7 +38,7 @@ bzip2 = "0.3.2"
 
 
 [dev-dependencies]
-savefile-derive = { path = "../savefile-derive", version="0.6.1" }
+savefile-derive = { path = "../savefile-derive", version="0.7.0" }
 
 
 

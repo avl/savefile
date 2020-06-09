@@ -19,8 +19,8 @@ there are no guarantees and there may be bugs!
 
 Cargo.toml:
 ````
-savefile="0.6.0"
-savefile-derive="0.6.0"
+savefile="0.7"
+savefile-derive="0.7"
 ````
 
 # Sample 
@@ -66,6 +66,19 @@ fn main() {
 
 
 # Changelog
+
+## 0.7.0 Update some stale dependencies
+
+The dependencies on bitvec, arrayvec and parking_lot where to old versions. They have been updated to:
+
+bit-vec = 0.6
+
+arrayvec = 0.5
+
+parking_lot = 0.10
+
+
+
 
 ## 0.6.1 Fix bad reference to SavefileError
 
