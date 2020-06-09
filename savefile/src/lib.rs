@@ -3487,17 +3487,17 @@ impl<T1:Deserialize> Deserialize for (T1,) {
 
 
 
-impl<T:arrayvec::Array<Item = u8> > WithSchema for arrayvec::ArrayString<T> {
+impl<T:arrayvec::Array<Item = u8> + Copy> WithSchema for arrayvec::ArrayString<T> {
     fn schema(_version:u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
-impl<T:arrayvec::Array<Item = u8> > Serialize for arrayvec::ArrayString<T> {
+impl<T:arrayvec::Array<Item = u8> + Copy> Serialize for arrayvec::ArrayString<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
         serializer.write_string(self.as_str())
     }
 }
-impl<T:arrayvec::Array<Item = u8> > Deserialize for arrayvec::ArrayString<T> {
+impl<T:arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let s = deserializer.read_string()?;
         Ok(arrayvec::ArrayString::from(&s)?)

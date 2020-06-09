@@ -13,12 +13,12 @@ external_benchmarks = []
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks"]}
 savefile-derive = { path = "../savefile-derive" }
-bit-vec = "0.5"
-arrayvec="0.4"
+bit-vec = "0.6"
+arrayvec="0.5"
 smallvec="1.0"
 byteorder="*"
 rand="*"
-parking_lot="*"
+parking_lot="0.10"
 serde="*"
 serde_derive="*"
 bincode="1.2.1"
