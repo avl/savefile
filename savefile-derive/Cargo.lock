@@ -18,7 +18,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)",
