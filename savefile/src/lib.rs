@@ -3504,6 +3504,85 @@ impl<T:arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<
     }
 }
 
+impl<V:WithSchema, T:arrayvec::Array<Item=V>> WithSchema for arrayvec::ArrayVec<T> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(V::schema(version)))
+    }
+}
+
+impl<V:Introspect+'static, T:arrayvec::Array<Item=V>> Introspect for arrayvec::ArrayVec<T> {
+    fn introspect_value(&self) -> String {
+        return "arrayvec[]".to_string();
+    }
+
+    fn introspect_child<'s>(&'s self, index: usize) -> Option<Box<dyn IntrospectItem<'s>+'s>> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some(Box::new(IntrospectItemSimple {
+            key: index.to_string(),
+            val: &self[index]
+        }));
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+impl<V:Serialize, T:arrayvec::Array<Item=V>> Serialize for arrayvec::ArrayVec<T> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        regular_serialize_vec(self, serializer)
+    }
+}
+
+impl<V:Serialize+ReprC, T:arrayvec::Array<Item=V>> Serialize for arrayvec::ArrayVec<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        unsafe {
+            if !V::repr_c_optimization_safe(serializer.version) {
+                regular_serialize_vec(self, serializer)
+            } else {
+                let l = self.len();
+                serializer.write_usize(l)?;
+                serializer.write_buf(std::slice::from_raw_parts(
+                    self.as_ptr() as *const u8,
+                    std::mem::size_of::<V>() * l,
+                ))
+            }
+        }
+    }
+}
+impl<V:Deserialize, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVec<T> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>,SavefileError> {
+        let mut ret = arrayvec::ArrayVec::new();
+        let l = deserializer.read_usize()?;
+        for _ in 0..l {
+            ret.push(V::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+impl<V:Deserialize+ReprC, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVec<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>,SavefileError> {
+        let mut ret = arrayvec::ArrayVec::new();
+        let l = deserializer.read_usize()?;
+        if l > ret.capacity() {
+            return Err(SavefileError::ArrayvecCapacityError {msg:format!("ArrayVec with capacity {} can't hold {} items",ret.capacity(),l)})
+        }
+        if !V::repr_c_optimization_safe(deserializer.memory_version) {
+            for _ in 0..l {
+                ret.push(V::deserialize(deserializer)?);
+            }
+        } else {
+            unsafe {
+                let bytebuf = std::slice::from_raw_parts_mut(ret.as_mut_ptr() as *mut u8,std::mem::size_of::<V>() * l);
+                deserializer.reader.read_exact(bytebuf)?;//We 'leak' ReprC objects here on error, but the idea is they are drop-less anyway, so this has no effect
+                ret.set_len(l);
+            }
+        }
+        Ok(ret)
+    }
+}
+
+
 use std::ops::Deref;
 impl<T:WithSchema> WithSchema for Box<T> {
     fn schema(version:u32) -> Schema {

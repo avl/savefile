@@ -27,6 +27,7 @@ mod test_versioning;
 mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
+mod test_arrayvec;
 
 #[cfg(feature = "external_benchmarks")]
 mod ext_benchmark;
