@@ -1,6 +1,6 @@
 [package]
 name = "savefile-derive"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
@@ -12,6 +12,10 @@ keywords = ["serialization", "deserialization"]
 categories = ["encoding"]
 
 license = "MIT/Apache-2.0"
+
+[features]
+default = []
+nightly = []
 
 [lib]
 proc-macro = true

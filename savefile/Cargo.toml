@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -23,6 +23,10 @@ license = "MIT/Apache-2.0"
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
 size_sanity_checks = []
+# Use features only available on the nightly rust-compiler.
+# Enabling this means serialization of vectors of simple types will be much faster.
+# It also enables serialization of arbitrary size arrays (arbitrary size Vec always work, regardless of features)
+nightly=[]
 
 [dependencies]
 byteorder="1.2"
@@ -38,7 +42,7 @@ bzip2 = "0.3.2"
 
 
 [dev-dependencies]
-savefile-derive = { path = "../savefile-derive", version="0.7.1" }
+savefile-derive = { path = "../savefile-derive", version="0.7.2" }
 
 
 

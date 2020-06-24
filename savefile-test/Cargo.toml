@@ -4,11 +4,11 @@ version = "0.0.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 [features]
-default = ["external_benchmarks"]
+default = ["external_benchmarks", "nightly"]
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
 external_benchmarks = []
-
+nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks"]}

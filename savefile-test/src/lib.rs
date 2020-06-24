@@ -1,12 +1,13 @@
-#![feature(integer_atomics)]
+#![cfg_attr(feature="nightly", feature(integer_atomics))]
 #![allow(unused_imports)]
-#![feature(test)]
+#![cfg_attr(feature="nightly", feature(test))]
 #![deny(warnings)]
 
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature="nightly")]
 extern crate test;
 extern crate savefile;
 #[macro_use]
@@ -219,11 +220,13 @@ pub struct BenchStruct {
     pad4:u32,
 }
 
+#[cfg(feature="nightly")]
 #[cfg(not(miri))]
 use test::{Bencher, black_box};
 
 
 
+#[cfg(feature="nightly")]
 #[bench]
 #[cfg(not(miri))]
 fn bench_savefile_serialize(b: &mut Bencher) {
@@ -258,6 +261,7 @@ fn bench_savefile_serialize(b: &mut Bencher) {
     });
 }
 
+#[cfg(feature="nightly")]
 #[test]
 #[cfg(not(miri))]
 pub fn test_bench_struct() {
@@ -459,6 +463,7 @@ pub fn test_string_leak_test() {
 }
 
 
+#[cfg(feature="nightly")]
 #[test]
 pub fn test_long_array() {
     let arr=[47;32];
@@ -466,6 +471,7 @@ pub fn test_long_array() {
 }
 
 
+#[cfg(feature="nightly")]
 #[test]
 pub fn test_very_long_array() {
     #[derive(Savefile)]

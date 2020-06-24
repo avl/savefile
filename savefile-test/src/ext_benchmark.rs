@@ -65,6 +65,7 @@ mod bincode_test_bad_schema {
 }
 
 
+#[cfg(feature="nightly")]
 mod bincode_benchmark {
     use test::{Bencher, black_box};
     use serde::{Serialize, Deserialize};
@@ -78,6 +79,7 @@ mod bincode_benchmark {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
+    #[cfg(feature="nightly")]
     #[bench]
     fn bench_ext_bincode(b: &mut Bencher) {
 
@@ -103,6 +105,7 @@ mod bincode_benchmark {
 
 
 
+#[cfg(feature="nightly")]
 mod savefile_benchmark {
     use test::{Bencher, black_box};
     use savefile::prelude::*;
@@ -116,6 +119,7 @@ mod savefile_benchmark {
     #[derive(Savefile, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
+    #[cfg(feature="nightly")]
     #[bench]
     fn bench_ext_savefile_with_reprc(b: &mut Bencher) {
 
@@ -140,6 +144,7 @@ mod savefile_benchmark {
 }
 
 
+#[cfg(feature="nightly")]
 mod savefile_benchmark_no_reprc {
     use test::{Bencher, black_box};
     use savefile::prelude::*;
@@ -153,6 +158,7 @@ mod savefile_benchmark_no_reprc {
     #[derive(Savefile, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
+    #[cfg(feature="nightly")]
     #[bench]
     fn bench_ext_savefile_no_reprc(b: &mut Bencher) {
 
