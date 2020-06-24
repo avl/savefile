@@ -67,6 +67,28 @@ fn main() {
 
 # Changelog
 
+## 0.7.2 Support for stable compilers
+
+Savefile is now usable with a stable compiler, not just nightly.
+
+When run on stable, the following features stop working:
+
+* The whole 'ReprC' subsystem. This means serialization of byte arrays 
+(or other small copy-types) is not as fast as it could be. The slow-down
+can be several orders of magnitude.
+
+* Serialization of arbitrary sized arrays. On stable, only arrays of sizes
+0-4 are supported.
+
+* Specialisation of introspection for hashmaps with string keys. This
+means introspection for hashmaps is not as nice.
+
+
+## 0.7.1 Better support for ArrayVec
+
+The arrayvec crate has long been a dependency, but the actual ArrayVec type was
+not supported. We did support ArrayString, but not until 0.7.1 was ArrayVec itself supported.
+
 ## 0.7.0 Update some stale dependencies
 
 The dependencies on bitvec, arrayvec and parking_lot where to old versions. They have been updated to:

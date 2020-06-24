@@ -295,6 +295,7 @@ pub fn test_bench_struct() {
     );
 }
 
+
 #[test]
 pub fn test_bench_struct_miri_compat() {
     assert_roundtrip(

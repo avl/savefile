@@ -44,7 +44,8 @@ bzip2 = "0.3.2"
 [dev-dependencies]
 savefile-derive = { path = "../savefile-derive", version="0.7.2" }
 
-
+[build-dependencies]
+rustc_version="0.2"
 
 
 

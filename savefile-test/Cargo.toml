@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 [features]
-default = ["external_benchmarks", "nightly"]
+default = ["external_benchmarks"]
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
 external_benchmarks = []
@@ -22,3 +22,9 @@ parking_lot="0.10"
 serde="*"
 serde_derive="*"
 bincode="1.2.1"
+
+[build-dependencies]
+rustc_version="0.2"
+
+
+
