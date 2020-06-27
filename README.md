@@ -86,6 +86,8 @@ means introspection for hashmaps is not as nice.
 The nightly-only features are activated automatically when a nightly compiler
 is used.
 
+Also, support for Arc<[T]> .
+
 
 ## 0.7.1 Better support for ArrayVec
 

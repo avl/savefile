@@ -3194,6 +3194,63 @@ fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) 
     Ok(())
 }
 
+impl<T: WithSchema> WithSchema for Arc<[T]> {
+    fn schema(version:u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)))
+    }
+}
+impl<T: Introspect> Introspect for Arc<[T]> {
+    fn introspect_value(&self) -> String {
+        return "Arc[]".to_string();
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some(introspect_item(index.to_string(), &self[index]));
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+#[cfg(feature="nightly")]
+impl<T: Serialize> Serialize for Arc<[T]> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        regular_serialize_vec(self, serializer)
+    }
+}
+#[cfg(not(feature="nightly"))]
+impl<T: Serialize> Serialize for Arc<[T]> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        regular_serialize_vec(self, serializer)
+    }
+}
+#[cfg(feature="nightly")]
+impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        unsafe {
+            if !T::repr_c_optimization_safe(serializer.version) {
+                regular_serialize_vec(&*self, serializer)
+            } else {
+                let l = self.len();
+                serializer.write_usize(l)?;
+                serializer.write_buf(std::slice::from_raw_parts(
+                    (*self).as_ptr() as *const u8,
+                    std::mem::size_of::<T>() * l,
+                ))
+            }
+        }
+    }
+}
+impl<T: Deserialize> Deserialize for Arc<[T]> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(Vec::<T>::deserialize(deserializer)?.into())
+    }
+}
+
+
+
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version:u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
@@ -3245,6 +3302,7 @@ impl<T: Serialize + ReprC> Serialize for Vec<T> {
         }
     }
 }
+
 
 fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Result<Vec<T>,SavefileError> {
     let l = deserializer.read_usize()?;

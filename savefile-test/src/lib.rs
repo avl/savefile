@@ -699,6 +699,7 @@ pub fn test_terrain() {
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
 use savefile::save_compressed;
+use std::sync::Arc;
 
 #[test]
 pub fn test_atomic() {
@@ -1068,4 +1069,12 @@ pub fn fuzz_regression2() {
     let _ = load_noschema::<MySimpleFuzz1>(&mut data,0);
 }
 
+
+#[test]
+pub fn test_roundtrip_arc_array() {
+    let a1: Arc<[u32]> = vec![1,2,3,4].into();
+    assert_roundtrip(a1);
+    let a2: Arc<[String]> = vec!["Hello".to_string()].into();
+    assert_roundtrip(a2);
+}
 
