@@ -3243,8 +3243,9 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
         }
     }
 }
+
 impl<T: Deserialize> Deserialize for Arc<[T]> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
