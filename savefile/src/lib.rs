@@ -3244,6 +3244,7 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     }
 }
 
+
 impl<T: Deserialize> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
@@ -3729,6 +3730,16 @@ impl<T:arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
         let s = deserializer.read_string()?;
         Ok(arrayvec::ArrayString::from(&s)?)
+    }
+}
+
+impl<T:arrayvec::Array<Item=u8> + Copy> Introspect for arrayvec::ArrayString<T> {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+        None
     }
 }
 
