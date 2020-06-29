@@ -5,3 +5,7 @@ members = [
     "savefile-derive",
 ]
 
+exclude=["savefile-test"]
+
+
+
