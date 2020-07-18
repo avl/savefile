@@ -64,7 +64,7 @@ pub fn test_simple_enum_with_key() {
 
 }
 
-    #[test]
+#[test]
 pub fn test_simple_with_key() {
     let val1 = StructWithName {
         name: "Apple".into(),
@@ -73,6 +73,25 @@ pub fn test_simple_with_key() {
     assert_eq!(val1.introspect_len(), 2);
     assert_eq!(val1.introspect_value(), "Apple");
 }
+
+#[derive(Savefile)]
+pub struct StructWithNameAndIgnoredValue {
+    name: String,
+    #[savefile_introspect_ignore]
+    value: String
+}
+#[test]
+pub fn test_simple_with_ignored_value() {
+    let val1 = StructWithNameAndIgnoredValue {
+        name: "Apple".into(),
+        value: "Orange".into()
+    };
+    assert_eq!(val1.introspect_len(), 1);
+    assert_eq!(val1.introspect_child(0).unwrap().key(), "name");
+    assert_eq!(val1.introspect_child(0).unwrap().val().introspect_value(), "Apple");
+}
+
+
 
 
 #[test]

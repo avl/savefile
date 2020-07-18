@@ -260,9 +260,9 @@ struct SomeType {
 
 ```
 
-## The ignore attribute
+## The savefile_ignore attribute
 
-The ignore attribute can be used to exclude certain fields from serialization. They still 
+The savefile_ignore attribute can be used to exclude certain fields from serialization. They still
 need to be constructed during deserialization (of course), so you need to use one of the
 default-attributes to make sure the field can be constructed. If none of the  default-attributes
 (described above) are used, savefile will attempt to use the Default trait. 
@@ -286,7 +286,8 @@ struct IgnoreExample {
 
 ```
 
-
+savefile_ignore does not stop the generator from generating an implementation for [Introspect](crate::Introspect) for the given field. To stop
+this as well, also supply the attribute savefile_introspect_ignore .
 
 ## The savefile_versions_as attribute
 
@@ -567,7 +568,7 @@ There is a helper called [crate::Introspector] which allows to get a structured 
 of parts of an introspectable object. The Introspector has a 'path' which looks in to the
 introspection tree and shows values for this tree. The advantage of using this compared to
 just using ```format!("{:#?}",mystuff)``` is that for very large data structures, unconditionally
-dumping all data may be unwieldy. The author has a state struct which becomes hundres of megabytes
+dumping all data may be unwieldy. The author has a state struct which becomes hundreds of megabytes
 when formatted using the Debug-trait in this way.
 
 An example:

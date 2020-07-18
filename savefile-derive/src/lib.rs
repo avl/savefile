@@ -29,7 +29,8 @@ struct AttrsResult {
     default_fn: Option<syn::Ident>,
     default_val: Option<TokenStream>,
     deserialize_types : Vec<VersionRange>,
-    introspect_key: bool
+    introspect_key: bool,
+    introspect_ignore: bool,
 }
 
 fn check_is_remove(field_type: &syn::Type) -> bool {
@@ -73,6 +74,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     let mut default_fn = None;
     let mut default_val = None;
     let mut ignore = false;
+    let mut introspect_ignore = false;
     let mut introspect_key = false;
     let mut deser_types = Vec::new();
     for attr in attrs.iter() {
@@ -84,6 +86,9 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     }
                     if x.to_string() == "savefile_introspect_key" {
                         introspect_key=true;
+                    }
+                    if x.to_string() == "savefile_introspect_ignore" {
+                        introspect_ignore=true;
                     }
                 }
                 &syn::Meta::List(ref _x) => {
@@ -116,7 +121,11 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
                     };
 
                     if x.ident.to_string() == "savefile_ignore" {
-                        ignore=true;                            
+                        ignore=true;
+
+                    };
+                    if x.ident.to_string() == "savefile_introspect_ignore" {
+                        introspect_ignore=true;
 
                     };
                     if x.ident.to_string() == "savefile_versions_as" {
@@ -246,7 +255,8 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
         default_val: default_val,
         ignore: ignore,
         deserialize_types : deser_types,
-        introspect_key
+        introspect_key,
+        introspect_ignore,
     }
 }
 
@@ -599,7 +609,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
     output
 }
 
-#[proc_macro_derive(Savefile, attributes(savefile_versions, savefile_versions_as, savefile_introspect_key, savefile_ignore, savefile_default_val, savefile_default_fn))]
+#[proc_macro_derive(Savefile, attributes(savefile_versions, savefile_versions_as, savefile_introspect_ignore, savefile_introspect_key, savefile_ignore, savefile_default_val, savefile_default_fn))]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
@@ -1024,6 +1034,9 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
             if introspect_key.is_some() {
                 panic!("Type had more than one field with savefile_introspect_key - attribute");
             }
+        }
+        if verinfo.introspect_ignore {
+            continue;
         }
         if need_self {
 
