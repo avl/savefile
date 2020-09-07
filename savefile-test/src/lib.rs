@@ -1080,9 +1080,25 @@ pub fn test_roundtrip_arc_array() {
 }
 
 
+
+
 #[test]
 pub fn test_pathbuf() {
     let x: PathBuf = "/c/hello.txt".into();
+    assert_roundtrip(x);
+
+}
+
+#[derive(Savefile, Debug, PartialEq)]
+struct SomethingWithPathbufIn {
+    my_pathbuf: PathBuf
+}
+
+#[test]
+pub fn test_pathbuf2() {
+    let x  = SomethingWithPathbufIn {
+        my_pathbuf: "/d/something.txt".into()
+    };
     assert_roundtrip(x);
 
 }
