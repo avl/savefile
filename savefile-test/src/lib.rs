@@ -700,6 +700,7 @@ use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
 use savefile::save_compressed;
 use std::sync::Arc;
+use std::path::PathBuf;
 
 #[test]
 pub fn test_atomic() {
@@ -1078,3 +1079,10 @@ pub fn test_roundtrip_arc_array() {
     assert_roundtrip(a2);
 }
 
+
+#[test]
+pub fn test_pathbuf() {
+    let x: PathBuf = "/c/hello.txt".into();
+    assert_roundtrip(x);
+
+}
