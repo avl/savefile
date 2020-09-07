@@ -886,7 +886,7 @@ impl Introspect for PathBuf {
         self.to_string_lossy().to_string()
     }
 
-    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
         None
     }
 }
