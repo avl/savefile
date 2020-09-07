@@ -488,7 +488,7 @@ Rules for using the #\[savefile_versions] attribute:
  By implementing the traits Serialize, Deserialize and WithSchema, it's possible to create custom
  serializers for any type.
 
- Let's create a custom serializer for PathBuf, as an example (this is just an example, because of
+ Let's create a custom serializer for an object MyPathBuf, as an example (this is just an example, because of
  the rust 'orphan rules', only Savefile can actually implement the Savefile-traits for PathBuf. However,
  you can implement the Savefile traits for your own data types in your own crates!)
 
@@ -498,9 +498,13 @@ Rules for using the #\[savefile_versions] attribute:
 
  Schema is an enum, with a few built-in variants. See documentation: [crate::Schema] .
 
- In our case, we choose to handle a PathBuf as a string, so we choose Schema::Primitive, with the
+ In our case, we choose to handle a MyPathBuf as a string, so we choose Schema::Primitive, with the
  argument SchemaPrimitive::schema_string . If your data is a collection of some sort, Schema::Vector
  may be appropriate.
+
+ Note that the implementor of Serialize and Deserialize have total freedom to serialize data
+ to/from the binary stream. The Schema is meant as an extra sanity check, not as an exact format
+ specification. The quality of this sanity check will depend on the implementation.
 
 
 
