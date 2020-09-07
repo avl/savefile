@@ -3706,7 +3706,42 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
 
 
 
+impl<T1:WithSchema> WithSchema for Range<T1> {
+    fn schema(version:u32) -> Schema {
+        Schema::new_tuple2::<T1,T1>(version)
+    }
+}
+impl<T1:Serialize> Serialize for Range<T1> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+        self.start.serialize(serializer)?;
+        self.end.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl<T1:Deserialize> Deserialize for Range<T1> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+        Ok(
+            T1::deserialize(deserializer)?
+            ..
+            T1::deserialize(deserializer)?
+        )
+    }
+}
+impl<T1:Introspect> Introspect for Range<T1> {
+    fn introspect_value(&self) -> String {
+        return "Range".to_string();
+    }
 
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+        if index == 0 {
+            return Some(introspect_item("start".to_string(), &self.start));
+        }
+        if index == 1 {
+            return Some(introspect_item("end".to_string(), &self.end));
+        }
+        return None;
+    }
+}
 
 
 
@@ -3905,7 +3940,7 @@ impl<V:Deserialize+ReprC, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::A
 }
 
 
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 impl<T:WithSchema> WithSchema for Box<T> {
     fn schema(version:u32) -> Schema {
         T::schema(version)

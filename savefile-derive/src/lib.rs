@@ -291,11 +291,11 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                 assert!(implicit_self);
                 let id = syn::Index { index:index_number, span:span };
                 index_number+=1;
-                quote!{ self.#id}
+                quote!{ &self.#id}
             } else {
                 let id = field.ident.clone().unwrap();
                 if implicit_self {
-                    quote!{ self.#id}
+                    quote!{ &self.#id}
                 } else {
                     quote!{ #id}
                 }
@@ -306,7 +306,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                     panic!("The Removed type can only be used for removed fields. Use the savefile_versions attribute.");
                 }
                 output.push(quote!(
-                    (#objid).serialize(#local_serializer)?;
+                    <_ as _savefile::prelude::Serialize>::serialize(#objid, #local_serializer)?;
                     ));
             } else {
                 if field_to_version < std::u32::MAX {
@@ -317,7 +317,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
                 }                    
                 output.push(quote!(
                         if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
-                            (#objid).serialize(#local_serializer)?;
+                            <_ as _savefile::prelude::Serialize>::serialize(#objid, #local_serializer)?;
                         }));
             }
         }
@@ -341,7 +341,7 @@ fn implement_fields_serialize<'a>(field_infos:Vec<FieldInfo<'a>>, implicit_self:
 
 }
 
-fn serialize(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
@@ -552,7 +552,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
                 panic!("The Removed type may only be used for fields which have an old version."); //TODO: Better message, tell user how to do this annotation
             };
             quote_spanned! { span =>
-                <#field_type>::deserialize(#local_deserializer)?
+                <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
             }
         } else if verinfo.ignore {            
             quote_spanned! { span => 
@@ -583,7 +583,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
 
                 version_mappings.push(quote!{
                     if #local_deserializer.file_version >= #dt_from && #local_deserializer.file_version <= #dt_to {
-                        let temp : #dt_field_type = <#dt_field_type>::deserialize(#local_deserializer)?;
+                        let temp : #dt_field_type = <#dt_field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?;
                         #dt_convert_fun(temp)
                     } else 
                 });
@@ -592,7 +592,7 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
             quote_spanned! { span =>
                 #(#version_mappings)*
                 if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                    <#field_type>::deserialize(#local_deserializer)?
+                    <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
                 } else {
                     #effective_default_val
                 }
@@ -613,13 +613,13 @@ fn implement_deserialize(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
-    let s=serialize(input.clone());
+    let s= savefile_derive_crate_serialize(input.clone());
 
-    let d=deserialize(input.clone());
+    let d= savefile_derive_crate_deserialize(input.clone());
 
-    let w=withschema(input.clone());
+    let w= savefile_derive_crate_withschema(input.clone());
 
-    let i=introspect(input);
+    let i= savefile_derive_crate_introspect(input);
 
     let expanded=quote! {
         #s
@@ -637,7 +637,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
 
-    let i=introspect(input);
+    let i= savefile_derive_crate_introspect(input);
 
     let expanded=quote! {
         #i
@@ -646,7 +646,7 @@ pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::T
     expanded.into()
 }
 
-fn deserialize(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
 
 
@@ -1100,7 +1100,7 @@ fn implement_introspect(field_infos:Vec<FieldInfo>, need_self:bool) -> (Vec<Toke
 
 
 #[allow(non_snake_case)]
-fn introspect(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
@@ -1410,7 +1410,7 @@ fn implement_withschema(field_infos:Vec<FieldInfo>) -> Vec<TokenStream> {
 }
 
 #[allow(non_snake_case)]
-fn withschema(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
