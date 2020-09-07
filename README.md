@@ -67,6 +67,20 @@ fn main() {
 
 # Changelog
 
+## 0.7.4 Add introspect for PathBuf
+
+PathBuf did not inmplement Introspect, which had the effect that trying to use derive(Savefile) on
+anything containing a PathBuf would fail, since the derive macro requires all components to implement all
+the Savefile traits.
+
+## 0.7.3 Support for co-existence with Serde
+
+Savefile-derive would previously not work correctly if one tried to use it in a crate where Serde was also used.
+
+This has been fixed.
+
+Also, support for serializing/deserializing PathBuf.
+
 ## 0.7.2 Support for stable compilers
 
 Savefile is now usable with a stable compiler, not just nightly.
