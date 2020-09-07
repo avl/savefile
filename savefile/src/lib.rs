@@ -881,7 +881,15 @@ impl Deserialize for PathBuf {
         Ok(PathBuf::from(String::deserialize(deserializer)?))
     }
 }
+impl Introspect for PathBuf {
+    fn introspect_value(&self) -> String {
+        self.to_string_lossy().to_string()
+    }
 
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+        None
+    }
+}
 
 use ring::{aead};
 use ring::aead::{Nonce, UnboundKey, AES_256_GCM, SealingKey, OpeningKey, NonceSequence, BoundKey};
