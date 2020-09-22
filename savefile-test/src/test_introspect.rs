@@ -4,6 +4,7 @@ use parking_lot::{RwLock, Mutex};
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::rc::Rc;
+use std::collections::BinaryHeap;
 
 
 #[derive(Savefile)]
@@ -73,6 +74,16 @@ pub fn test_simple_with_key() {
     assert_eq!(val1.introspect_len(), 2);
     assert_eq!(val1.introspect_value(), "Apple");
 }
+
+#[test]
+pub fn test_simple_binheap() {
+    let mut heap = BinaryHeap::new();
+    heap.push(43);
+    assert_eq!(heap.introspect_len(), 1);
+    assert_eq!(heap.introspect_value(), "BinaryHeap");
+    assert_eq!(heap.introspect_child(0).unwrap().val().introspect_value(), "43");
+}
+
 
 #[derive(Savefile)]
 pub struct StructWithNameAndIgnoredValue {

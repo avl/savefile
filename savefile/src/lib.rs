@@ -3168,8 +3168,25 @@ impl Deserialize for bit_vec::BitVec {
         Ok(ret)
     }
 }
-    
 
+
+impl<T: Introspect> Introspect for BinaryHeap<T> {
+    fn introspect_value(&self) -> String {
+        "BinaryHeap".to_string()
+    }
+
+
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a>+'a>> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some(introspect_item(index.to_string(), self.iter().skip(index).next().unwrap()));
+    }
+
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
 
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
     fn schema(version:u32) -> Schema {
