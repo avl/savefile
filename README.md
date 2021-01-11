@@ -67,6 +67,20 @@ fn main() {
 
 # Changelog
 
+## 0.7.5 Deduplicaton of Arc<str>
+
+Previously, serialization of Arc<str> was not possible. Support is now added,
+including deduplication of str objects. Note that the deduplication is
+not actually in the serialized format, just in the result in memory after
+deduplication. The deduplication does not know how the memory graph looked before
+saving, it simply makes it so that identical strings are backed by the same 
+memory after loading.
+
+This could cause problems if the code is somehow dependent on the addresses
+of &str objects. However, this should be rather rare in practice.
+Just file a bug if you feel that this could be a problem!
+
+
 ## 0.7.4 Add introspect for PathBuf
 
 PathBuf did not inmplement Introspect, which had the effect that trying to use derive(Savefile) on
