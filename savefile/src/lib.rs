@@ -3324,7 +3324,18 @@ impl WithSchema for Arc<str> {
         Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
+impl Introspect for Arc<str> {
+    fn introspect_value(&self) -> String {
+        self.deref().to_string()
+    }
 
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+        None
+    }
+    fn introspect_len(&self) -> usize {
+        0
+    }
+}
 impl Serialize for Arc<str> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(&*self)
