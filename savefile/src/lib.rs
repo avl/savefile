@@ -816,8 +816,26 @@ pub struct Deserializer<'a> {
     pub file_version: u32,
     /// The version of the data structures in memory
     pub memory_version: u32,
+    /// This contains ephemeral state that can be used to implement de-duplication of
+    /// strings or possibly other situations where it is desired to deserialize DAGs.
+    ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
+
+impl<'a> Deserializer<'a> {
+    /// This function constructs a temporary state object of type R, and returns a mutable
+    /// reference to it. This object can be used to store data that needs to live for the entire
+    /// deserialization session. An example is de-duplicating Arc and other reference counted objects.
+    /// Out of the box, Arc<str> has this deduplication done for it.
+    /// The type T must be set to the type being deserialized, and is used as a key in a hashmap
+    /// separating the state for different types.
+    pub fn get_state<T:'static,R:Default+'static>(&mut self) -> &mut R {
+        let type_id = TypeId::of::<T>();
+        let the_any = self.ephemeral_state.entry(type_id).or_insert_with(||Box::new(R::default()));
+
+        the_any.downcast_mut().unwrap()
+    }
+}
 
 
 
@@ -1434,6 +1452,7 @@ impl<'a> Deserializer<'a> {
             reader,
             file_version: file_ver,
             memory_version: version,
+            ephemeral_state: HashMap::new(),
         };
         Ok(T::deserialize(&mut deserializer)?)
     }
@@ -1446,6 +1465,7 @@ impl<'a> Deserializer<'a> {
             reader,
             file_version: 0,
             memory_version: 0,
+            ephemeral_state: HashMap::new(),
         }
     }
 }
@@ -3298,6 +3318,33 @@ impl<T: Introspect> Introspect for Arc<[T]> {
         self.len()
     }
 }
+
+impl WithSchema for Arc<str> {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string)
+    }
+}
+
+impl Serialize for Arc<str> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        serializer.write_string(&*self)
+    }
+}
+impl Deserialize for Arc<str> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let s = deserializer.read_string()?;
+
+        let state = deserializer.get_state::<Arc<str>,HashMap<String,Arc<str>>>();
+
+        if let Some(needle) = state.get(&s) {
+            return Ok(Arc::clone(needle));
+        }
+
+        let arc_ref = state.entry(s.clone()).or_insert(s.into());
+        Ok(Arc::clone(arc_ref))
+    }
+}
+
 #[cfg(feature="nightly")]
 impl<T: Serialize> Serialize for Arc<[T]> {
     default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
@@ -4027,6 +4074,7 @@ use std::sync::Arc;
 use std::convert::TryFrom;
 use bzip2::Compression;
 use std::path::PathBuf;
+use std::any::{TypeId, Any};
 
 impl<T:WithSchema> WithSchema for RefCell<T> {
     fn schema(version:u32) -> Schema {

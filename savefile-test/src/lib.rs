@@ -1089,6 +1089,28 @@ pub fn test_pathbuf() {
 
 }
 
+#[test]
+pub fn test_arc_str() {
+    let x:Arc<str> = "hej".into();
+    assert_roundtrip(x);
+}
+#[test]
+pub fn test_arc_str_dedup() {
+    let x:Arc<str> = "hej".into();
+    let y:Arc<str> = "hejsan".into();
+    let z:Arc<str> = "hej".into();
+
+    let (nx,ny,nz) = roundtrip((x.clone(),y.clone(),z.clone()));
+    assert_ne!(nx.as_ptr(), x.as_ptr());
+    assert_ne!(ny.as_ptr(), y.as_ptr());
+    assert_ne!(nz.as_ptr(), z.as_ptr());
+    assert_eq!(nx,nz);
+    assert_ne!(nx,ny);
+    assert_ne!(ny,nz);
+
+
+}
+
 #[derive(Savefile, Debug, PartialEq)]
 struct SomethingWithPathbufIn {
     my_pathbuf: PathBuf
