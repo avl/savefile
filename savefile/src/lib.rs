@@ -4601,126 +4601,34 @@ impl WithSchema for f64 {
     }
 }
 
-impl Introspect for bool {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
+macro_rules! impl_introspect {
+    ($ty: ty) => {
+        impl Introspect for $ty {
+            fn introspect_value(&self) -> String {
+                self.to_string()
+            }
+            fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+                None
+            }
+        }
+    };
 }
-impl Introspect for u8 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for u16 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for u32 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for u64 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for u128 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for i8 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for i16 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for i32 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for i64 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for i128 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for f32 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for f64 {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for usize {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
-impl Introspect for isize {
-    fn introspect_value(&self) -> String {
-        self.to_string()
-    }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        None
-    }
-}
+
+impl_introspect!(bool);
+impl_introspect!(u8);
+impl_introspect!(u16);
+impl_introspect!(u32);
+impl_introspect!(u64);
+impl_introspect!(u128);
+impl_introspect!(i8);
+impl_introspect!(i16);
+impl_introspect!(i32);
+impl_introspect!(i64);
+impl_introspect!(i128);
+impl_introspect!(f32);
+impl_introspect!(f64);
+impl_introspect!(usize);
+impl_introspect!(isize);
 
 impl Serialize for u8 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
