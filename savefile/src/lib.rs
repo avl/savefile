@@ -1,9 +1,9 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
-#![cfg_attr(feature="nightly", feature(test))]
-#![cfg_attr(feature="nightly", feature(specialization))]
-#![cfg_attr(feature="nightly", feature(integer_atomics))]
-#![cfg_attr(feature="nightly", feature(const_generics))]
+#![cfg_attr(feature = "nightly", feature(test))]
+#![cfg_attr(feature = "nightly", feature(specialization))]
+#![cfg_attr(feature = "nightly", feature(integer_atomics))]
+#![cfg_attr(feature = "nightly", feature(const_generics))]
 #![deny(missing_docs)]
 
 /*!
@@ -51,7 +51,7 @@ fn load_player() -> Player {
 }
 
 fn main() {
-	let player = Player { name: "Steve".to_string(), strength: 42,
+    let player = Player { name: "Steve".to_string(), strength: 42,
         inventory: vec!(
             "wallet".to_string(),
             "car keys".to_string(),
@@ -94,22 +94,22 @@ struct Player {
 }
 
 fn save_player(file:&'static str, player:&Player) {
-	// Save current version of file.
+    // Save current version of file.
     save_file(file, GLOBAL_VERSION, player).unwrap();
 }
 
 fn load_player(file:&'static str) -> Player {
-	// The GLOBAL_VERSION means we have that version of our data structures,
-	// but we can still load any older version.
+    // The GLOBAL_VERSION means we have that version of our data structures,
+    // but we can still load any older version.
     load_file(file, GLOBAL_VERSION).unwrap()
 }
 
 fn main() {
-	let mut player = load_player("save.bin"); //Load from previous save
-	assert_eq!("Steve",&player.name); //The name from the previous version saved will remain
-	assert_eq!(0,player.skills.len()); //Skills didn't exist when this was saved
-	player.skills.push("Whistling".to_string());
-	save_player("newsave.bin", &player); //The version saved here will the vec of skills
+    let mut player = load_player("save.bin"); //Load from previous save
+    assert_eq!("Steve",&player.name); //The name from the previous version saved will remain
+    assert_eq!(0,player.skills.len()); //Skills didn't exist when this was saved
+    player.skills.push("Whistling".to_string());
+    save_player("newsave.bin", &player); //The version saved here will the vec of skills
 }
 ```
 
@@ -400,8 +400,8 @@ Rules for using the #\[savefile_versions] attribute:
  ```
  #[repr(C)]
  struct Bad {
- 	f1 : u8,
- 	f2 : u32,
+     f1 : u8,
+     f2 : u32,
  }
  ```
  Since the compiler is likely to insert 3 bytes of padding after f1, to ensure that f2 is aligned to 4 bytes.
@@ -411,11 +411,11 @@ Rules for using the #\[savefile_versions] attribute:
  ```
  #[repr(C)]
  struct Good {
- 	f1 : u8,
- 	pad1 :u8,
- 	pad2 :u8,
- 	pad3 :u8,
- 	f2 : u32,
+     f1 : u8,
+     pad1 :u8,
+     pad2 :u8,
+     pad3 :u8,
+     f2 : u32,
  }
  ```
 
@@ -425,8 +425,8 @@ Rules for using the #\[savefile_versions] attribute:
  ```
  #[repr(C)]
  struct Bad2 {
- 	f1 : u32,
- 	f2 : u8,
+     f1 : u32,
+     f2 : u8,
  }
  ```
  This restriction may be lifted at a later time.
@@ -446,8 +446,8 @@ Rules for using the #\[savefile_versions] attribute:
  #[derive(ReprC, Clone, Copy, Savefile)]
  #[repr(C)]
  struct Position {
- 	x : u32,
- 	y : u32,
+     x : u32,
+     y : u32,
  }
 
  const GLOBAL_VERSION:u32 = 2;
@@ -472,11 +472,11 @@ Rules for using the #\[savefile_versions] attribute:
  }
 
  fn main() {
- 	let mut player = load_player("newsave.bin"); //Load from previous save
- 	player.history.push(Position{x:1,y:1});
- 	player.history.push(Position{x:2,y:1});
- 	player.history.push(Position{x:2,y:2});
- 	save_player("newersave.bin", &player);
+     let mut player = load_player("newsave.bin"); //Load from previous save
+     player.history.push(Position{x:1,y:1});
+     player.history.push(Position{x:2,y:1});
+     player.history.push(Position{x:2,y:2});
+     save_player("newersave.bin", &player);
  }
  ```
 
@@ -687,45 +687,40 @@ Rules for using the #\[savefile_versions] attribute:
 
 */
 
-#[macro_use] 
+#[macro_use]
 extern crate failure;
 
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
-extern crate byteorder;
 extern crate alloc;
 extern crate arrayvec;
-extern crate smallvec;
+extern crate byteorder;
 extern crate parking_lot;
+extern crate smallvec;
 use parking_lot::{Mutex, MutexGuard};
 use parking_lot::{RwLock, RwLockReadGuard};
-use std::io::{Write, Error, ErrorKind};
-use std::io::Read;
 use std::fs::File;
+use std::io::Read;
+use std::io::{Error, ErrorKind, Write};
 use std::sync::atomic::{
-    Ordering,
-    AtomicBool,
-    AtomicU8,AtomicI8,
-    AtomicU16,AtomicI16,
-    AtomicU32,AtomicI32,
-    AtomicU64,AtomicI64,
-    AtomicUsize,AtomicIsize,
+    AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
+    AtomicUsize, Ordering,
 };
 
-use self::byteorder::{LittleEndian};
+use self::byteorder::LittleEndian;
+use std::collections::BinaryHeap;
+use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
 #[allow(unused_imports)]
 use std::mem::MaybeUninit;
-use std::collections::{HashMap, HashSet, BTreeMap};
-use std::collections::VecDeque;
-use std::collections::BinaryHeap;
-use std::hash::Hash;
 extern crate indexmap;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
-#[cfg(feature="nightly")]
-extern crate test;
 extern crate bit_vec;
 extern crate bzip2;
+#[cfg(feature = "nightly")]
+extern crate test;
 
 /// This object represents an error in deserializing or serializing
 /// an item.
@@ -733,7 +728,6 @@ extern crate bzip2;
 #[must_use]
 #[non_exhaustive]
 pub enum SavefileError {
-
     /// Error given when the schema stored in a file, does not match
     /// the schema given by the data structures in the code, taking into account
     /// versions.
@@ -743,28 +737,28 @@ pub enum SavefileError {
         message: String,
     },
     /// Some sort of IO failure. Permissions, broken media etc ...
-    #[fail(display = "IO Error: {}",io_error)]
-    IOError{
+    #[fail(display = "IO Error: {}", io_error)]
+    IOError {
         /// Cause
-        io_error:std::io::Error
+        io_error: std::io::Error,
     },
     /// The binary data which is being deserialized, contained an invalid utf8 sequence
     /// where a String was expected. If this occurs, it is either a bug in savefile,
     /// a bug in an implementation of Deserialize, Serialize or WithSchema, or
     /// a corrupt data file.
-    #[fail(display = "Invalid utf8 character {}",msg)]
-    InvalidUtf8{
+    #[fail(display = "Invalid utf8 character {}", msg)]
+    InvalidUtf8 {
         /// descriptive message
-        msg:String
+        msg: String,
     },
     /// Unexpected error with regards to memory layout requirements.
     #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
     MemoryAllocationLayoutError,
-    #[fail(display = "Arrayvec: {}",msg)]
+    #[fail(display = "Arrayvec: {}", msg)]
     /// An Arrayvec had smaller capacity than the size of the data in the binary file.
-    ArrayvecCapacityError{
+    ArrayvecCapacityError {
         /// Descriptive message
-        msg:String
+        msg: String,
     },
     /// The reader returned fewer bytes than expected
     #[fail(display = "ShortRead")]
@@ -777,25 +771,22 @@ pub enum SavefileError {
     /// does not fit in a 32 bit word.
     #[fail(display = "SizeOverflow")]
     SizeOverflow,
-    #[fail(display = "WrongVersion: {}",msg)]
+    #[fail(display = "WrongVersion: {}", msg)]
     /// The file does not have a supported version number
-    WrongVersion{
+    WrongVersion {
         /// Descriptive message
-        msg:String
+        msg: String,
     },
-    #[fail(display = "GeneralError: {}",msg)]
+    #[fail(display = "GeneralError: {}", msg)]
     /// The file does not have a supported version number
-    GeneralError{
+    GeneralError {
         /// Descriptive message
-        msg:String
+        msg: String,
     },
     #[fail(display = "Poisoned mutex error")]
     /// A poisoned mutex was encountered when traversing the object being saved
-    PoisonedMutex
-
+    PoisonedMutex,
 }
-
-
 
 /// Object to which serialized data is to be written.
 /// This is basically just a wrapped `std::io::Write` object
@@ -803,7 +794,7 @@ pub enum SavefileError {
 pub struct Serializer<'a> {
     writer: &'a mut dyn Write,
     /// The version of the data structures in memory which are being serialized.
-    pub version: u32
+    pub version: u32,
 }
 
 /// Object from which bytes to be deserialized are read.
@@ -821,7 +812,6 @@ pub struct Deserializer<'a> {
     ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
-
 impl<'a> Deserializer<'a> {
     /// This function constructs a temporary state object of type R, and returns a mutable
     /// reference to it. This object can be used to store data that needs to live for the entire
@@ -829,15 +819,16 @@ impl<'a> Deserializer<'a> {
     /// Out of the box, Arc<str> has this deduplication done for it.
     /// The type T must be set to the type being deserialized, and is used as a key in a hashmap
     /// separating the state for different types.
-    pub fn get_state<T:'static,R:Default+'static>(&mut self) -> &mut R {
+    pub fn get_state<T: 'static, R: Default + 'static>(&mut self) -> &mut R {
         let type_id = TypeId::of::<T>();
-        let the_any = self.ephemeral_state.entry(type_id).or_insert_with(||Box::new(R::default()));
+        let the_any = self
+            .ephemeral_state
+            .entry(type_id)
+            .or_insert_with(|| Box::new(R::default()));
 
         the_any.downcast_mut().unwrap()
     }
 }
-
-
 
 /// This is a marker trait for types which have an in-memory layout that is packed
 /// and therefore identical to the layout that savefile will use on disk.
@@ -860,7 +851,7 @@ pub unsafe trait ReprC: Copy {
 
 impl From<std::io::Error> for SavefileError {
     fn from(s: std::io::Error) -> SavefileError {
-        SavefileError::IOError{io_error:s}
+        SavefileError::IOError { io_error: s }
     }
 }
 
@@ -870,16 +861,15 @@ impl<T> From<std::sync::PoisonError<T>> for SavefileError {
     }
 }
 
-
 impl From<std::string::FromUtf8Error> for SavefileError {
     fn from(s: std::string::FromUtf8Error) -> SavefileError {
-        SavefileError::InvalidUtf8{msg:s.to_string()}
+        SavefileError::InvalidUtf8 { msg: s.to_string() }
     }
 }
 
-impl<T> From<arrayvec::CapacityError<T> > for SavefileError {
+impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
     fn from(s: arrayvec::CapacityError<T>) -> SavefileError {
-        SavefileError::ArrayvecCapacityError{msg:s.to_string()}
+        SavefileError::ArrayvecCapacityError { msg: s.to_string() }
     }
 }
 
@@ -890,7 +880,7 @@ impl WithSchema for PathBuf {
 }
 impl Serialize for PathBuf {
     fn serialize<'a>(&self, serializer: &mut Serializer<'a>) -> Result<(), SavefileError> {
-        let as_string : String = self.to_string_lossy().to_string();
+        let as_string: String = self.to_string_lossy().to_string();
         as_string.serialize(serializer)
     }
 }
@@ -909,37 +899,36 @@ impl Introspect for PathBuf {
     }
 }
 
-use ring::{aead};
-use ring::aead::{Nonce, UnboundKey, AES_256_GCM, SealingKey, OpeningKey, NonceSequence, BoundKey};
+use ring::aead;
+use ring::aead::{BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM};
 use ring::error::Unspecified;
 extern crate rand;
 
-use rand::rngs::{OsRng};
-use rand::RngCore;
-use byteorder::WriteBytesExt;
 use byteorder::ReadBytesExt;
+use byteorder::WriteBytesExt;
+use rand::rngs::OsRng;
+use rand::RngCore;
 
 extern crate ring;
 
 #[derive(Debug)]
 struct RandomNonceSequence {
-    data1:u64,
-    data2:u32,
+    data1: u64,
+    data2: u32,
 }
 impl RandomNonceSequence {
     pub fn new() -> RandomNonceSequence {
-
         RandomNonceSequence {
             data1: OsRng.next_u64(),
             data2: OsRng.next_u32(),
         }
     }
-    pub fn serialize(&self, writer:&mut dyn Write) -> Result<(),SavefileError>{
+    pub fn serialize(&self, writer: &mut dyn Write) -> Result<(), SavefileError> {
         writer.write_u64::<LittleEndian>(self.data1)?;
         writer.write_u32::<LittleEndian>(self.data2)?;
         Ok(())
     }
-    pub fn deserialize(reader: &mut dyn Read) -> Result<RandomNonceSequence,SavefileError> {
+    pub fn deserialize(reader: &mut dyn Read) -> Result<RandomNonceSequence, SavefileError> {
         Ok(RandomNonceSequence {
             data1: reader.read_u64::<LittleEndian>()?,
             data2: reader.read_u32::<LittleEndian>()?,
@@ -954,14 +943,14 @@ impl NonceSequence for RandomNonceSequence {
             self.data1 = self.data1.wrapping_add(1);
         }
         use std::mem::transmute;
-        let mut bytes = [0u8;12];
-        let bytes1:[u8;8] = unsafe { transmute(self.data1.to_le()) };
-        let bytes2:[u8;4] = unsafe { transmute(self.data2.to_le()) };
+        let mut bytes = [0u8; 12];
+        let bytes1: [u8; 8] = unsafe { transmute(self.data1.to_le()) };
+        let bytes2: [u8; 4] = unsafe { transmute(self.data2.to_le()) };
         for i in 0..8 {
-            bytes[i]=bytes1[i];
+            bytes[i] = bytes1[i];
         }
         for i in 0..4 {
-            bytes[i+8]=bytes2[i];
+            bytes[i + 8] = bytes2[i];
         }
 
         Ok(Nonce::assume_unique_for_key(bytes))
@@ -972,28 +961,27 @@ impl NonceSequence for RandomNonceSequence {
 /// Wraps a plain dyn Write, and itself implements Write, encrypting
 /// all data written.
 pub struct CryptoWriter<'a> {
-    writer : &'a mut dyn Write,
+    writer: &'a mut dyn Write,
     buf: Vec<u8>,
-    sealkey : SealingKey<RandomNonceSequence>,
-    failed: bool
+    sealkey: SealingKey<RandomNonceSequence>,
+    failed: bool,
 }
 
 /// A cryptographic stream wrapper.
 /// Wraps a plain dyn Read, and itself implements Read, decrypting
 /// and verifying all data read.
 pub struct CryptoReader<'a> {
-    reader : &'a mut dyn Read,
+    reader: &'a mut dyn Read,
     buf: Vec<u8>,
-    offset:usize,
-    openingkey : OpeningKey<RandomNonceSequence>
+    offset: usize,
+    openingkey: OpeningKey<RandomNonceSequence>,
 }
 
 impl<'a> CryptoReader<'a> {
     /// Create a new CryptoReader, wrapping the given Read . Decrypts using the given
     /// 32 byte cryptographic key.
     /// Crypto is 256 bit AES GCM
-    pub fn new(reader:&'a mut dyn Read, key_bytes: [u8;32]) -> Result<CryptoReader<'a>,SavefileError> {
-
+    pub fn new(reader: &'a mut dyn Read, key_bytes: [u8; 32]) -> Result<CryptoReader<'a>, SavefileError> {
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
 
         let nonce_sequence = RandomNonceSequence::deserialize(reader)?;
@@ -1001,15 +989,14 @@ impl<'a> CryptoReader<'a> {
 
         Ok(CryptoReader {
             reader,
-            offset:0,
-            buf:Vec::new(),
-            openingkey
+            offset: 0,
+            buf: Vec::new(),
+            openingkey,
         })
     }
-
 }
 
-const CRYPTO_BUFSIZE : usize = 100_000;
+const CRYPTO_BUFSIZE: usize = 100_000;
 
 impl<'a> Drop for CryptoWriter<'a> {
     fn drop(&mut self) {
@@ -1020,7 +1007,7 @@ impl<'a> CryptoWriter<'a> {
     /// Create a new CryptoWriter, wrapping the given Write . Encrypts using the given
     /// 32 byte cryptographic key.
     /// Crypto is 256 bit AES GCM
-    pub fn new(writer:&'a mut dyn Write, key_bytes: [u8;32]) -> Result<CryptoWriter<'a>,SavefileError> {
+    pub fn new(writer: &'a mut dyn Write, key_bytes: [u8; 32]) -> Result<CryptoWriter<'a>, SavefileError> {
         let unboundkey = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
         let nonce_sequence = RandomNonceSequence::new();
         nonce_sequence.serialize(writer)?;
@@ -1029,13 +1016,13 @@ impl<'a> CryptoWriter<'a> {
             writer,
             buf: Vec::new(),
             sealkey,
-            failed: false
+            failed: false,
         })
     }
     /// Data is encrypted in chunks. Calling this unconditionally finalizes a chunk, actually emitting
     /// data to the underlying dyn Write. When later reading data, an entire chunk must be read
     /// from file before any plaintext is produced.
-    pub fn flush_final(mut self) -> Result<(),SavefileError> {
+    pub fn flush_final(mut self) -> Result<(), SavefileError> {
         if self.failed {
             panic!("Call to failed CryptoWriter");
         }
@@ -1045,21 +1032,19 @@ impl<'a> CryptoWriter<'a> {
 }
 impl<'a> Read for CryptoReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-
         loop {
             if buf.len() <= self.buf.len() - self.offset {
-                buf.clone_from_slice(&self.buf[self.offset .. self.offset+buf.len()]);
+                buf.clone_from_slice(&self.buf[self.offset..self.offset + buf.len()]);
                 self.offset += buf.len();
-                return Ok(buf.len())
+                return Ok(buf.len());
             }
 
             {
                 let oldlen = self.buf.len();
                 let newlen = self.buf.len() - self.offset;
-                self.buf.copy_within(self.offset..oldlen,0);
-                self.buf.resize(newlen,0);
+                self.buf.copy_within(self.offset..oldlen, 0);
+                self.buf.resize(newlen, 0);
                 self.offset = 0;
-
             }
             let mut sizebuf = [0; 8];
             let mut sizebuf_bytes_read = 0;
@@ -1069,7 +1054,8 @@ impl<'a> Read for CryptoReader<'a> {
                         if gotsize == 0 {
                             if sizebuf_bytes_read == 0 {
                                 let cur_content_size = self.buf.len() - self.offset;
-                                buf[0..cur_content_size].clone_from_slice(&self.buf[self.offset .. self.offset+cur_content_size]);
+                                buf[0..cur_content_size]
+                                    .clone_from_slice(&self.buf[self.offset..self.offset + cur_content_size]);
                                 self.offset += cur_content_size;
                                 return Ok(cur_content_size);
                             } else {
@@ -1079,8 +1065,8 @@ impl<'a> Read for CryptoReader<'a> {
                             sizebuf_bytes_read += gotsize;
                             assert!(sizebuf_bytes_read <= 8);
                         }
-                    },
-                    Err(err) => {return Err(err)},
+                    }
+                    Err(err) => return Err(err),
                 }
                 if sizebuf_bytes_read == 8 {
                     break;
@@ -1090,20 +1076,23 @@ impl<'a> Read for CryptoReader<'a> {
             let curlen = byteorder::LittleEndian::read_u64(&sizebuf) as usize;
 
             if curlen > CRYPTO_BUFSIZE + 16 {
-                return Err(Error::new(ErrorKind::Other,"Cryptography error"));
+                return Err(Error::new(ErrorKind::Other, "Cryptography error"));
             }
             let orglen = self.buf.len();
-            self.buf.resize(orglen + curlen,0);
+            self.buf.resize(orglen + curlen, 0);
 
-            self.reader.read_exact(&mut self.buf[orglen..orglen+curlen])?;
+            self.reader.read_exact(&mut self.buf[orglen..orglen + curlen])?;
 
-            match self.openingkey.open_in_place(aead::Aad::empty(),
-                &mut self.buf[orglen..]) {
-                Ok(_) => {},
-                Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error")); }
+            match self
+                .openingkey
+                .open_in_place(aead::Aad::empty(), &mut self.buf[orglen..])
+            {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err(Error::new(ErrorKind::Other, "Cryptography error"));
+                }
             }
-            self.buf.resize(self.buf.len()-16,0);
-
+            self.buf.resize(self.buf.len() - 16, 0);
         }
     }
 }
@@ -1124,41 +1113,39 @@ impl<'a> Write for CryptoWriter<'a> {
     /// lost.
     fn flush(&mut self) -> Result<(), Error> {
         self.failed = true;
-        let mut offset=0;
+        let mut offset = 0;
 
-        let mut tempbuf= Vec::new();
+        let mut tempbuf = Vec::new();
         if self.buf.len() > CRYPTO_BUFSIZE {
-            tempbuf = Vec::<u8>::with_capacity(CRYPTO_BUFSIZE+16);
+            tempbuf = Vec::<u8>::with_capacity(CRYPTO_BUFSIZE + 16);
         }
 
         while self.buf.len() > offset {
-
             let curbuf;
-            if offset==0 && self.buf.len() <= CRYPTO_BUFSIZE {
-                curbuf=&mut self.buf;
+            if offset == 0 && self.buf.len() <= CRYPTO_BUFSIZE {
+                curbuf = &mut self.buf;
             } else {
                 let chunksize = (self.buf.len() - offset).min(CRYPTO_BUFSIZE);
-                tempbuf.resize(chunksize,0u8);
-                tempbuf.clone_from_slice(&self.buf[offset..offset+chunksize]);
+                tempbuf.resize(chunksize, 0u8);
+                tempbuf.clone_from_slice(&self.buf[offset..offset + chunksize]);
                 curbuf = &mut tempbuf;
             }
             let expected_final_len = curbuf.len() as u64 + 16;
             debug_assert!(expected_final_len <= CRYPTO_BUFSIZE as u64 + 16);
 
             self.writer.write_u64::<LittleEndian>(expected_final_len)?; //16 for the tag
-            match self.sealkey.seal_in_place_append_tag(
-                aead::Aad::empty(),
-                curbuf,
-            ) {
-                Ok(_) => {},
-                Err(_) => { return Err(Error::new(ErrorKind::Other,"Cryptography error"));}
+            match self.sealkey.seal_in_place_append_tag(aead::Aad::empty(), curbuf) {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err(Error::new(ErrorKind::Other, "Cryptography error"));
+                }
             }
             debug_assert!(curbuf.len() == expected_final_len as usize, "The size of the TAG generated by the AES 256 GCM in ring seems to have changed! This is very unexpected. File a bug on the savefile-crate");
 
             self.writer.write_all(&curbuf[..])?;
             self.writer.flush()?;
-            offset += curbuf.len()-16;
-            curbuf.resize(curbuf.len()-16,0);
+            offset += curbuf.len() - 16;
+            curbuf.resize(curbuf.len() - 16, 0);
         }
         self.buf.clear();
         self.failed = false;
@@ -1166,96 +1153,110 @@ impl<'a> Write for CryptoWriter<'a> {
     }
 }
 
-
 impl<'a> Serializer<'a> {
     /// Writes a binary bool to the dyn Write
-    pub fn write_bool(&mut self, v: bool)  -> Result<(),SavefileError> {
-        Ok(self.writer.write_u8( if v {1} else {0})?)
+    pub fn write_bool(&mut self, v: bool) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u8(if v { 1 } else { 0 })?)
     }
     /// Writes a binary u8 to the dyn Write
-    pub fn write_u8(&mut self, v: u8)  -> Result<(),SavefileError> {
+    pub fn write_u8(&mut self, v: u8) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(&[v])?)
     }
     /// Writes a binary i8 to the dyn Write
-    pub fn write_i8(&mut self, v: i8) -> Result<(),SavefileError> {
+    pub fn write_i8(&mut self, v: i8) -> Result<(), SavefileError> {
         Ok(self.writer.write_i8(v)?)
     }
 
     /// Writes a binary little endian u16 to the dyn Write
-    pub fn write_u16(&mut self, v: u16) -> Result<(),SavefileError> {
+    pub fn write_u16(&mut self, v: u16) -> Result<(), SavefileError> {
         Ok(self.writer.write_u16::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i16 to the dyn Write
-    pub fn write_i16(&mut self, v: i16) -> Result<(),SavefileError> {
+    pub fn write_i16(&mut self, v: i16) -> Result<(), SavefileError> {
         Ok(self.writer.write_i16::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian u32 to the dyn Write
-    pub fn write_u32(&mut self, v: u32) -> Result<(),SavefileError> {
+    pub fn write_u32(&mut self, v: u32) -> Result<(), SavefileError> {
         Ok(self.writer.write_u32::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i32 to the dyn Write
-    pub fn write_i32(&mut self, v: i32) -> Result<(),SavefileError> {
+    pub fn write_i32(&mut self, v: i32) -> Result<(), SavefileError> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian f32 to the dyn Write
-    pub fn write_f32(&mut self, v: f32) -> Result<(),SavefileError> {
+    pub fn write_f32(&mut self, v: f32) -> Result<(), SavefileError> {
         Ok(self.writer.write_f32::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian f64 to the dyn Write
-    pub fn write_f64(&mut self, v: f64) -> Result<(),SavefileError> {
+    pub fn write_f64(&mut self, v: f64) -> Result<(), SavefileError> {
         Ok(self.writer.write_f64::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian u64 to the dyn Write
-    pub fn write_u64(&mut self, v: u64) -> Result<(),SavefileError> {
+    pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i64 to the dyn Write
-    pub fn write_i64(&mut self, v: i64) -> Result<(),SavefileError> {
+    pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian usize as u64 to the dyn Write
-    pub fn write_usize(&mut self, v: usize) -> Result<(),SavefileError> {
+    pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
     }
     /// Writes a binary little endian isize as i64 to the dyn Write
-    pub fn write_isize(&mut self, v: isize) -> Result<(),SavefileError> {
+    pub fn write_isize(&mut self, v: isize) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
     }
     /// Writes a binary u8 array to the dyn Write
-    pub fn write_buf(&mut self, v: &[u8]) -> Result<(),SavefileError> {
+    pub fn write_buf(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
     /// Writes as a string as 64 bit length + utf8 data
-    pub fn write_string(&mut self, v: &str) -> Result<(),SavefileError> {
+    pub fn write_string(&mut self, v: &str) -> Result<(), SavefileError> {
         let asb = v.as_bytes();
         self.write_usize(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
     /// Writes a binary u8 array to the dyn Write. Synonym of write_buf.
-    pub fn write_bytes(&mut self, v: &[u8]) -> Result<(),SavefileError> {
+    pub fn write_bytes(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
 
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save] function instead.
-    pub fn save<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T, with_compression: bool) -> Result<(),SavefileError> {
-        Ok(Self::save_impl(writer,version,data,true, with_compression)?)
+    pub fn save<T: WithSchema + Serialize>(
+        writer: &mut dyn Write,
+        version: u32,
+        data: &T,
+        with_compression: bool,
+    ) -> Result<(), SavefileError> {
+        Ok(Self::save_impl(writer, version, data, true, with_compression)?)
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save_noschema] function instead.
-    pub fn save_noschema<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
-        Ok(Self::save_impl(writer,version,data,false, false)?)
+    pub fn save_noschema<T: WithSchema + Serialize>(
+        writer: &mut dyn Write,
+        version: u32,
+        data: &T,
+    ) -> Result<(), SavefileError> {
+        Ok(Self::save_impl(writer, version, data, false, false)?)
     }
-    fn save_impl<T:WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T, with_schema: bool, with_compression: bool) -> Result<(),SavefileError> {
+    fn save_impl<T: WithSchema + Serialize>(
+        writer: &mut dyn Write,
+        version: u32,
+        data: &T,
+        with_schema: bool,
+        with_compression: bool,
+    ) -> Result<(), SavefileError> {
         let header = "savefile\0".to_string().into_bytes();
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(0/*savefile format version*/)?;
+        writer.write_u16::<LittleEndian>(0 /*savefile format version*/)?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
 
@@ -1270,14 +1271,13 @@ impl<'a> Serializer<'a> {
                 writer
             };
 
-            if with_schema
-            {
+            if with_schema {
                 let schema = T::schema(version);
-                let mut schema_serializer= Serializer::new_raw(writer);
+                let mut schema_serializer = Serializer::new_raw(writer);
                 schema.serialize(&mut schema_serializer)?;
             }
 
-            let mut serializer=Serializer { writer, version };
+            let mut serializer = Serializer { writer, version };
             data.serialize(&mut serializer)?;
             writer.flush()?;
         }
@@ -1289,60 +1289,60 @@ impl<'a> Serializer<'a> {
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
     pub fn new_raw(writer: &mut dyn Write) -> Serializer {
-        Serializer { writer, version:0}
+        Serializer { writer, version: 0 }
     }
 }
 
 impl<'a> Deserializer<'a> {
     /// Reads a u8 and return true if equal to 1
-    pub fn read_bool(&mut self) -> Result<bool,SavefileError> {
+    pub fn read_bool(&mut self) -> Result<bool, SavefileError> {
         Ok(self.reader.read_u8()? == 1)
     }
     /// Reads an u8
-    pub fn read_u8(&mut self) -> Result<u8,SavefileError> {
+    pub fn read_u8(&mut self) -> Result<u8, SavefileError> {
         let mut buf = [0u8];
         self.reader.read_exact(&mut buf)?;
         Ok(buf[0])
     }
     /// Reads a little endian u16
-    pub fn read_u16(&mut self) -> Result<u16,SavefileError> {
+    pub fn read_u16(&mut self) -> Result<u16, SavefileError> {
         Ok(self.reader.read_u16::<LittleEndian>()?)
     }
     /// Reads a little endian u32
-    pub fn read_u32(&mut self) -> Result<u32,SavefileError> {
+    pub fn read_u32(&mut self) -> Result<u32, SavefileError> {
         Ok(self.reader.read_u32::<LittleEndian>()?)
     }
     /// Reads a little endian u64
-    pub fn read_u64(&mut self) -> Result<u64,SavefileError> {
+    pub fn read_u64(&mut self) -> Result<u64, SavefileError> {
         Ok(self.reader.read_u64::<LittleEndian>()?)
     }
 
     /// Reads an i8
-    pub fn read_i8(&mut self) -> Result<i8,SavefileError> {
+    pub fn read_i8(&mut self) -> Result<i8, SavefileError> {
         Ok(self.reader.read_i8()?)
     }
     /// Reads a little endian i16
-    pub fn read_i16(&mut self) -> Result<i16,SavefileError> {
+    pub fn read_i16(&mut self) -> Result<i16, SavefileError> {
         Ok(self.reader.read_i16::<LittleEndian>()?)
     }
     /// Reads a little endian i32
-    pub fn read_i32(&mut self) -> Result<i32,SavefileError> {
+    pub fn read_i32(&mut self) -> Result<i32, SavefileError> {
         Ok(self.reader.read_i32::<LittleEndian>()?)
     }
     /// Reads a little endian i64
-    pub fn read_i64(&mut self) -> Result<i64,SavefileError> {
+    pub fn read_i64(&mut self) -> Result<i64, SavefileError> {
         Ok(self.reader.read_i64::<LittleEndian>()?)
     }
     /// Reads a little endian f32
-    pub fn read_f32(&mut self) -> Result<f32,SavefileError> {
+    pub fn read_f32(&mut self) -> Result<f32, SavefileError> {
         Ok(self.reader.read_f32::<LittleEndian>()?)
     }
     /// Reads a little endian f64
-    pub fn read_f64(&mut self) -> Result<f64,SavefileError> {
+    pub fn read_f64(&mut self) -> Result<f64, SavefileError> {
         Ok(self.reader.read_f64::<LittleEndian>()?)
     }
     /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
-    pub fn read_isize(&mut self) -> Result<isize,SavefileError> {
+    pub fn read_isize(&mut self) -> Result<isize, SavefileError> {
         if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()? as isize) {
             Ok(val)
         } else {
@@ -1350,7 +1350,7 @@ impl<'a> Deserializer<'a> {
         }
     }
     /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
-    pub fn read_usize(&mut self) -> Result<usize,SavefileError> {
+    pub fn read_usize(&mut self) -> Result<usize, SavefileError> {
         if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()? as usize) {
             Ok(val)
         } else {
@@ -1358,12 +1358,14 @@ impl<'a> Deserializer<'a> {
         }
     }
     /// Reads a 64 bit length followed by an utf8 encoded string. Fails if data is not valid utf8
-    pub fn read_string(&mut self) -> Result<String,SavefileError> {
+    pub fn read_string(&mut self) -> Result<String, SavefileError> {
         let l = self.read_usize()?;
         #[cfg(feature = "size_sanity_checks")]
         {
-                if l > 1_000_000 {
-                return Err(SavefileError::GeneralError {msg:format!("String too large")});
+            if l > 1_000_000 {
+                return Err(SavefileError::GeneralError {
+                    msg: format!("String too large"),
+                });
             }
         }
         let mut v = Vec::with_capacity(l);
@@ -1373,42 +1375,43 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Reads 'len' raw u8 bytes as a Vec<u8>
-    pub fn read_bytes(&mut self, len:usize) -> Result<Vec<u8>,SavefileError> {
+    pub fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, SavefileError> {
         let mut v = Vec::with_capacity(len);
         v.resize(len, 0); //TODO: Optimize this
         self.reader.read_exact(&mut v)?;
-        Ok(v)        
+        Ok(v)
     }
     /// Reads raw u8 bytes into the given buffer. The buffer size must be
     /// equal to the number of bytes desired to be read.
-    pub fn read_bytes_to_buf(&mut self, buf:&mut [u8]) -> Result<(),SavefileError> {
+    pub fn read_bytes_to_buf(&mut self, buf: &mut [u8]) -> Result<(), SavefileError> {
         self.reader.read_exact(buf)?;
-        Ok(())        
+        Ok(())
     }
 
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
-    pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
-        Deserializer::load_impl::<T>(reader,version, true)
+    pub fn load<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
+        Deserializer::load_impl::<T>(reader, version, true)
     }
 
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load_noschema] function
     /// instead.
-    pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
-        Deserializer::load_impl::<T>(reader,version,false)
+    pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
+        Deserializer::load_impl::<T>(reader, version, false)
     }
-    fn load_impl<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32, fetch_schema: bool) -> Result<T,SavefileError> {
-
-
-        let mut head:[u8;9] = [0u8;9];
+    fn load_impl<T: WithSchema + Deserialize>(
+        reader: &mut dyn Read,
+        version: u32,
+        fetch_schema: bool,
+    ) -> Result<T, SavefileError> {
+        let mut head: [u8; 9] = [0u8; 9];
         reader.read_exact(&mut head)?;
 
         if &head[..] != &("savefile\0".to_string().into_bytes())[..] {
             return Err(SavefileError::GeneralError {msg: "File is not in new savefile-format. If you have a file in old format, contact crate author and we'll work something out! It is not the intention that binary compatibility will be broken any more in the future.".into()});
         }
-
 
         let savefile_lib_version = reader.read_u16::<LittleEndian>()?;
         if savefile_lib_version != 0 {
@@ -1418,37 +1421,37 @@ impl<'a> Deserializer<'a> {
 
         if file_ver > version {
             return Err(SavefileError::WrongVersion {
-                msg:
-                format!("File has later version ({}) than structs in memory ({}).",
-                        file_ver, version)
+                msg: format!(
+                    "File has later version ({}) than structs in memory ({}).",
+                    file_ver, version
+                ),
             });
         }
         let with_compression = reader.read_u8()? != 0;
 
         let mut temp;
         let reader: &mut dyn Read = if with_compression {
-
             temp = bzip2::read::BzDecoder::new(reader);
             &mut temp
-
         } else {
             reader
         };
 
-
-        if fetch_schema
-        {
+        if fetch_schema {
             let mut schema_deserializer = Deserializer::new_raw(reader);
             let memory_schema = T::schema(file_ver);
             let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
-            if let Some(err) = diff_schema(&memory_schema, &file_schema,".".to_string()) {
-                return Err(SavefileError::IncompatibleSchema{
-                    message:format!("Saved schema differs from in-memory schema for version {}. Error: {}",file_ver,
-                    err)});
+            if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
+                return Err(SavefileError::IncompatibleSchema {
+                    message: format!(
+                        "Saved schema differs from in-memory schema for version {}. Error: {}",
+                        file_ver, err
+                    ),
+                });
             }
         }
-        let mut deserializer=Deserializer {
+        let mut deserializer = Deserializer {
             reader,
             file_version: file_ver,
             memory_version: version,
@@ -1470,128 +1473,145 @@ impl<'a> Deserializer<'a> {
     }
 }
 
-
 /// Deserialize an instance of type T from the given `reader` .
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
-pub fn load<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
-    Deserializer::load::<T>(reader,version)
+pub fn load<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
+    Deserializer::load::<T>(reader, version)
 }
 
 /// Deserialize an instance of type T from the given u8 slice .
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
-pub fn load_from_mem<T:WithSchema+Deserialize>(input: &[u8], version: u32) -> Result<T,SavefileError> {
+pub fn load_from_mem<T: WithSchema + Deserialize>(input: &[u8], version: u32) -> Result<T, SavefileError> {
     let mut input = input;
-    Deserializer::load::<T>(&mut input,version)
+    Deserializer::load::<T>(&mut input, version)
 }
 
-/// Write the given `data` to the `writer`. 
+/// Write the given `data` to the `writer`.
 /// The current version of data must be `version`.
-pub fn save<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
-    Serializer::save::<T>(writer,version,data, false)
+pub fn save<T: WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(), SavefileError> {
+    Serializer::save::<T>(writer, version, data, false)
 }
 
 /// Write the given `data` to the `writer`. Compresses data using 'snappy' compression format.
 /// The current version of data must be `version`.
 /// The resultant data can be loaded using the regular load-function (it autodetects if compressions was
 /// active or not).
-pub fn save_compressed<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T, ) -> Result<(),SavefileError> {
-    Serializer::save::<T>(writer,version,data,true)
+pub fn save_compressed<T: WithSchema + Serialize>(
+    writer: &mut dyn Write,
+    version: u32,
+    data: &T,
+) -> Result<(), SavefileError> {
+    Serializer::save::<T>(writer, version, data, true)
 }
-
 
 /// Serialize the given data and return as a Vec<u8>
 /// The current version of data must be `version`.
-pub fn save_to_mem<T:WithSchema+Serialize>(version: u32, data: &T) -> Result<Vec<u8>,SavefileError> {
+pub fn save_to_mem<T: WithSchema + Serialize>(version: u32, data: &T) -> Result<Vec<u8>, SavefileError> {
     let mut retval = Vec::new();
-    Serializer::save::<T>(&mut retval,version,data, false)?;
+    Serializer::save::<T>(&mut retval, version, data, false)?;
     Ok(retval)
 }
 
 /// Like [crate::load] , but used to open files saved without schema,
 /// by one of the _noschema versions of the save functions.
-pub fn load_noschema<T:WithSchema+Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T,SavefileError> {
-    Deserializer::load_noschema::<T>(reader,version)
+pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
+    Deserializer::load_noschema::<T>(reader, version)
 }
 
-/// Write the given `data` to the `writer`. 
+/// Write the given `data` to the `writer`.
 /// The current version of data must be `version`.
 /// Do this write without writing any schema to disk.
 /// As long as all the serializers and deserializers
 /// are correctly written, the schema is not necessary.
 /// Omitting the schema saves some space in the saved file,
-/// but means that any mistake in implementation of the 
+/// but means that any mistake in implementation of the
 /// Serialize or Deserialize traits will cause hard-to-troubleshoot
 /// data corruption instead of a nice error message.
-pub fn save_noschema<T:WithSchema+Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(),SavefileError> {
-    Serializer::save_noschema::<T>(writer,version,data)
+pub fn save_noschema<T: WithSchema + Serialize>(
+    writer: &mut dyn Write,
+    version: u32,
+    data: &T,
+) -> Result<(), SavefileError> {
+    Serializer::save_noschema::<T>(writer, version, data)
 }
 
 /// Like [crate::load] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
+pub fn load_file<T: WithSchema + Deserialize>(filepath: &str, version: u32) -> Result<T, SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load::<T>(&mut f, version)
 }
 
 /// Like [crate::save] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
-pub fn save_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
+pub fn save_file<T: WithSchema + Serialize>(filepath: &str, version: u32, data: &T) -> Result<(), SavefileError> {
     let mut f = File::create(filepath)?;
-    Serializer::save::<T>(&mut f,version,data, false)
+    Serializer::save::<T>(&mut f, version, data, false)
 }
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file_noschema<T:WithSchema+Deserialize>(filepath:&str, version: u32) -> Result<T,SavefileError> {
+pub fn load_file_noschema<T: WithSchema + Deserialize>(filepath: &str, version: u32) -> Result<T, SavefileError> {
     let mut f = File::open(filepath)?;
-    Deserializer::load_noschema::<T>(&mut f,version)
+    Deserializer::load_noschema::<T>(&mut f, version)
 }
 
 /// Like [crate::save_noschema] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
-pub fn save_file_noschema<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T) -> Result<(),SavefileError> {
+pub fn save_file_noschema<T: WithSchema + Serialize>(
+    filepath: &str,
+    version: u32,
+    data: &T,
+) -> Result<(), SavefileError> {
     let mut f = File::create(filepath)?;
-    Serializer::save_noschema::<T>(&mut f,version,data)
+    Serializer::save_noschema::<T>(&mut f, version, data)
 }
 
 /// Like [crate::save_file], except encrypts the data with AES256, using the SHA256 hash
 /// of the password as key.
-pub fn save_encrypted_file<T:WithSchema+Serialize>(filepath:&str, version: u32, data: &T, password: &str) -> Result<(),SavefileError> {
-    use ring::{digest};
+pub fn save_encrypted_file<T: WithSchema + Serialize>(
+    filepath: &str,
+    version: u32,
+    data: &T,
+    password: &str,
+) -> Result<(), SavefileError> {
+    use ring::digest;
     let actual = digest::digest(&digest::SHA256, password.as_bytes());
-    let mut  key = [0u8;32];
+    let mut key = [0u8; 32];
     let password_hash = actual.as_ref();
-    assert_eq!(password_hash.len(), key.len(),"A SHA256 sum must be 32 bytes");
+    assert_eq!(password_hash.len(), key.len(), "A SHA256 sum must be 32 bytes");
     key.clone_from_slice(password_hash);
 
     let mut f = File::create(filepath)?;
-    let mut writer = CryptoWriter::new(&mut f,key)?;
+    let mut writer = CryptoWriter::new(&mut f, key)?;
 
-    Serializer::save::<T>(&mut writer,version,data, true)?;
+    Serializer::save::<T>(&mut writer, version, data, true)?;
     writer.flush()?;
     Ok(())
 }
 
-
 /// Like [crate::load_file], except it expects the file to be an encrypted file previously stored using
 /// [crate::save_encrypted_file].
-pub fn load_encrypted_file<T:WithSchema+Deserialize>(filepath:&str, version: u32, password: &str) -> Result<T,SavefileError> {
-    use ring::{digest};
+pub fn load_encrypted_file<T: WithSchema + Deserialize>(
+    filepath: &str,
+    version: u32,
+    password: &str,
+) -> Result<T, SavefileError> {
+    use ring::digest;
     let actual = digest::digest(&digest::SHA256, password.as_bytes());
-    let mut  key = [0u8;32];
+    let mut key = [0u8; 32];
     let password_hash = actual.as_ref();
-    assert_eq!(password_hash.len(), key.len(),"A SHA256 sum must be 32 bytes");
+    assert_eq!(password_hash.len(), key.len(), "A SHA256 sum must be 32 bytes");
     key.clone_from_slice(password_hash);
 
     let mut f = File::open(filepath)?;
     let mut reader = CryptoReader::new(&mut f, key).unwrap();
     Deserializer::load::<T>(&mut reader, version)
 }
-
 
 /// This trait must be implemented by all data structures you wish to be able to save.
 /// It must encode the schema for the datastructure when saved using the given version number.
@@ -1602,7 +1622,7 @@ pub fn load_encrypted_file<T:WithSchema+Deserialize>(filepath:&str, version: u32
 /// can be disabled).
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
-    fn schema(version:u32) -> Schema;    
+    fn schema(version: u32) -> Schema;
 }
 
 /// This trait must be implemented for all data structures you wish to be
@@ -1615,10 +1635,9 @@ pub trait WithSchema {
 /// extern crate savefile-derive;`
 ///
 /// and the use #\[derive(Serialize)]
-pub trait Serialize : WithSchema {
+pub trait Serialize: WithSchema {
     /// Serialize self into the given serializer.
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError>; //TODO: Do error handling
-
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError>; //TODO: Do error handling
 }
 
 /// A child of an object implementing Introspect. Is a key-value pair. The only reason this is not
@@ -1640,7 +1659,6 @@ pub const MAX_CHILDREN: usize = 10000;
 
 /// Gives the ability to look into an object, inspecting any children (fields).
 pub trait Introspect {
-
     /// Returns the value of the object, excluding children, as a string.
     /// Exactly what the value returned here is depends on the type.
     /// For some types, like a plain array, there isn't much of a value,
@@ -1656,7 +1674,7 @@ pub trait Introspect {
     /// all though there isn't really anything stopping the user of the trait to have
     /// any arbitrary index strategy, consecutive numbering 0, 1, 2, ... etc is strongly
     /// encouraged.
-    fn introspect_child<'a>(&'a self, index:usize) -> Option<Box<dyn IntrospectItem<'a>+'a>>;
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>>;
 
     /// Returns the total number of children.
     /// The default implementation calculates this by simply calling introspect_child with
@@ -1673,8 +1691,6 @@ pub trait Introspect {
     }
 }
 
-
-
 /// This trait must be implemented for all data structures you wish to
 /// be able to deserialize.
 ///
@@ -1683,124 +1699,118 @@ pub trait Introspect {
 /// extern crate savefile-derive;`
 ///
 /// and the use #\[derive(Deserialize)]
-pub trait Deserialize : WithSchema + Sized {
+pub trait Deserialize: WithSchema + Sized {
     /// Deserialize and return an instance of Self from the given deserializer.
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError>;  //TODO: Do error handling
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError>; //TODO: Do error handling
 }
-
-
 
 /// A field is serialized according to its value.
 /// The name is just for diagnostics.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Field {
     /// Field name
-    pub name : String,
+    pub name: String,
     /// Field type
-    pub value : Box<Schema>
+    pub value: Box<Schema>,
 }
 
 /// An array is serialized by serializing its items one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SchemaArray {
     /// Type of array elements
-    pub item_type : Box<Schema>,
+    pub item_type: Box<Schema>,
     /// Length of array
     pub count: usize,
 }
 
 impl SchemaArray {
     fn serialized_size(&self) -> Option<usize> {
-        self.item_type.serialized_size().map(|x|x* self.count)
+        self.item_type.serialized_size().map(|x| x * self.count)
     }
 }
 
 /// A struct is serialized by serializing its fields one by one,
-/// without any padding. 
+/// without any padding.
 /// The dbg_name is just for diagnostics.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SchemaStruct {
     /// Diagnostic value
-    pub dbg_name : String,
+    pub dbg_name: String,
     /// Fields of struct
-    pub fields : Vec<Field>
+    pub fields: Vec<Field>,
 }
-fn maybe_add(a:Option<usize>,b:Option<usize>) -> Option<usize> {
+fn maybe_add(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     if let Some(a) = a {
         if let Some(b) = b {
-            return Some(a+b);
+            return Some(a + b);
         }
-    }   
-    None 
+    }
+    None
 }
 impl SchemaStruct {
     fn serialized_size(&self) -> Option<usize> {
-        self.fields.iter().fold(Some(0usize),|prev,x| {
-            maybe_add(prev,x.value.serialized_size())
-        })
+        self.fields
+            .iter()
+            .fold(Some(0usize), |prev, x| maybe_add(prev, x.value.serialized_size()))
     }
 }
 
-
 /// An enum variant is serialized as its fields, one by one,
 /// without any padding.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Variant {
     /// Name of variant
-    pub name : String,
+    pub name: String,
     /// Discriminator in binary file-format
-    pub discriminator : u8,
+    pub discriminator: u8,
     /// Fields of variant
-    pub fields : Vec<Field>
+    pub fields: Vec<Field>,
 }
 impl Variant {
     fn serialized_size(&self) -> Option<usize> {
-        self.fields.iter().fold(Some(0usize),|prev,x| {
-            maybe_add(prev,x.value.serialized_size())
-        })
+        self.fields
+            .iter()
+            .fold(Some(0usize), |prev, x| maybe_add(prev, x.value.serialized_size()))
     }
 }
 
 /// An enum is serialized as its u8 variant discriminator
 /// followed by all the field for that variant.
-/// The name of each variant, as well as its order in 
+/// The name of each variant, as well as its order in
 /// the enum (the discriminator), is significant.
 #[derive(Debug, PartialEq)]
 pub struct SchemaEnum {
     /// Diagnostic name
-    pub dbg_name : String,
+    pub dbg_name: String,
     /// Variants of enum
-    pub variants : Vec<Variant>
+    pub variants: Vec<Variant>,
 }
 
-
-fn maybe_max(a:Option<usize>,b:Option<usize>) -> Option<usize> {
+fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     if let Some(a) = a {
         if let Some(b) = b {
             return Some(a.max(b));
         }
-    }   
-    None 
+    }
+    None
 }
 impl SchemaEnum {
-
     fn serialized_size(&self) -> Option<usize> {
-        let discr_size = 1usize;  //Discriminator is always 1 byte
-        self.variants.iter().fold(Some(discr_size),|prev,x| {
-            maybe_max(prev,x.serialized_size())
-        })
+        let discr_size = 1usize; //Discriminator is always 1 byte
+        self.variants
+            .iter()
+            .fold(Some(discr_size), |prev, x| maybe_max(prev, x.serialized_size()))
     }
 }
-
 
 /// A primitive is serialized as the little endian
 /// representation of its type, except for string,
 /// which is serialized as an usize length followed
 /// by the string in utf8.
 #[allow(non_camel_case_types)]
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SchemaPrimitive {
     /// i8
     schema_i8,
@@ -1851,13 +1861,12 @@ impl SchemaPrimitive {
 
 impl SchemaPrimitive {
     fn serialized_size(&self) -> Option<usize> {
-
         match *self {
             SchemaPrimitive::schema_i8 | SchemaPrimitive::schema_u8 => Some(1),
             SchemaPrimitive::schema_i16 | SchemaPrimitive::schema_u16 => Some(2),
             SchemaPrimitive::schema_i32 | SchemaPrimitive::schema_u32 => Some(4),
             SchemaPrimitive::schema_i64 | SchemaPrimitive::schema_u64 => Some(8),
-            SchemaPrimitive::schema_string => None,       
+            SchemaPrimitive::schema_string => None,
             SchemaPrimitive::schema_f32 => Some(4),
             SchemaPrimitive::schema_f64 => Some(8),
             SchemaPrimitive::schema_bool => Some(1),
@@ -1866,26 +1875,28 @@ impl SchemaPrimitive {
     }
 }
 
-fn diff_primitive(a:SchemaPrimitive,b:SchemaPrimitive, path:&str) -> Option<String> {
-    if a!=b {
-
-        return Some(format!("At location [{}]: Application protocol has datatype {}, but disk format has {}",
-            path,a.name(),b.name()));
+fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<String> {
+    if a != b {
+        return Some(format!(
+            "At location [{}]: Application protocol has datatype {}, but disk format has {}",
+            path,
+            a.name(),
+            b.name()
+        ));
     }
     None
 }
 
-
 /// The schema represents the save file format
 /// of your data structure. It is an AST (Abstract Syntax Tree)
-/// for consisting of various types of nodes in the savefile 
+/// for consisting of various types of nodes in the savefile
 /// format. Custom Serialize-implementations cannot add new types to
-/// this tree, but must reuse these existing ones. 
+/// this tree, but must reuse these existing ones.
 /// See the various enum variants for more information:
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Schema {
     /// Represents a struct. Custom implementations of Serialize may use this
-    /// format are encouraged to use this format. 
+    /// format are encouraged to use this format.
     Struct(SchemaStruct),
     /// Represents an enum
     Enum(SchemaEnum),
@@ -1900,145 +1911,188 @@ pub enum Schema {
     /// Basically a dummy value, the Schema nodes themselves report this schema if queried.
     Undefined,
     /// A zero-sized type. I.e, there is no data to serialize or deserialize.
-    ZeroSize,    
+    ZeroSize,
 }
 
 impl Schema {
     /// Create a 1-element tuple
-    pub fn new_tuple1<T1:WithSchema>(version:u32) -> Schema {
-        Schema::Struct(
-            SchemaStruct {
-                dbg_name: "1-Tuple".to_string(),
-                fields:vec![
-                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
-                ]
-            })
+    pub fn new_tuple1<T1: WithSchema>(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "1-Tuple".to_string(),
+            fields: vec![Field {
+                name: "0".to_string(),
+                value: Box::new(T1::schema(version)),
+            }],
+        })
     }
 
     /// Create a 2-element tuple
-    pub fn new_tuple2<T1:WithSchema,T2:WithSchema>(version:u32) -> Schema {
-        Schema::Struct(
-            SchemaStruct {
-                dbg_name: "2-Tuple".to_string(),
-                fields:vec![
-                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
-                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))}
-                ]
-            })
+    pub fn new_tuple2<T1: WithSchema, T2: WithSchema>(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "2-Tuple".to_string(),
+            fields: vec![
+                Field {
+                    name: "0".to_string(),
+                    value: Box::new(T1::schema(version)),
+                },
+                Field {
+                    name: "1".to_string(),
+                    value: Box::new(T2::schema(version)),
+                },
+            ],
+        })
     }
     /// Create a 3-element tuple
-    pub fn new_tuple3<T1:WithSchema,T2:WithSchema,T3:WithSchema>(version:u32) -> Schema {
-        Schema::Struct(
-            SchemaStruct {
-                dbg_name: "3-Tuple".to_string(),
-                fields:vec![
-                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
-                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))},
-                    Field {name:"2".to_string(), value: Box::new(T3::schema(version))}
-                ]
-            })
+    pub fn new_tuple3<T1: WithSchema, T2: WithSchema, T3: WithSchema>(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "3-Tuple".to_string(),
+            fields: vec![
+                Field {
+                    name: "0".to_string(),
+                    value: Box::new(T1::schema(version)),
+                },
+                Field {
+                    name: "1".to_string(),
+                    value: Box::new(T2::schema(version)),
+                },
+                Field {
+                    name: "2".to_string(),
+                    value: Box::new(T3::schema(version)),
+                },
+            ],
+        })
     }
     /// Create a 4-element tuple
-    pub fn new_tuple4<T1:WithSchema,T2:WithSchema,T3:WithSchema,T4:WithSchema>(version:u32) -> Schema {
-        Schema::Struct(
-            SchemaStruct {
-                dbg_name: "4-Tuple".to_string(),
-                fields:vec![
-                    Field {name:"0".to_string(), value: Box::new(T1::schema(version))},
-                    Field {name:"1".to_string(), value: Box::new(T2::schema(version))},
-                    Field {name:"2".to_string(), value: Box::new(T3::schema(version))},
-                    Field {name:"3".to_string(), value: Box::new(T4::schema(version))}
-                ]
-            })
+    pub fn new_tuple4<T1: WithSchema, T2: WithSchema, T3: WithSchema, T4: WithSchema>(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "4-Tuple".to_string(),
+            fields: vec![
+                Field {
+                    name: "0".to_string(),
+                    value: Box::new(T1::schema(version)),
+                },
+                Field {
+                    name: "1".to_string(),
+                    value: Box::new(T2::schema(version)),
+                },
+                Field {
+                    name: "2".to_string(),
+                    value: Box::new(T3::schema(version)),
+                },
+                Field {
+                    name: "3".to_string(),
+                    value: Box::new(T4::schema(version)),
+                },
+            ],
+        })
     }
     /// Size
     pub fn serialized_size(&self) -> Option<usize> {
         match *self {
-            Schema::Struct(ref schema_struct) => {
-                schema_struct.serialized_size()
-            }
-            Schema::Enum(ref schema_enum) => {
-                schema_enum.serialized_size()
-            }
-            Schema::Primitive(ref schema_primitive) => {
-                schema_primitive.serialized_size()
-            }
-            Schema::Vector(ref _vector) => {
-                None
-            }
-            Schema::Array(ref array) => {
-                array.serialized_size()
-            }
-            Schema::SchemaOption(ref _content) => {
-                None
-            }
-            Schema::Undefined => {
-                None
-            }
-            Schema::ZeroSize => {
-                Some(0)
-            }
+            Schema::Struct(ref schema_struct) => schema_struct.serialized_size(),
+            Schema::Enum(ref schema_enum) => schema_enum.serialized_size(),
+            Schema::Primitive(ref schema_primitive) => schema_primitive.serialized_size(),
+            Schema::Vector(ref _vector) => None,
+            Schema::Array(ref array) => array.serialized_size(),
+            Schema::SchemaOption(ref _content) => None,
+            Schema::Undefined => None,
+            Schema::ZeroSize => Some(0),
         }
     }
 }
 
-fn diff_vector(a:&Schema,b:&Schema,path:String) -> Option<String> {
-    diff_schema(a,b,
-        path + "/*")
+fn diff_vector(a: &Schema, b: &Schema, path: String) -> Option<String> {
+    diff_schema(a, b, path + "/*")
 }
 
-fn diff_array(a:&SchemaArray,b:&SchemaArray,path:String) -> Option<String> {
-    if a.count!=b.count {
-        return Some(format!("At location [{}]: In memory array has length {}, but disk format length {}.",
-            path,a.count,b.count));
+fn diff_array(a: &SchemaArray, b: &SchemaArray, path: String) -> Option<String> {
+    if a.count != b.count {
+        return Some(format!(
+            "At location [{}]: In memory array has length {}, but disk format length {}.",
+            path, a.count, b.count
+        ));
     }
 
-    diff_schema(&a.item_type,&b.item_type,
-         format!("{}/[{}]",path,a.count))
+    diff_schema(&a.item_type, &b.item_type, format!("{}/[{}]", path, a.count))
 }
 
-fn diff_option(a:&Schema,b:&Schema,path:String) -> Option<String> {
-    diff_schema(a,b,
-        path + "/?")
+fn diff_option(a: &Schema, b: &Schema, path: String) -> Option<String> {
+    diff_schema(a, b, path + "/?")
 }
 
-fn diff_enum(a:&SchemaEnum,b:&SchemaEnum, path:String)  -> Option<String> {
-
+fn diff_enum(a: &SchemaEnum, b: &SchemaEnum, path: String) -> Option<String> {
     let path = (path + &b.dbg_name).to_string();
-    if a.variants.len()!=b.variants.len() {
-        return Some(format!("At location [{}]: In memory enum has {} variants, but disk format has {} variants.",
-            path,a.variants.len(),b.variants.len()));
+    if a.variants.len() != b.variants.len() {
+        return Some(format!(
+            "At location [{}]: In memory enum has {} variants, but disk format has {} variants.",
+            path,
+            a.variants.len(),
+            b.variants.len()
+        ));
     }
     for i in 0..a.variants.len() {
-        if a.variants[i].name!=b.variants[i].name {
-            return Some(format!("At location [{}]: Enum variant #{} in memory is called {}, but in disk format it is called {}",
-                &path,i, a.variants[i].name,b.variants[i].name));
+        if a.variants[i].name != b.variants[i].name {
+            return Some(format!(
+                "At location [{}]: Enum variant #{} in memory is called {}, but in disk format it is called {}",
+                &path, i, a.variants[i].name, b.variants[i].name
+            ));
         }
-        if a.variants[i].discriminator!=b.variants[i].discriminator {
-            return Some(format!("At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
-                &path,i,a.variants[i].discriminator,b.variants[i].discriminator));
+        if a.variants[i].discriminator != b.variants[i].discriminator {
+            return Some(format!(
+                "At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
+                &path, i, a.variants[i].discriminator, b.variants[i].discriminator
+            ));
         }
-        let r=diff_fields(&a.variants[i].fields,&b.variants[i].fields,&(path.to_string()+"/"+&b.variants[i].name).to_string(),"enum",
-            "","");
-        if let Some(err)=r {
+        let r = diff_fields(
+            &a.variants[i].fields,
+            &b.variants[i].fields,
+            &(path.to_string() + "/" + &b.variants[i].name).to_string(),
+            "enum",
+            "",
+            "",
+        );
+        if let Some(err) = r {
             return Some(err);
         }
     }
     None
 }
-fn diff_struct(a:&SchemaStruct,b:&SchemaStruct,path:String) -> Option<String> {
-    diff_fields(&a.fields,&b.fields,&(path+"/"+&b.dbg_name).to_string(),"struct", 
-        &(" (struct ".to_string()+&a.dbg_name+")"), &(" (struct ".to_string()+&b.dbg_name+")"))
+fn diff_struct(a: &SchemaStruct, b: &SchemaStruct, path: String) -> Option<String> {
+    diff_fields(
+        &a.fields,
+        &b.fields,
+        &(path + "/" + &b.dbg_name).to_string(),
+        "struct",
+        &(" (struct ".to_string() + &a.dbg_name + ")"),
+        &(" (struct ".to_string() + &b.dbg_name + ")"),
+    )
 }
-fn diff_fields(a:&[Field],b:&[Field],path:&str, structuretype:&str,
-    extra_a:&str,extra_b:&str) -> Option<String> {
-    if a.len()!=b.len() {
-        return Some(format!("At location [{}]: In memory {}{} has {} fields, disk format{} has {} fields.",
-            path,structuretype,extra_a,a.len(),extra_b,b.len()));
+fn diff_fields(
+    a: &[Field],
+    b: &[Field],
+    path: &str,
+    structuretype: &str,
+    extra_a: &str,
+    extra_b: &str,
+) -> Option<String> {
+    if a.len() != b.len() {
+        return Some(format!(
+            "At location [{}]: In memory {}{} has {} fields, disk format{} has {} fields.",
+            path,
+            structuretype,
+            extra_a,
+            a.len(),
+            extra_b,
+            b.len()
+        ));
     }
     for i in 0..a.len() {
-        let r=diff_schema(&a[i].value,&b[i].value,(path.to_string()+"/"+&b[i].name).to_string());
-        if let Some(err)=r {
+        let r = diff_schema(
+            &a[i].value,
+            &b[i].value,
+            (path.to_string() + "/" + &b[i].name).to_string(),
+        );
+        if let Some(err) = r {
             return Some(err);
         }
     }
@@ -2049,239 +2103,212 @@ fn diff_fields(a:&[Field],b:&[Field],path:&str, structuretype:&str,
 /// between the two schemas. The schema 'a' is assumed to be the current
 /// schema (used in memory).
 /// Returns None if both schemas are equivalent
-fn diff_schema(a:&Schema, b: &Schema, path:String) -> Option<String> {
-    let (atype,btype)=match *a {
-        Schema::Struct(ref xa) => {
-            match *b {
-                Schema::Struct(ref xb) => {
-                    return diff_struct(xa,xb,path)
-                },
-                Schema::Enum(_) => ("struct","enum"),
-                Schema::Primitive(_) => ("struct","primitive"),
-                Schema::Vector(_) => ("struct","vector"),
-                Schema::SchemaOption(_) => ("struct","option"),
-                Schema::Undefined => ("struct","undefined"),
-                Schema::ZeroSize => ("struct","zerosize"),
-                Schema::Array(_) => ("struct","array"),
+fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
+    let (atype, btype) = match *a {
+        Schema::Struct(ref xa) => match *b {
+            Schema::Struct(ref xb) => return diff_struct(xa, xb, path),
+            Schema::Enum(_) => ("struct", "enum"),
+            Schema::Primitive(_) => ("struct", "primitive"),
+            Schema::Vector(_) => ("struct", "vector"),
+            Schema::SchemaOption(_) => ("struct", "option"),
+            Schema::Undefined => ("struct", "undefined"),
+            Schema::ZeroSize => ("struct", "zerosize"),
+            Schema::Array(_) => ("struct", "array"),
+        },
+        Schema::Enum(ref xa) => match *b {
+            Schema::Enum(ref xb) => return diff_enum(xa, xb, path),
+            Schema::Struct(_) => ("enum", "struct"),
+            Schema::Primitive(_) => ("enum", "primitive"),
+            Schema::Vector(_) => ("enum", "vector"),
+            Schema::SchemaOption(_) => ("enum", "option"),
+            Schema::Undefined => ("enum", "undefined"),
+            Schema::ZeroSize => ("enum", "zerosize"),
+            Schema::Array(_) => ("enum", "array"),
+        },
+        Schema::Primitive(ref xa) => match *b {
+            Schema::Primitive(ref xb) => {
+                return diff_primitive(*xa, *xb, &path);
             }
-        }
-        Schema::Enum(ref xa) => {
-            match *b {
-                Schema::Enum(ref xb) => {
-                    return diff_enum(xa,xb,path)
-                },
-                Schema::Struct(_) => ("enum","struct"),
-                Schema::Primitive(_) => ("enum","primitive"),
-                Schema::Vector(_) => ("enum","vector"),
-                Schema::SchemaOption(_) => ("enum","option"),
-                Schema::Undefined => ("enum","undefined"),
-                Schema::ZeroSize => ("enum","zerosize"),
-                Schema::Array(_) => ("enum","array"),
+            Schema::Struct(_) => ("primitive", "struct"),
+            Schema::Enum(_) => ("primitive", "enum"),
+            Schema::Vector(_) => ("primitive", "vector"),
+            Schema::SchemaOption(_) => ("primitive", "option"),
+            Schema::Undefined => ("primitive", "undefined"),
+            Schema::ZeroSize => ("primitive", "zerosize"),
+            Schema::Array(_) => ("primitive", "array"),
+        },
+        Schema::SchemaOption(ref xa) => match *b {
+            Schema::SchemaOption(ref xb) => {
+                return diff_option(xa, xb, path);
             }
-        }
-        Schema::Primitive(ref xa) => {
-            match *b {
-                Schema::Primitive(ref xb) => {
-                    return diff_primitive(*xa,*xb,&path);
-                },
-                Schema::Struct(_) => ("primitive","struct"),
-                Schema::Enum(_) => ("primitive","enum"),
-                Schema::Vector(_) => ("primitive","vector"),
-                Schema::SchemaOption(_) => ("primitive","option"),
-                Schema::Undefined => ("primitive","undefined"),
-                Schema::ZeroSize => ("primitive","zerosize"),
-                Schema::Array(_) => ("primitive","array"),
-
+            Schema::Struct(_) => ("option", "struct"),
+            Schema::Enum(_) => ("option", "enum"),
+            Schema::Primitive(_) => ("option", "primitive"),
+            Schema::Vector(_) => ("option", "vector"),
+            Schema::Undefined => ("option", "undefined"),
+            Schema::ZeroSize => ("option", "zerosize"),
+            Schema::Array(_) => ("option", "array"),
+        },
+        Schema::Vector(ref xa) => match *b {
+            Schema::Vector(ref xb) => {
+                return diff_vector(xa, xb, path);
             }
-        }
-        Schema::SchemaOption(ref xa) => {
-            match *b {
-                Schema::SchemaOption(ref xb) => {
-                    return diff_option(xa,xb,path);
-                },
-                Schema::Struct(_) => ("option","struct"),
-                Schema::Enum(_) => ("option","enum"),
-                Schema::Primitive(_) => ("option","primitive"),
-                Schema::Vector(_) => ("option","vector"),
-                Schema::Undefined => ("option","undefined"),
-                Schema::ZeroSize => ("option","zerosize"),
-                Schema::Array(_) => ("option","array"),
-            }
-        }
-        Schema::Vector(ref xa) => {
-            match *b {
-                Schema::Vector(ref xb) => {
-                    return diff_vector(xa,xb,path);
-                },
-                Schema::Struct(_) => ("vector","struct"),
-                Schema::Enum(_) => ("vector","enum"),
-                Schema::Primitive(_) => ("vector","primitive"),
-                Schema::SchemaOption(_) => ("vector","option"),
-                Schema::Undefined => ("vector","undefined"),
-                Schema::ZeroSize => ("vector","zerosize"),
-                Schema::Array(_) => ("vector","array"),
-            }
-        }
+            Schema::Struct(_) => ("vector", "struct"),
+            Schema::Enum(_) => ("vector", "enum"),
+            Schema::Primitive(_) => ("vector", "primitive"),
+            Schema::SchemaOption(_) => ("vector", "option"),
+            Schema::Undefined => ("vector", "undefined"),
+            Schema::ZeroSize => ("vector", "zerosize"),
+            Schema::Array(_) => ("vector", "array"),
+        },
         Schema::Undefined => {
-            return Some(format!("At location [{}]: Undefined schema encountered.",path));
+            return Some(format!("At location [{}]: Undefined schema encountered.", path));
         }
-        Schema::ZeroSize => {
-            match *b {
-                Schema::ZeroSize => {
-                    return None;
-                },
-                Schema::Vector(_) => ("zerosize","vector"),
-                Schema::Struct(_) => ("zerosize","struct"),
-                Schema::Enum(_) => ("zerosize","enum"),
-                Schema::SchemaOption(_) => ("zerosize","option"),
-                Schema::Primitive(_) => ("zerosize","primitive"),
-                Schema::Undefined => ("zerosize","undefined"),
-                Schema::Array(_) => ("zerosize","array"),
+        Schema::ZeroSize => match *b {
+            Schema::ZeroSize => {
+                return None;
             }
-        }
-        Schema::Array(ref xa) => {
-            match *b {
-                Schema::Vector(_) => ("array","vector"),
-                Schema::Struct(_) => ("array","struct"),
-                Schema::Enum(_) => ("array","enum"),
-                Schema::Primitive(_) => ("array","primitive"),
-                Schema::SchemaOption(_) => ("array","option"),
-                Schema::Undefined => ("array","undefined"),
-                Schema::ZeroSize => ("array","zerosize"),
-                Schema::Array(ref xb) => return diff_array(xa,xb,path),
-            }
-        }
+            Schema::Vector(_) => ("zerosize", "vector"),
+            Schema::Struct(_) => ("zerosize", "struct"),
+            Schema::Enum(_) => ("zerosize", "enum"),
+            Schema::SchemaOption(_) => ("zerosize", "option"),
+            Schema::Primitive(_) => ("zerosize", "primitive"),
+            Schema::Undefined => ("zerosize", "undefined"),
+            Schema::Array(_) => ("zerosize", "array"),
+        },
+        Schema::Array(ref xa) => match *b {
+            Schema::Vector(_) => ("array", "vector"),
+            Schema::Struct(_) => ("array", "struct"),
+            Schema::Enum(_) => ("array", "enum"),
+            Schema::Primitive(_) => ("array", "primitive"),
+            Schema::SchemaOption(_) => ("array", "option"),
+            Schema::Undefined => ("array", "undefined"),
+            Schema::ZeroSize => ("array", "zerosize"),
+            Schema::Array(ref xb) => return diff_array(xa, xb, path),
+        },
     };
-    Some(format!("At location [{}]: In memory schema: {}, file schema: {}",
-        path,atype,btype))
-    
+    Some(format!(
+        "At location [{}]: In memory schema: {}, file schema: {}",
+        path, atype, btype
+    ))
 }
 
-
 impl WithSchema for Field {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
-    }    
+    }
 }
 
 impl Serialize for Field {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError>{
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
         self.value.serialize(serializer)
     }
 }
 impl Deserialize for Field {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Field {
-            name : deserializer.read_string()?,
-            value : Box::new(Schema::deserialize(deserializer)?)
+            name: deserializer.read_string()?,
+            value: Box::new(Schema::deserialize(deserializer)?),
         })
     }
 }
 impl WithSchema for Variant {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
-    }    
+    }
 }
 impl Serialize for Variant {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
         serializer.write_u8(self.discriminator)?;
         serializer.write_usize(self.fields.len())?;
-        for field in &self.fields  {
+        for field in &self.fields {
             field.serialize(serializer)?;
         }
         Ok(())
-    }    
+    }
 }
 
-
-
 impl Deserialize for Variant {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Variant {
             name: deserializer.read_string()?,
             discriminator: deserializer.read_u8()?,
-            fields : {
+            fields: {
                 let l = deserializer.read_usize()?;
-                let mut ret=Vec::new();
+                let mut ret = Vec::new();
                 for _ in 0..l {
-                    ret.push(
-                        Field {
-                            name: deserializer.read_string()?,
-                            value: Box::new(Schema::deserialize(deserializer)?)
-                        });
+                    ret.push(Field {
+                        name: deserializer.read_string()?,
+                        value: Box::new(Schema::deserialize(deserializer)?),
+                    });
                 }
                 ret
-            }
+            },
         })
     }
 }
 impl Serialize for SchemaArray {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.count)?;
         self.item_type.serialize(serializer)?;
         Ok(())
     }
 }
 impl Deserialize for SchemaArray {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let count = deserializer.read_usize()?;
         let item_type = Box::new(Schema::deserialize(deserializer)?);
-        Ok(
-            SchemaArray {
-                count,
-                item_type,
-            }
-        )
+        Ok(SchemaArray { count, item_type })
     }
 }
 impl WithSchema for SchemaArray {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
     }
 }
 
 impl WithSchema for SchemaStruct {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
     }
 }
 impl Serialize for SchemaStruct {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.fields.len())?;
-        for field in &self.fields {            
+        for field in &self.fields {
             field.serialize(serializer)?;
         }
         Ok(())
     }
 }
 impl Deserialize for SchemaStruct {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
-        let l=deserializer.read_usize()?;
+        let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
             fields: {
-                let mut ret=Vec::new();
+                let mut ret = Vec::new();
                 for _ in 0..l {
                     ret.push(Field::deserialize(deserializer)?)
                 }
                 ret
-            }        
+            },
         })
     }
 }
 
 impl WithSchema for SchemaPrimitive {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
-    }    
+    }
 }
 impl Serialize for SchemaPrimitive {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        let discr=match *self {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        let discr = match *self {
             SchemaPrimitive::schema_i8 => 1,
             SchemaPrimitive::schema_u8 => 2,
             SchemaPrimitive::schema_i16 => 3,
@@ -2300,8 +2327,8 @@ impl Serialize for SchemaPrimitive {
     }
 }
 impl Deserialize for SchemaPrimitive {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let var=match deserializer.read_u8()? {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let var = match deserializer.read_u8()? {
             1 => SchemaPrimitive::schema_i8,
             2 => SchemaPrimitive::schema_u8,
             3 => SchemaPrimitive::schema_i16,
@@ -2315,89 +2342,88 @@ impl Deserialize for SchemaPrimitive {
             11 => SchemaPrimitive::schema_f64,
             12 => SchemaPrimitive::schema_bool,
             13 => SchemaPrimitive::schema_canary1,
-            c => return Err(SavefileError::GeneralError {msg:format!("Corrupt schema, type {} encountered", c)}),
+            c => {
+                return Err(SavefileError::GeneralError {
+                    msg: format!("Corrupt schema, type {} encountered", c),
+                })
+            }
         };
         Ok(var)
     }
 }
 
 impl WithSchema for SchemaEnum {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
-    }    
+    }
 }
 
 impl Serialize for SchemaEnum {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.variants.len())?;
-        for var in &self.variants {            
+        for var in &self.variants {
             var.serialize(serializer)?;
         }
         Ok(())
     }
 }
 impl Deserialize for SchemaEnum {
-    fn deserialize(deserializer:&mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
         let l = deserializer.read_usize()?;
-        let mut ret=Vec::new();
+        let mut ret = Vec::new();
         for _ in 0..l {
             ret.push(Variant::deserialize(deserializer)?);
         }
         Ok(SchemaEnum {
             dbg_name,
-            variants: ret
+            variants: ret,
         })
     }
 }
 
 impl WithSchema for Schema {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Undefined
-    }    
+    }
 }
 impl Serialize for Schema {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         match *self {
             Schema::Struct(ref schema_struct) => {
                 serializer.write_u8(1)?;
                 schema_struct.serialize(serializer)
-            },
+            }
             Schema::Enum(ref schema_enum) => {
                 serializer.write_u8(2)?;
                 schema_enum.serialize(serializer)
-            },
+            }
             Schema::Primitive(ref schema_prim) => {
                 serializer.write_u8(3)?;
                 schema_prim.serialize(serializer)
-            },
+            }
             Schema::Vector(ref schema_vector) => {
                 serializer.write_u8(4)?;
                 schema_vector.serialize(serializer)
-            },
-            Schema::Undefined => {
-                serializer.write_u8(5)
-            },
-            Schema::ZeroSize => {
-                serializer.write_u8(6)
-            },
+            }
+            Schema::Undefined => serializer.write_u8(5),
+            Schema::ZeroSize => serializer.write_u8(6),
             Schema::SchemaOption(ref content) => {
                 serializer.write_u8(7)?;
                 content.serialize(serializer)
-            },
+            }
             Schema::Array(ref array) => {
                 serializer.write_u8(8)?;
                 array.serialize(serializer)
-            },
+            }
         }
-    }    
+    }
 }
 
-
 impl Deserialize for Schema {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let schema=match deserializer.read_u8()? {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let schema = match deserializer.read_u8()? {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
@@ -2406,18 +2432,21 @@ impl Deserialize for Schema {
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
-            c => return Err(SavefileError::GeneralError {msg:format!("Corrupt schema, schema variant {} encountered", c)}),
+            c => {
+                return Err(SavefileError::GeneralError {
+                    msg: format!("Corrupt schema, schema variant {} encountered", c),
+                })
+            }
         };
 
         Ok(schema)
-
     }
 }
 
 impl WithSchema for String {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string)
-    }    
+    }
 }
 
 impl Introspect for String {
@@ -2430,23 +2459,23 @@ impl Introspect for String {
     }
 }
 impl Serialize for String {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(self)
     }
 }
 
 impl Deserialize for String {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<String,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<String, SavefileError> {
         deserializer.read_string()
     }
 }
 
 /// Type of single child of introspector for Mutex
-pub struct IntrospectItemMutex<'a,T> {
-    g: MutexGuard<'a,T>,
+pub struct IntrospectItemMutex<'a, T> {
+    g: MutexGuard<'a, T>,
 }
 
-impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a,T> {
+impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a, T> {
     fn key(&self) -> &str {
         "0"
     }
@@ -2456,14 +2485,14 @@ impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a,T> {
     }
 }
 
-impl<T:Introspect> Introspect for Mutex<T> {
+impl<T: Introspect> Introspect for Mutex<T> {
     fn introspect_value(&self) -> String {
-        format!("Mutex<{}>",std::any::type_name::<T>())
+        format!("Mutex<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
-            Some(Box::new(IntrospectItemMutex{g:self.lock()}))
+            Some(Box::new(IntrospectItemMutex { g: self.lock() }))
         } else {
             None
         }
@@ -2471,11 +2500,11 @@ impl<T:Introspect> Introspect for Mutex<T> {
 }
 
 /// Type of single child of introspector for std::sync::Mutex
-pub struct IntrospectItemStdMutex<'a,T> {
-    g: std::sync::MutexGuard<'a,T>,
+pub struct IntrospectItemStdMutex<'a, T> {
+    g: std::sync::MutexGuard<'a, T>,
 }
 
-impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemStdMutex<'a,T> {
+impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemStdMutex<'a, T> {
     fn key(&self) -> &str {
         "0"
     }
@@ -2485,71 +2514,69 @@ impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemStdMutex<'a,T> {
     }
 }
 
-impl<T:Introspect> Introspect for std::sync::Mutex<T> {
+impl<T: Introspect> Introspect for std::sync::Mutex<T> {
     fn introspect_value(&self) -> String {
-        format!("Mutex<{}>",std::any::type_name::<T>())
+        format!("Mutex<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         match self.lock() {
             Ok(item) => {
                 if index == 0 {
-                    Some(Box::new(IntrospectItemStdMutex{g:item}))
+                    Some(Box::new(IntrospectItemStdMutex { g: item }))
                 } else {
                     None
                 }
-            },
-            Err(_) => {
-                None
             }
+            Err(_) => None,
         }
     }
 }
 
-impl<T:WithSchema> WithSchema for std::sync::Mutex<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
-    }    
+    }
 }
 
-impl<T:Serialize> Serialize for std::sync::Mutex<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: Serialize> Serialize for std::sync::Mutex<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.lock()?;
         data.serialize(serializer)
     }
 }
 
-impl<T:Deserialize> Deserialize for std::sync::Mutex<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<std::sync::Mutex<T>,SavefileError> {
+impl<T: Deserialize> Deserialize for std::sync::Mutex<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<std::sync::Mutex<T>, SavefileError> {
         Ok(std::sync::Mutex::new(T::deserialize(deserializer)?))
     }
 }
 
-impl<T:WithSchema> WithSchema for Mutex<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Mutex<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
 
-impl<T:Serialize> Serialize for Mutex<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: Serialize> Serialize for Mutex<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.lock();
         data.serialize(serializer)
     }
 }
 
-impl<T:Deserialize> Deserialize for Mutex<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>,SavefileError> {
+impl<T: Deserialize> Deserialize for Mutex<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>, SavefileError> {
         Ok(Mutex::new(T::deserialize(deserializer)?))
     }
 }
 
 /// Type of single child of introspector for RwLock
-pub struct IntrospectItemRwLock<'a,T> {
-    g: RwLockReadGuard<'a,T>,
+pub struct IntrospectItemRwLock<'a, T> {
+    g: RwLockReadGuard<'a, T>,
 }
 
-impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
+impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a, T> {
     fn key(&self) -> &str {
         "0"
     }
@@ -2559,12 +2586,15 @@ impl<'a,T:Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a,T> {
     }
 }
 
-impl<T:Introspect> Introspect for RefCell<T> {
+impl<T: Introspect> Introspect for RefCell<T> {
     fn introspect_value(&self) -> String {
-        format!("RefCell({} (deep introspect not supported))",self.borrow().introspect_value())
+        format!(
+            "RefCell({} (deep introspect not supported))",
+            self.borrow().introspect_value()
+        )
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         // Introspect not supported
         None
     }
@@ -2575,12 +2605,12 @@ impl<T:Introspect> Introspect for RefCell<T> {
     }
 }
 
-impl<T:Introspect> Introspect for Rc<T> {
+impl<T: Introspect> Introspect for Rc<T> {
     fn introspect_value(&self) -> String {
-        format!("Rc({})",self.deref().introspect_value())
+        format!("Rc({})", self.deref().introspect_value())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         self.deref().introspect_child(index)
     }
 
@@ -2589,12 +2619,12 @@ impl<T:Introspect> Introspect for Rc<T> {
     }
 }
 
-impl<T:Introspect> Introspect for Arc<T> {
+impl<T: Introspect> Introspect for Arc<T> {
     fn introspect_value(&self) -> String {
-        format!("Arc({})",self.deref().introspect_value())
+        format!("Arc({})", self.deref().introspect_value())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         self.deref().introspect_child(index)
     }
 
@@ -2602,15 +2632,13 @@ impl<T:Introspect> Introspect for Arc<T> {
         self.deref().introspect_len()
     }
 }
-impl<T:Introspect> Introspect for RwLock<T> {
+impl<T: Introspect> Introspect for RwLock<T> {
     fn introspect_value(&self) -> String {
-        format!("RwLock<{}>",std::any::type_name::<T>())
+        format!("RwLock<{}>", std::any::type_name::<T>())
     }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
-            Some(Box::new(IntrospectItemRwLock{
-                g:self.read()
-            }))
+            Some(Box::new(IntrospectItemRwLock { g: self.read() }))
         } else {
             None
         }
@@ -2621,22 +2649,21 @@ impl<T:Introspect> Introspect for RwLock<T> {
     }
 }
 
-
-impl<T:WithSchema> WithSchema for RwLock<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for RwLock<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
-    }    
+    }
 }
 
-impl<T:Serialize> Serialize for RwLock<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: Serialize> Serialize for RwLock<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.read();
         data.serialize(serializer)
     }
 }
 
-impl<T:Deserialize> Deserialize for RwLock<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<RwLock<T>,SavefileError> {
+impl<T: Deserialize> Deserialize for RwLock<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<RwLock<T>, SavefileError> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
@@ -2644,7 +2671,7 @@ impl<T:Deserialize> Deserialize for RwLock<T> {
 /// Standard child for Introspect trait. Simply owned key string and reference to dyn Introspect
 pub struct IntrospectItemSimple<'a> {
     key: String,
-    val: &'a dyn Introspect
+    val: &'a dyn Introspect,
 }
 
 impl<'a> IntrospectItem<'a> for IntrospectItemSimple<'a> {
@@ -2658,29 +2685,24 @@ impl<'a> IntrospectItem<'a> for IntrospectItemSimple<'a> {
 }
 
 /// Create a default IntrospectItem with the given key and Introspect.
-pub fn introspect_item<'a>(key:String,val: &'a dyn Introspect) -> Box<dyn IntrospectItem<'a>+'a> {
-    Box::new(IntrospectItemSimple {
-        key: key,
-        val:val
-    })
+pub fn introspect_item<'a>(key: String, val: &'a dyn Introspect) -> Box<dyn IntrospectItem<'a> + 'a> {
+    Box::new(IntrospectItemSimple { key: key, val: val })
 }
 
-
-#[cfg(not(feature="nightly"))]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for HashMap<K, V, S> {
+#[cfg(not(feature = "nightly"))]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for HashMap<K, V, S> {
     fn introspect_value(&self) -> String {
-        format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
+        format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        let bucket = index/2;
-        let off = index%2;
-        if let Some((key,val)) = self.iter().skip(bucket).next() {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        let bucket = index / 2;
+        let off = index % 2;
+        if let Some((key, val)) = self.iter().skip(bucket).next() {
             if off == 0 {
-                Some(introspect_item(format!("Key #{}",index),key))
+                Some(introspect_item(format!("Key #{}", index), key))
             } else {
-                Some(introspect_item(format!("Value #{}",index),val))
+                Some(introspect_item(format!("Value #{}", index), val))
             }
         } else {
             None
@@ -2691,21 +2713,20 @@ for HashMap<K, V, S> {
     }
 }
 
-#[cfg(feature="nightly")]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for HashMap<K, V, S> {
+#[cfg(feature = "nightly")]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for HashMap<K, V, S> {
     default fn introspect_value(&self) -> String {
-        format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
+        format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-        let bucket = index/2;
-        let off = index%2;
-        if let Some((key,val)) = self.iter().skip(bucket).next() {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        let bucket = index / 2;
+        let off = index % 2;
+        if let Some((key, val)) = self.iter().skip(bucket).next() {
             if off == 0 {
-                Some(introspect_item(format!("Key #{}",index),key))
+                Some(introspect_item(format!("Key #{}", index), key))
             } else {
-                Some(introspect_item(format!("Value #{}",index),val))
+                Some(introspect_item(format!("Value #{}", index), val))
             }
         } else {
             None
@@ -2716,17 +2737,18 @@ for HashMap<K, V, S> {
     }
 }
 
-#[cfg(feature="nightly")]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for HashMap<K, V, S> where K:ToString{
+#[cfg(feature = "nightly")]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for HashMap<K, V, S>
+where
+    K: ToString,
+{
     fn introspect_value(&self) -> String {
-        format!("HashMap<{},{}>",std::any::type_name::<K>(),std::any::type_name::<V>())
+        format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-
-        if let Some((key,val)) = self.iter().skip(index).next() {
-            Some(introspect_item(key.to_string(),val))
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        if let Some((key, val)) = self.iter().skip(index).next() {
+            Some(introspect_item(key.to_string(), val))
         } else {
             None
         }
@@ -2736,15 +2758,14 @@ for HashMap<K, V, S> where K:ToString{
     }
 }
 
-impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect
-for HashSet<K, S> {
+impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for HashSet<K, S> {
     fn introspect_value(&self) -> String {
-        format!("HashSet<{}>",std::any::type_name::<K>())
+        format!("HashSet<{}>", std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if let Some(key) = self.iter().skip(index).next() {
-            Some(introspect_item(format!("#{}",index),key))
+            Some(introspect_item(format!("#{}", index), key))
         } else {
             None
         }
@@ -2754,35 +2775,34 @@ for HashSet<K, S> {
     }
 }
 
-impl<K:WithSchema+Eq+Ord, V: WithSchema> WithSchema for BTreeMap<K,V> {
+impl<K: WithSchema + Eq + Ord, V: WithSchema> WithSchema for BTreeMap<K, V> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(
-            Schema::Struct(SchemaStruct{
-                dbg_name: "KeyValuePair".to_string(),
-                fields: vec![
-                    Field {
-                        name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
-                    },
-                    Field {
-                        name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
-                    },
-                ]
-            })))
+        Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
+            dbg_name: "KeyValuePair".to_string(),
+            fields: vec![
+                Field {
+                    name: "key".to_string(),
+                    value: Box::new(K::schema(version)),
+                },
+                Field {
+                    name: "value".to_string(),
+                    value: Box::new(V::schema(version)),
+                },
+            ],
+        })))
     }
 }
-impl<K:Serialize+Eq+Ord, V: Serialize> Serialize for BTreeMap<K,V> {
+impl<K: Serialize + Eq + Ord, V: Serialize> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
-        for (k,v) in self {
+        for (k, v) in self {
             k.serialize(serializer)?;
             v.serialize(serializer)?;
         }
         Ok(())
     }
 }
-impl<K:Deserialize+Eq+Ord, V: Deserialize> Deserialize for BTreeMap<K,V> {
+impl<K: Deserialize + Eq + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let mut ret = BTreeMap::new();
         let count = <usize as Deserialize>::deserialize(deserializer)?;
@@ -2796,33 +2816,26 @@ impl<K:Deserialize+Eq+Ord, V: Deserialize> Deserialize for BTreeMap<K,V> {
     }
 }
 
-
-
-impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
-    for HashMap<K, V, S> {
-    fn schema(version:u32) -> Schema {
-        Schema::Vector(Box::new(
-            Schema::Struct(SchemaStruct{
-                dbg_name: "KeyValuePair".to_string(),
-                fields: vec![
-                    Field {
-                        name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
-                    },
-                    Field {
-                        name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
-                    },
-                ]
-            })))
-    }        
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashMap<K, V, S> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
+            dbg_name: "KeyValuePair".to_string(),
+            fields: vec![
+                Field {
+                    name: "key".to_string(),
+                    value: Box::new(K::schema(version)),
+                },
+                Field {
+                    name: "value".to_string(),
+                    value: Box::new(V::schema(version)),
+                },
+            ],
+        })))
+    }
 }
 
-
-impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
-    for HashMap<K, V, S>
-{
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
@@ -2832,9 +2845,8 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
-
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = HashMap::with_capacity(l);
         for _ in 0..l {
@@ -2844,49 +2856,42 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     }
 }
 
-
-impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
-    for IndexMap<K, V, S> {
-    fn schema(version:u32) -> Schema {
-        Schema::Vector(Box::new(
-            Schema::Struct(SchemaStruct{
-                dbg_name: "KeyValuePair".to_string(),
-                fields: vec![
-                    Field {
-                        name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
-                    },
-                    Field {
-                        name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
-                    },
-                ]
-            })))
-    }        
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for IndexMap<K, V, S> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
+            dbg_name: "KeyValuePair".to_string(),
+            fields: vec![
+                Field {
+                    name: "key".to_string(),
+                    value: Box::new(K::schema(version)),
+                },
+                Field {
+                    name: "value".to_string(),
+                    value: Box::new(V::schema(version)),
+                },
+            ],
+        })))
+    }
 }
 
-#[cfg(not(feature="nightly"))]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for IndexMap<K, V, S> {
+#[cfg(not(feature = "nightly"))]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S> {
     fn introspect_value(&self) -> String {
-        format!("IndexMap<{},{}>",
-                std::any::type_name::<K>(),
-                std::any::type_name::<V>())
+        format!(
+            "IndexMap<{},{}>",
+            std::any::type_name::<K>(),
+            std::any::type_name::<V>()
+        )
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-
-        let bucket = index/2;
-        let off = index%2;
-        if let Some((k,v)) = self.get_index(bucket) {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        let bucket = index / 2;
+        let off = index % 2;
+        if let Some((k, v)) = self.get_index(bucket) {
             if off == 0 {
-                Some(introspect_item(format!("Key #{}",bucket),
-                                     k
-                ))
+                Some(introspect_item(format!("Key #{}", bucket), k))
             } else {
-                Some(introspect_item(format!("Value #{}",bucket),
-                                     v
-                ))
+                Some(introspect_item(format!("Value #{}", bucket), v))
             }
         } else {
             None
@@ -2898,28 +2903,24 @@ for IndexMap<K, V, S> {
     }
 }
 
-#[cfg(feature="nightly")]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for IndexMap<K, V, S> {
+#[cfg(feature = "nightly")]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S> {
     default fn introspect_value(&self) -> String {
-        format!("IndexMap<{},{}>",
+        format!(
+            "IndexMap<{},{}>",
             std::any::type_name::<K>(),
-            std::any::type_name::<V>())
+            std::any::type_name::<V>()
+        )
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-
-        let bucket = index/2;
-        let off = index%2;
-        if let Some((k,v)) = self.get_index(bucket) {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        let bucket = index / 2;
+        let off = index % 2;
+        if let Some((k, v)) = self.get_index(bucket) {
             if off == 0 {
-                Some(introspect_item(format!("Key #{}",bucket),
-                      k
-                ))
+                Some(introspect_item(format!("Key #{}", bucket), k))
             } else {
-                Some(introspect_item(format!("Value #{}",bucket),
-                 v
-                ))
+                Some(introspect_item(format!("Value #{}", bucket), v))
             }
         } else {
             None
@@ -2931,21 +2932,22 @@ for IndexMap<K, V, S> {
     }
 }
 
-#[cfg(feature="nightly")]
-impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
-for IndexMap<K, V, S> where K:ToString {
+#[cfg(feature = "nightly")]
+impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S>
+where
+    K: ToString,
+{
     fn introspect_value(&self) -> String {
-        format!("IndexMap<{},{}>",
-                std::any::type_name::<K>(),
-                std::any::type_name::<V>())
+        format!(
+            "IndexMap<{},{}>",
+            std::any::type_name::<K>(),
+            std::any::type_name::<V>()
+        )
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
-
-        if let Some((k,v)) = self.get_index(index) {
-            Some(introspect_item(k.to_string(),
-                  v
-            ))
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        if let Some((k, v)) = self.get_index(index) {
+            Some(introspect_item(k.to_string(), v))
         } else {
             None
         }
@@ -2955,10 +2957,8 @@ for IndexMap<K, V, S> where K:ToString {
         self.len()
     }
 }
-impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
-    for IndexMap<K, V, S>
-{
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
@@ -2968,9 +2968,8 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
-
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexMap::with_capacity(l);
         for _ in 0..l {
@@ -2980,15 +2979,14 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> 
     }
 }
 
-impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect
-for IndexSet<K, S> {
+impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for IndexSet<K, S> {
     fn introspect_value(&self) -> String {
-        format!("IndexSet<{}>",std::any::type_name::<K>())
+        format!("IndexSet<{}>", std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if let Some(val) = self.get_index(index) {
-            Some(introspect_item(format!("#{}",index),val))
+            Some(introspect_item(format!("#{}", index), val))
         } else {
             None
         }
@@ -2999,28 +2997,20 @@ for IndexSet<K, S> {
     }
 }
 
-
-impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema
-    for IndexSet<K, S> {
-    fn schema(version:u32) -> Schema {
-        Schema::Vector(Box::new(
-            Schema::Struct(SchemaStruct{
-                dbg_name: "Key".to_string(),
-                fields: vec![
-                    Field {
-                        name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
-                    },
-                ]
-            })))
-    }        
+impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
+            dbg_name: "Key".to_string(),
+            fields: vec![Field {
+                name: "key".to_string(),
+                value: Box::new(K::schema(version)),
+            }],
+        })))
+    }
 }
 
-
-impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize
-    for IndexSet<K, S>
-{
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for k in self.iter() {
             k.serialize(serializer)?;
@@ -3029,9 +3019,8 @@ impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize
     }
 }
 
-
 impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexSet::with_capacity(l);
         for _ in 0..l {
@@ -3040,7 +3029,6 @@ impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
         Ok(ret)
     }
 }
-
 
 /// Helper struct which represents a field which has been removed
 #[derive(Debug, PartialEq)]
@@ -3056,28 +3044,28 @@ impl<T> Removed<T> {
         }
     }
 }
-impl<T:WithSchema> WithSchema for Removed<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Removed<T> {
+    fn schema(version: u32) -> Schema {
         <T>::schema(version)
-    }    
+    }
 }
 
-impl<T:Introspect> Introspect for Removed<T> {
+impl<T: Introspect> Introspect for Removed<T> {
     fn introspect_value(&self) -> String {
-        format!("Removed<{}>",std::any::type_name::<T>())
+        format!("Removed<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         None
     }
 }
-impl<T:WithSchema> Serialize for Removed<T> {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: WithSchema> Serialize for Removed<T> {
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
     }
 }
 impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         T::deserialize(deserializer)?;
         Ok(Removed {
             phantom: std::marker::PhantomData,
@@ -3085,47 +3073,44 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
     }
 }
 
-
 impl<T> Introspect for PhantomData<T> {
     fn introspect_value(&self) -> String {
         "PhantomData".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         None
     }
 }
 impl<T> WithSchema for std::marker::PhantomData<T> {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::ZeroSize
-    }    
+    }
 }
 
-
 impl<T> Serialize for std::marker::PhantomData<T> {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {        
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
         Ok(())
     }
 }
 impl<T> Deserialize for std::marker::PhantomData<T> {
-    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {        
+    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(std::marker::PhantomData)
     }
 }
 
-
-impl<T:Introspect> Introspect for Box<T> {
+impl<T: Introspect> Introspect for Box<T> {
     fn introspect_value(&self) -> String {
         self.deref().introspect_value()
     }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         self.deref().introspect_child(index)
     }
     fn introspect_len(&self) -> usize {
         self.deref().introspect_len()
     }
 }
-impl<T:Introspect> Introspect for Option<T> {
+impl<T: Introspect> Introspect for Option<T> {
     fn introspect_value(&self) -> String {
         if let Some(cont) = self {
             format!("Some({})", cont.introspect_value())
@@ -3134,7 +3119,7 @@ impl<T:Introspect> Introspect for Option<T> {
         }
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if let Some(cont) = self {
             cont.introspect_child(index)
         } else {
@@ -3150,20 +3135,26 @@ impl<T:Introspect> Introspect for Option<T> {
     }
 }
 
-
-impl<T:WithSchema> WithSchema for Option<T> {fn schema(version:u32) -> Schema {Schema::SchemaOption(Box::new(T::schema(version)))}}
+impl<T: WithSchema> WithSchema for Option<T> {
+    fn schema(version: u32) -> Schema {
+        Schema::SchemaOption(Box::new(T::schema(version)))
+    }
+}
 
 impl<T: Serialize> Serialize for Option<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         match self {
-            &Some(ref x) => {serializer.write_bool(true)?;x.serialize(serializer)},
-            &None => serializer.write_bool(false)
+            &Some(ref x) => {
+                serializer.write_bool(true)?;
+                x.serialize(serializer)
+            }
+            &None => serializer.write_bool(false),
         }
     }
 }
 impl<T: Deserialize> Deserialize for Option<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        let issome=deserializer.read_bool()?;
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let issome = deserializer.read_bool()?;
         if issome {
             Ok(Some(T::deserialize(deserializer)?))
         } else {
@@ -3173,10 +3164,10 @@ impl<T: Deserialize> Deserialize for Option<T> {
 }
 
 impl WithSchema for bit_vec::BitVec {
-    fn schema(version:u32) -> Schema {
-        Schema::Struct(SchemaStruct{
-            dbg_name : "BitVec".to_string(),
-            fields : vec![
+    fn schema(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "BitVec".to_string(),
+            fields: vec![
                 Field {
                     name: "num_bits".to_string(),
                     value: Box::new(usize::schema(version)),
@@ -3187,23 +3178,21 @@ impl WithSchema for bit_vec::BitVec {
                 },
                 Field {
                     name: "buffer".to_string(),
-                    value: Box::new(Schema::Vector(
-                        Box::new(u8::schema(version))
-                    )),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
                 },
-            ]
+            ],
         })
     }
 }
 
 impl Serialize for bit_vec::BitVec {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
-        let bytes=self.to_bytes();
+        let bytes = self.to_bytes();
         serializer.write_usize(bytes.len())?;
         serializer.write_bytes(&bytes)?;
-        Ok(())            
+        Ok(())
     }
 }
 impl Introspect for bit_vec::BitVec {
@@ -3219,33 +3208,34 @@ impl Introspect for bit_vec::BitVec {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         None
     }
 }
 impl Deserialize for bit_vec::BitVec {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let numbits = deserializer.read_usize()?;
-        let numbytes= deserializer.read_usize()?;
+        let numbytes = deserializer.read_usize()?;
         let bytes = deserializer.read_bytes(numbytes)?;
-        let mut ret=bit_vec::BitVec::from_bytes(&bytes);
+        let mut ret = bit_vec::BitVec::from_bytes(&bytes);
         ret.truncate(numbits);
         Ok(ret)
     }
 }
-
 
 impl<T: Introspect> Introspect for BinaryHeap<T> {
     fn introspect_value(&self) -> String {
         "BinaryHeap".to_string()
     }
 
-
-    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a>+'a>> {
+    fn introspect_child<'a>(&'a self, index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
         if index >= self.len() {
             return None;
         }
-        return Some(introspect_item(index.to_string(), self.iter().skip(index).next().unwrap()));
+        return Some(introspect_item(
+            index.to_string(),
+            self.iter().skip(index).next().unwrap(),
+        ));
     }
 
     fn introspect_len(&self) -> usize {
@@ -3254,22 +3244,22 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 }
 
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
-    fn schema(version:u32) -> Schema {
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
     }
 }
-impl<T: Serialize+Ord> Serialize for BinaryHeap<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
         for item in self.iter() {
             item.serialize(serializer)?
         }
-        Ok(())            
+        Ok(())
     }
 }
-impl<T: Deserialize+Ord> Deserialize for BinaryHeap<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize + Ord> Deserialize for BinaryHeap<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = BinaryHeap::with_capacity(l);
         for _ in 0..l {
@@ -3279,19 +3269,17 @@ impl<T: Deserialize+Ord> Deserialize for BinaryHeap<T> {
     }
 }
 
-impl<T:smallvec::Array> Introspect for smallvec::SmallVec<T> where
-    T::Item : Introspect
+impl<T: smallvec::Array> Introspect for smallvec::SmallVec<T>
+where
+    T::Item: Introspect,
 {
     fn introspect_value(&self) -> String {
-        format!("SmallVec<{}>",std::any::type_name::<T>())
+        format!("SmallVec<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if let Some(val) = self.get(index) {
-            Some(introspect_item(
-                 index.to_string(),
-                val
-                ))
+            Some(introspect_item(index.to_string(), val))
         } else {
             None
         }
@@ -3302,16 +3290,20 @@ impl<T:smallvec::Array> Introspect for smallvec::SmallVec<T> where
     }
 }
 
-impl<T:smallvec::Array> WithSchema for smallvec::SmallVec<T> 
-    where T::Item : WithSchema {
-    fn schema(version:u32) -> Schema {
+impl<T: smallvec::Array> WithSchema for smallvec::SmallVec<T>
+where
+    T::Item: WithSchema,
+{
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::Item::schema(version)))
     }
 }
 
-impl<T:smallvec::Array> Serialize for smallvec::SmallVec<T> 
-    where T::Item : Serialize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+impl<T: smallvec::Array> Serialize for smallvec::SmallVec<T>
+where
+    T::Item: Serialize,
+{
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
         for item in self.iter() {
@@ -3320,9 +3312,11 @@ impl<T:smallvec::Array> Serialize for smallvec::SmallVec<T>
         Ok(())
     }
 }
-impl<T:smallvec::Array> Deserialize for smallvec::SmallVec<T> 
-    where T::Item : Deserialize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: smallvec::Array> Deserialize for smallvec::SmallVec<T>
+where
+    T::Item: Deserialize,
+{
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = Self::with_capacity(l);
         for _ in 0..l {
@@ -3332,9 +3326,7 @@ impl<T:smallvec::Array> Deserialize for smallvec::SmallVec<T>
     }
 }
 
-
-
-fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(),SavefileError> {
+fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(), SavefileError> {
     let l = item.len();
     serializer.write_usize(l)?;
     for item in item.iter() {
@@ -3344,7 +3336,7 @@ fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) 
 }
 
 impl<T: WithSchema> WithSchema for Arc<[T]> {
-    fn schema(version:u32) -> Schema {
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
     }
 }
@@ -3353,7 +3345,7 @@ impl<T: Introspect> Introspect for Arc<[T]> {
         return "Arc[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index >= self.len() {
             return None;
         }
@@ -3390,7 +3382,7 @@ impl Deserialize for Arc<str> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let s = deserializer.read_string()?;
 
-        let state = deserializer.get_state::<Arc<str>,HashMap<String,Arc<str>>>();
+        let state = deserializer.get_state::<Arc<str>, HashMap<String, Arc<str>>>();
 
         if let Some(needle) = state.get(&s) {
             return Ok(Arc::clone(needle));
@@ -3401,21 +3393,21 @@ impl Deserialize for Arc<str> {
     }
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Serialize> Serialize for Arc<[T]> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
-#[cfg(not(feature="nightly"))]
+#[cfg(not(feature = "nightly"))]
 impl<T: Serialize> Serialize for Arc<[T]> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if !T::repr_c_optimization_safe(serializer.version) {
                 regular_serialize_vec(&*self, serializer)
@@ -3431,17 +3423,14 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     }
 }
 
-
 impl<T: Deserialize> Deserialize for Arc<[T]> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
 
-
-
 impl<T: WithSchema> WithSchema for Vec<T> {
-    fn schema(version:u32) -> Schema {
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
     }
 }
@@ -3451,7 +3440,7 @@ impl<T: Introspect> Introspect for Vec<T> {
         return "vec[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index >= self.len() {
             return None;
         }
@@ -3462,21 +3451,21 @@ impl<T: Introspect> Introspect for Vec<T> {
     }
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Serialize> Serialize for Vec<T> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
-#[cfg(not(feature="nightly"))]
+#[cfg(not(feature = "nightly"))]
 impl<T: Serialize> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if !T::repr_c_optimization_safe(serializer.version) {
                 regular_serialize_vec(self, serializer)
@@ -3492,14 +3481,15 @@ impl<T: Serialize + ReprC> Serialize for Vec<T> {
     }
 }
 
-
-fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Result<Vec<T>,SavefileError> {
+fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Result<Vec<T>, SavefileError> {
     let l = deserializer.read_usize()?;
 
     #[cfg(feature = "size_sanity_checks")]
     {
         if l > 1_000_000 {
-            return Err(SavefileError::GeneralError {msg: format!("Too many items in Vec: {}",l)});
+            return Err(SavefileError::GeneralError {
+                msg: format!("Too many items in Vec: {}", l),
+            });
         }
     }
     let mut ret = Vec::with_capacity(l);
@@ -3509,28 +3499,28 @@ fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> R
     Ok(ret)
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Deserialize> Deserialize for Vec<T> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vec::<T>(deserializer)?)
     }
 }
 
-#[cfg(not(feature="nightly"))]
+#[cfg(not(feature = "nightly"))]
 impl<T: Deserialize> Deserialize for Vec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vec::<T>(deserializer)?)
     }
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         if !T::repr_c_optimization_safe(deserializer.file_version) {
             Ok(regular_deserialize_vec::<T>(deserializer)?)
         } else {
             use std::mem;
-            
+
             let align = mem::align_of::<T>();
             let elem_size = mem::size_of::<T>();
             let num_elems = deserializer.read_usize()?;
@@ -3548,7 +3538,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             {
                 let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
-                    Ok(()) => {Ok(())}
+                    Ok(()) => Ok(()),
                     Err(err) => {
                         unsafe {
                             std::alloc::dealloc(ptr, layout);
@@ -3557,7 +3547,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                     }
                 }?;
             }
-            let ret=unsafe { Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems) };
+            let ret = unsafe { Vec::from_raw_parts(ptr as *mut T, num_elems, num_elems) };
             Ok(ret)
         }
     }
@@ -3565,10 +3555,10 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
 
 impl<T: Introspect> Introspect for VecDeque<T> {
     fn introspect_value(&self) -> String {
-        format!("VecDeque<{}>",std::any::type_name::<T>())
+        format!("VecDeque<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if let Some(val) = self.get(index) {
             Some(introspect_item(index.to_string(), val))
         } else {
@@ -3582,27 +3572,27 @@ impl<T: Introspect> Introspect for VecDeque<T> {
 }
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
-    fn schema(version:u32) -> Schema {
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
     }
 }
 
-
 impl<T: Serialize> Serialize for VecDeque<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vecdeque::<T>(self, serializer)
     }
 }
 
 impl<T: Deserialize> Deserialize for VecDeque<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vecdeque::<T>(deserializer)?)
-    }    
+    }
 }
 
-
-
-fn regular_serialize_vecdeque<T: Serialize>(item: &VecDeque<T>, serializer: &mut Serializer) -> Result<(),SavefileError> {
+fn regular_serialize_vecdeque<T: Serialize>(
+    item: &VecDeque<T>,
+    serializer: &mut Serializer,
+) -> Result<(), SavefileError> {
     let l = item.len();
     serializer.write_usize(l)?;
     for item in item.iter() {
@@ -3611,8 +3601,7 @@ fn regular_serialize_vecdeque<T: Serialize>(item: &VecDeque<T>, serializer: &mut
     Ok(())
 }
 
-
-fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer) -> Result<VecDeque<T>,SavefileError> {
+fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer) -> Result<VecDeque<T>, SavefileError> {
     let l = deserializer.read_usize()?;
     let mut ret = VecDeque::with_capacity(l);
     for _ in 0..l {
@@ -3621,56 +3610,116 @@ fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer)
     Ok(ret)
 }
 
-
-
-unsafe impl ReprC for bool {fn repr_c_optimization_safe(_version:u32) -> bool {true}} //It isn't really guaranteed that bool is an u8 or i8 where false = 0 and true = 1. But it's true in practice. And the breakage would be hard to measure if this were ever changed, so a change is unlikely.
-unsafe impl ReprC for u8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for i8 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for u16 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for i16 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for u32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for i32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for u64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for i64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for f32 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for f64 {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for usize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for isize {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
-unsafe impl ReprC for () {fn repr_c_optimization_safe(_version:u32) -> bool {true}}
+unsafe impl ReprC for bool {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+} //It isn't really guaranteed that bool is an u8 or i8 where false = 0 and true = 1. But it's true in practice. And the breakage would be hard to measure if this were ever changed, so a change is unlikely.
+unsafe impl ReprC for u8 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for i8 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for u16 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for i16 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for u32 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for i32 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for u64 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for i64 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for f32 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for f64 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for usize {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for isize {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for () {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
 
 /// This module contains implementations of Serialize, Deserialize, WithSchema and Introspect, for arrays of sizes
 /// 0 to 4.
-#[cfg(not(feature="nightly"))]
+#[cfg(not(feature = "nightly"))]
 pub mod array_impls {
+    use crate::{
+        introspect_item, Deserialize, Deserializer, Introspect, IntrospectItem, SavefileError, Schema, SchemaArray,
+        Serialize, Serializer, WithSchema,
+    };
     use std::mem::MaybeUninit;
-    use crate::{Deserialize,Serialize,Deserializer,Serializer,WithSchema,introspect_item, IntrospectItem,Introspect,SchemaArray,Schema,SavefileError};
 
-    #[cfg(not(feature="nightly"))]
+    #[cfg(not(feature = "nightly"))]
     macro_rules! impl_array_schema {
         ( $n:expr ) => {
-            impl<T: WithSchema> WithSchema for [T;$n] {
-                fn schema(version:u32) -> Schema {
+            impl<T: WithSchema> WithSchema for [T; $n] {
+                fn schema(version: u32) -> Schema {
                     Schema::Array(SchemaArray {
                         item_type: Box::new(T::schema(version)),
-                        count: $n
+                        count: $n,
                     })
                 }
             }
-         };
+        };
     }
-    #[cfg(not(feature="nightly"))]
-    impl_array_schema!(0);impl_array_schema!(1);impl_array_schema!(2);impl_array_schema!(3);impl_array_schema!(4);
+    #[cfg(not(feature = "nightly"))]
+    impl_array_schema!(0);
+    impl_array_schema!(1);
+    impl_array_schema!(2);
+    impl_array_schema!(3);
+    impl_array_schema!(4);
 
-
-    #[cfg(not(feature="nightly"))]
+    #[cfg(not(feature = "nightly"))]
     macro_rules! impl_array_introspect {
         ( $n:expr ) => {
-            impl<T: Introspect> Introspect for [T;$n] {
+            impl<T: Introspect> Introspect for [T; $n] {
                 fn introspect_value(&self) -> String {
-                    format!("[{}; {}]",std::any::type_name::<T>(), $n)
+                    format!("[{}; {}]", std::any::type_name::<T>(), $n)
                 }
 
-                fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+                fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
                     if index >= self.len() {
                         None
                     } else {
@@ -3678,13 +3727,16 @@ pub mod array_impls {
                     }
                 }
             }
-         };
+        };
     }
 
-    impl_array_introspect!(0);impl_array_introspect!(1);impl_array_introspect!(2);impl_array_introspect!(3);impl_array_introspect!(4);
+    impl_array_introspect!(0);
+    impl_array_introspect!(1);
+    impl_array_introspect!(2);
+    impl_array_introspect!(3);
+    impl_array_introspect!(4);
 
-
-    #[cfg(not(feature="nightly"))]
+    #[cfg(not(feature = "nightly"))]
     macro_rules! impl_array_serialize {
         ( $n:expr ) => {
             impl<T: Serialize> Serialize for [T; $n] {
@@ -3695,54 +3747,59 @@ pub mod array_impls {
                     Ok(())
                 }
             }
-         };
+        };
     }
-    #[cfg(not(feature="nightly"))]
-    impl_array_serialize!(0);impl_array_serialize!(1);impl_array_serialize!(2);impl_array_serialize!(3);impl_array_serialize!(4);
+    #[cfg(not(feature = "nightly"))]
+    impl_array_serialize!(0);
+    impl_array_serialize!(1);
+    impl_array_serialize!(2);
+    impl_array_serialize!(3);
+    impl_array_serialize!(4);
 
-    #[cfg(not(feature="nightly"))]
+    #[cfg(not(feature = "nightly"))]
     macro_rules! impl_array_deserialize {
-    ( $n:expr ) => {
-        impl<T: Deserialize> Deserialize for [T;$n] {
-            fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-                let mut data: [MaybeUninit<T>; $n] = unsafe {
-                    MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
-                };
-                for idx in 0..$n {
-                    data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
+        ( $n:expr ) => {
+            impl<T: Deserialize> Deserialize for [T; $n] {
+                fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+                    let mut data: [MaybeUninit<T>; $n] = unsafe {
+                        MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+                    };
+                    for idx in 0..$n {
+                        data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
+                    }
+                    let ptr = &mut data as *mut _ as *mut [T; $n];
+                    let res = unsafe { ptr.read() };
+                    core::mem::forget(data);
+                    Ok(res)
                 }
-                let ptr = &mut data as *mut _ as *mut [T; $n];
-                let res = unsafe { ptr.read() };
-                core::mem::forget(data);
-                Ok( res )
             }
-        }
-     };
+        };
     }
-    #[cfg(not(feature="nightly"))]
-    impl_array_deserialize!(0);impl_array_deserialize!(1);impl_array_deserialize!(2);impl_array_deserialize!(3);impl_array_deserialize!(4);
-
-
+    #[cfg(not(feature = "nightly"))]
+    impl_array_deserialize!(0);
+    impl_array_deserialize!(1);
+    impl_array_deserialize!(2);
+    impl_array_deserialize!(3);
+    impl_array_deserialize!(4);
 }
 
-#[cfg(feature="nightly")]
-impl<T: WithSchema, const N:usize> WithSchema for [T; N] {
-    fn schema(version:u32) -> Schema {
+#[cfg(feature = "nightly")]
+impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
+    fn schema(version: u32) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version)),
-            count: N
+            count: N,
         })
     }
 }
 
-
-#[cfg(feature="nightly")]
-impl<T: Introspect, const N:usize> Introspect for [T; N] {
+#[cfg(feature = "nightly")]
+impl<T: Introspect, const N: usize> Introspect for [T; N] {
     fn introspect_value(&self) -> String {
-        format!("[{}; {}]",std::any::type_name::<T>(), N)
+        format!("[{}; {}]", std::any::type_name::<T>(), N)
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index >= self.len() {
             None
         } else {
@@ -3751,9 +3808,8 @@ impl<T: Introspect, const N:usize> Introspect for [T; N] {
     }
 }
 
-
-#[cfg(feature="nightly")]
-impl<T: Serialize, const N:usize> Serialize for [T; N] {
+#[cfg(feature = "nightly")]
+impl<T: Serialize, const N: usize> Serialize for [T; N] {
     default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         for item in self.iter() {
             item.serialize(serializer)?
@@ -3762,9 +3818,8 @@ impl<T: Serialize, const N:usize> Serialize for [T; N] {
     }
 }
 
-
-#[cfg(feature="nightly")]
-impl<T: Deserialize, const N:usize> Deserialize for [T;N] {
+#[cfg(feature = "nightly")]
+impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
     default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let mut data: [MaybeUninit<T>; N] = unsafe {
             MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
@@ -3775,13 +3830,13 @@ impl<T: Deserialize, const N:usize> Deserialize for [T;N] {
         let ptr = &mut data as *mut _ as *mut [T; N];
         let res = unsafe { ptr.read() };
         core::mem::forget(data);
-        Ok( res )
+        Ok(res)
     }
 }
 
-#[cfg(feature="nightly")]
-impl<T: Serialize + ReprC, const N:usize> Serialize for [T; N] {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+#[cfg(feature = "nightly")]
+impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if !T::repr_c_optimization_safe(serializer.version) {
                 for item in self.iter() {
@@ -3798,9 +3853,9 @@ impl<T: Serialize + ReprC, const N:usize> Serialize for [T; N] {
     }
 }
 
-#[cfg(feature="nightly")]
-impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+#[cfg(feature = "nightly")]
+impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         if !T::repr_c_optimization_safe(deserializer.file_version) {
             let mut data: [MaybeUninit<T>; N] = unsafe {
                 MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
@@ -3811,7 +3866,7 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
             core::mem::forget(data);
-            Ok( res )
+            Ok(res)
         } else {
             let mut data: [MaybeUninit<T>; N] = unsafe {
                 MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
@@ -3819,48 +3874,42 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T;N] {
 
             {
                 let ptr = data.as_mut_ptr();
-                let num_bytes:usize = std::mem::size_of::<T>() * N;
-                let slice: &mut [MaybeUninit<u8>] = unsafe { std::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, num_bytes) };
-                deserializer.reader.read_exact(unsafe{std::mem::transmute(slice)})?;
+                let num_bytes: usize = std::mem::size_of::<T>() * N;
+                let slice: &mut [MaybeUninit<u8>] =
+                    unsafe { std::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, num_bytes) };
+                deserializer.reader.read_exact(unsafe { std::mem::transmute(slice) })?;
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
             core::mem::forget(data);
-            Ok( res )
+            Ok(res)
         }
     }
 }
 
-
-
-
-impl<T1:WithSchema> WithSchema for Range<T1> {
-    fn schema(version:u32) -> Schema {
-        Schema::new_tuple2::<T1,T1>(version)
+impl<T1: WithSchema> WithSchema for Range<T1> {
+    fn schema(version: u32) -> Schema {
+        Schema::new_tuple2::<T1, T1>(version)
     }
 }
-impl<T1:Serialize> Serialize for Range<T1> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T1: Serialize> Serialize for Range<T1> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.start.serialize(serializer)?;
         self.end.serialize(serializer)?;
         Ok(())
     }
 }
-impl<T1:Deserialize> Deserialize for Range<T1> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        Ok(
-            T1::deserialize(deserializer)?
-            ..
-            T1::deserialize(deserializer)?
-        )
+impl<T1: Deserialize> Deserialize for Range<T1> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        Ok(T1::deserialize(deserializer)?..T1::deserialize(deserializer)?)
     }
 }
-impl<T1:Introspect> Introspect for Range<T1> {
+impl<T1: Introspect> Introspect for Range<T1> {
     fn introspect_value(&self) -> String {
         return "Range".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
             return Some(introspect_item("start".to_string(), &self.start));
         }
@@ -3871,91 +3920,79 @@ impl<T1:Introspect> Introspect for Range<T1> {
     }
 }
 
-
-
-impl<T1:WithSchema,T2:WithSchema,T3:WithSchema> WithSchema for (T1,T2,T3) {
-    fn schema(version:u32) -> Schema {
-        Schema::new_tuple3::<T1,T2,T3>(version)
+impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3) {
+    fn schema(version: u32) -> Schema {
+        Schema::new_tuple3::<T1, T2, T3>(version)
     }
 }
-impl<T1:Serialize,T2:Serialize,T3:Serialize> Serialize for (T1,T2,T3) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T1: Serialize, T2: Serialize, T3: Serialize> Serialize for (T1, T2, T3) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.0.serialize(serializer)?;
         self.1.serialize(serializer)?;
         self.2.serialize(serializer)
     }
 }
-impl<T1:Deserialize,T2:Deserialize,T3:Deserialize> Deserialize for (T1,T2,T3) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        Ok(
-            (T1::deserialize(deserializer)?,
-             T2::deserialize(deserializer)?,
-             T3::deserialize(deserializer)?
-             )
-        )
+impl<T1: Deserialize, T2: Deserialize, T3: Deserialize> Deserialize for (T1, T2, T3) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        Ok((
+            T1::deserialize(deserializer)?,
+            T2::deserialize(deserializer)?,
+            T3::deserialize(deserializer)?,
+        ))
     }
 }
 
-
-
-impl<T1:WithSchema,T2:WithSchema> WithSchema for (T1,T2) {
-    fn schema(version:u32) -> Schema {
-        Schema::new_tuple2::<T1,T2>(version)
+impl<T1: WithSchema, T2: WithSchema> WithSchema for (T1, T2) {
+    fn schema(version: u32) -> Schema {
+        Schema::new_tuple2::<T1, T2>(version)
     }
 }
-impl<T1:Serialize,T2:Serialize> Serialize for (T1,T2) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T1: Serialize, T2: Serialize> Serialize for (T1, T2) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.0.serialize(serializer)?;
         self.1.serialize(serializer)
     }
 }
-impl<T1:Deserialize,T2:Deserialize> Deserialize for (T1,T2) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        Ok(
-            (T1::deserialize(deserializer)?,
-             T2::deserialize(deserializer)?)
-        )
+impl<T1: Deserialize, T2: Deserialize> Deserialize for (T1, T2) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        Ok((T1::deserialize(deserializer)?, T2::deserialize(deserializer)?))
     }
 }
 
-impl<T1:WithSchema> WithSchema for (T1,) {
-    fn schema(version:u32) -> Schema {
+impl<T1: WithSchema> WithSchema for (T1,) {
+    fn schema(version: u32) -> Schema {
         Schema::new_tuple1::<T1>(version)
     }
 }
-impl<T1:Serialize> Serialize for (T1,) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T1: Serialize> Serialize for (T1,) {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.0.serialize(serializer)
     }
 }
-impl<T1:Deserialize> Deserialize for (T1,) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
-        Ok(
-            (T1::deserialize(deserializer)?,)
-        )
+impl<T1: Deserialize> Deserialize for (T1,) {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        Ok((T1::deserialize(deserializer)?,))
     }
 }
 
-
-
-impl<T:arrayvec::Array<Item = u8> + Copy> WithSchema for arrayvec::ArrayString<T> {
-    fn schema(_version:u32) -> Schema {
+impl<T: arrayvec::Array<Item = u8> + Copy> WithSchema for arrayvec::ArrayString<T> {
+    fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
-impl<T:arrayvec::Array<Item = u8> + Copy> Serialize for arrayvec::ArrayString<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+impl<T: arrayvec::Array<Item = u8> + Copy> Serialize for arrayvec::ArrayString<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(self.as_str())
     }
 }
-impl<T:arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let s = deserializer.read_string()?;
         Ok(arrayvec::ArrayString::from(&s)?)
     }
 }
 
-impl<T:arrayvec::Array<Item=u8> + Copy> Introspect for arrayvec::ArrayString<T> {
+impl<T: arrayvec::Array<Item = u8> + Copy> Introspect for arrayvec::ArrayString<T> {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
@@ -3965,47 +4002,47 @@ impl<T:arrayvec::Array<Item=u8> + Copy> Introspect for arrayvec::ArrayString<T> 
     }
 }
 
-impl<V:WithSchema, T:arrayvec::Array<Item=V>> WithSchema for arrayvec::ArrayVec<T> {
-    fn schema(version:u32) -> Schema {
+impl<V: WithSchema, T: arrayvec::Array<Item = V>> WithSchema for arrayvec::ArrayVec<T> {
+    fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(V::schema(version)))
     }
 }
 
-impl<V:Introspect+'static, T:arrayvec::Array<Item=V>> Introspect for arrayvec::ArrayVec<T> {
+impl<V: Introspect + 'static, T: arrayvec::Array<Item = V>> Introspect for arrayvec::ArrayVec<T> {
     fn introspect_value(&self) -> String {
         return "arrayvec[]".to_string();
     }
 
-    fn introspect_child<'s>(&'s self, index: usize) -> Option<Box<dyn IntrospectItem<'s>+'s>> {
+    fn introspect_child<'s>(&'s self, index: usize) -> Option<Box<dyn IntrospectItem<'s> + 's>> {
         if index >= self.len() {
             return None;
         }
         return Some(Box::new(IntrospectItemSimple {
             key: index.to_string(),
-            val: &self[index]
+            val: &self[index],
         }));
     }
     fn introspect_len(&self) -> usize {
         self.len()
     }
 }
-#[cfg(feature="nightly")]
-impl<V:Serialize, T:arrayvec::Array<Item=V>> Serialize for arrayvec::ArrayVec<T> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+#[cfg(feature = "nightly")]
+impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
 
-#[cfg(not(feature="nightly"))]
-impl<V:Serialize, T:arrayvec::Array<Item=V>> Serialize for arrayvec::ArrayVec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+#[cfg(not(feature = "nightly"))]
+impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
 
-#[cfg(feature="nightly")]
-impl<V:Serialize+ReprC, T:arrayvec::Array<Item=V>> Serialize for arrayvec::ArrayVec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+#[cfg(feature = "nightly")]
+impl<V: Serialize + ReprC, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if !V::repr_c_optimization_safe(serializer.version) {
                 regular_serialize_vec(self, serializer)
@@ -4020,9 +4057,9 @@ impl<V:Serialize+ReprC, T:arrayvec::Array<Item=V>> Serialize for arrayvec::Array
         }
     }
 }
-#[cfg(feature="nightly")]
-impl<V:Deserialize, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVec<T> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>,SavefileError> {
+#[cfg(feature = "nightly")]
+impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {
@@ -4032,9 +4069,9 @@ impl<V:Deserialize, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVe
     }
 }
 
-#[cfg(not(feature="nightly"))]
-impl<V:Deserialize, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>,SavefileError> {
+#[cfg(not(feature = "nightly"))]
+impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {
@@ -4044,13 +4081,15 @@ impl<V:Deserialize, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVe
     }
 }
 
-#[cfg(feature="nightly")]
-impl<V:Deserialize+ReprC, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::ArrayVec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>,SavefileError> {
+#[cfg(feature = "nightly")]
+impl<V: Deserialize + ReprC, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         if l > ret.capacity() {
-            return Err(SavefileError::ArrayvecCapacityError {msg:format!("ArrayVec with capacity {} can't hold {} items",ret.capacity(),l)})
+            return Err(SavefileError::ArrayvecCapacityError {
+                msg: format!("ArrayVec with capacity {} can't hold {} items", ret.capacity(), l),
+            });
         }
         if !V::repr_c_optimization_safe(deserializer.memory_version) {
             for _ in 0..l {
@@ -4058,8 +4097,8 @@ impl<V:Deserialize+ReprC, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::A
             }
         } else {
             unsafe {
-                let bytebuf = std::slice::from_raw_parts_mut(ret.as_mut_ptr() as *mut u8,std::mem::size_of::<V>() * l);
-                deserializer.reader.read_exact(bytebuf)?;//We 'leak' ReprC objects here on error, but the idea is they are drop-less anyway, so this has no effect
+                let bytebuf = std::slice::from_raw_parts_mut(ret.as_mut_ptr() as *mut u8, std::mem::size_of::<V>() * l);
+                deserializer.reader.read_exact(bytebuf)?; //We 'leak' ReprC objects here on error, but the idea is they are drop-less anyway, so this has no effect
                 ret.set_len(l);
             }
         }
@@ -4067,114 +4106,107 @@ impl<V:Deserialize+ReprC, T:arrayvec::Array<Item=V>> Deserialize for arrayvec::A
     }
 }
 
-
 use std::ops::{Deref, Range};
-impl<T:WithSchema> WithSchema for Box<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Box<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
-impl<T:Serialize> Serialize for Box<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+impl<T: Serialize> Serialize for Box<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T:Deserialize> Deserialize for Box<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize> Deserialize for Box<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Box::new(T::deserialize(deserializer)?))
     }
 }
 
 use std::rc::Rc;
 
-impl<T:WithSchema> WithSchema for Rc<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Rc<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
-impl<T:Serialize> Serialize for Rc<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+impl<T: Serialize> Serialize for Rc<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T:Deserialize> Deserialize for Rc<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize> Deserialize for Rc<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Rc::new(T::deserialize(deserializer)?))
     }
 }
 
-
-
-
-impl<T:WithSchema> WithSchema for Arc<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Arc<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
-impl<T:Serialize> Serialize for Arc<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+impl<T: Serialize> Serialize for Arc<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T:Deserialize> Deserialize for Arc<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize> Deserialize for Arc<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Arc::new(T::deserialize(deserializer)?))
     }
 }
 
-use std::cell::RefCell;
+use bzip2::Compression;
+use std::any::{Any, TypeId};
 use std::cell::Cell;
+use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::sync::Arc;
-use std::convert::TryFrom;
-use bzip2::Compression;
 use std::path::PathBuf;
-use std::any::{TypeId, Any};
+use std::sync::Arc;
 
-impl<T:WithSchema> WithSchema for RefCell<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for RefCell<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
-impl<T:Serialize> Serialize for RefCell<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {        
+impl<T: Serialize> Serialize for RefCell<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.borrow().serialize(serializer)
     }
 }
-impl<T:Deserialize> Deserialize for RefCell<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize> Deserialize for RefCell<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(RefCell::new(T::deserialize(deserializer)?))
     }
 }
 
-
-impl<T:WithSchema> WithSchema for Cell<T> {
-    fn schema(version:u32) -> Schema {
+impl<T: WithSchema> WithSchema for Cell<T> {
+    fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
-impl<T:Serialize+Copy> Serialize for Cell<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
-        let t:T = self.get();
+impl<T: Serialize + Copy> Serialize for Cell<T> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        let t: T = self.get();
         t.serialize(serializer)
     }
 }
-impl<T:Deserialize> Deserialize for Cell<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+impl<T: Deserialize> Deserialize for Cell<T> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Cell::new(T::deserialize(deserializer)?))
     }
 }
 
-
-
 impl WithSchema for () {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::ZeroSize
     }
 }
 impl Serialize for () {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(),SavefileError> {        
+    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
         Ok(())
     }
 }
@@ -4182,22 +4214,22 @@ impl Introspect for () {
     fn introspect_value(&self) -> String {
         "()".to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         None
     }
 }
 impl Deserialize for () {
-    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(())
     }
 }
 
-impl<T:Introspect> Introspect for (T,) {
+impl<T: Introspect> Introspect for (T,) {
     fn introspect_value(&self) -> String {
         return "1-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -4205,12 +4237,12 @@ impl<T:Introspect> Introspect for (T,) {
     }
 }
 
-impl<T1:Introspect,T2:Introspect> Introspect for (T1,T2) {
+impl<T1: Introspect, T2: Introspect> Introspect for (T1, T2) {
     fn introspect_value(&self) -> String {
         return "2-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -4220,12 +4252,12 @@ impl<T1:Introspect,T2:Introspect> Introspect for (T1,T2) {
         return None;
     }
 }
-impl<T1:Introspect,T2:Introspect,T3:Introspect> Introspect for (T1,T2,T3) {
+impl<T1: Introspect, T2: Introspect, T3: Introspect> Introspect for (T1, T2, T3) {
     fn introspect_value(&self) -> String {
         return "3-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -4238,12 +4270,12 @@ impl<T1:Introspect,T2:Introspect,T3:Introspect> Introspect for (T1,T2,T3) {
         return None;
     }
 }
-impl<T1:Introspect,T2:Introspect,T3:Introspect,T4:Introspect> Introspect for (T1,T2,T3,T4) {
+impl<T1: Introspect, T2: Introspect, T3: Introspect, T4: Introspect> Introspect for (T1, T2, T3, T4) {
     fn introspect_value(&self) -> String {
         return "4-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -4260,348 +4292,602 @@ impl<T1:Introspect,T2:Introspect,T3:Introspect,T4:Introspect> Introspect for (T1
     }
 }
 
-impl Introspect for AtomicBool {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicU8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicI8 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicU16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicI16 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicU32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicI32 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicU64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicI64 {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicUsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for AtomicIsize {fn introspect_value(&self) -> String {self.load(Ordering::SeqCst).to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
+impl Introspect for AtomicBool {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicU8 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicI8 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicU16 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicI16 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicU32 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicI32 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicU64 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicI64 {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicUsize {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for AtomicIsize {
+    fn introspect_value(&self) -> String {
+        self.load(Ordering::SeqCst).to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
 
-
-
-impl WithSchema for AtomicBool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}
-impl WithSchema for AtomicU8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
-impl WithSchema for AtomicI8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
-impl WithSchema for AtomicU16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u16)}}
-impl WithSchema for AtomicI16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i16)}}
-impl WithSchema for AtomicU32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u32)}}
-impl WithSchema for AtomicI32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i32)}}
-impl WithSchema for AtomicU64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u64)}}
-impl WithSchema for AtomicI64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i64)}}
-impl WithSchema for AtomicUsize {fn schema(_version:u32) -> Schema {
+impl WithSchema for AtomicBool {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_bool)
+    }
+}
+impl WithSchema for AtomicU8 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u8)
+    }
+}
+impl WithSchema for AtomicI8 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i8)
+    }
+}
+impl WithSchema for AtomicU16 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u16)
+    }
+}
+impl WithSchema for AtomicI16 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i16)
+    }
+}
+impl WithSchema for AtomicU32 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u32)
+    }
+}
+impl WithSchema for AtomicI32 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i32)
+    }
+}
+impl WithSchema for AtomicU64 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u64)
+    }
+}
+impl WithSchema for AtomicI64 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i64)
+    }
+}
+impl WithSchema for AtomicUsize {
+    fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
             8 => Schema::Primitive(SchemaPrimitive::schema_u64),
             _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
-}}
-impl WithSchema for AtomicIsize {fn schema(_version:u32) -> Schema {
+    }
+}
+impl WithSchema for AtomicIsize {
+    fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
             8 => Schema::Primitive(SchemaPrimitive::schema_i64),
             _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
-}}
+    }
+}
 
-
-impl WithSchema for bool {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_bool)}}
-impl WithSchema for u8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u8)}}
-impl WithSchema for i8 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i8)}}
-impl WithSchema for u16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u16)}}
-impl WithSchema for i16 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i16)}}
-impl WithSchema for u32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u32)}}
-impl WithSchema for i32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i32)}}
-impl WithSchema for u64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_u64)}}
-impl WithSchema for i64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_i64)}}
-impl WithSchema for usize {fn schema(_version:u32) -> Schema {
+impl WithSchema for bool {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_bool)
+    }
+}
+impl WithSchema for u8 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u8)
+    }
+}
+impl WithSchema for i8 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i8)
+    }
+}
+impl WithSchema for u16 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u16)
+    }
+}
+impl WithSchema for i16 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i16)
+    }
+}
+impl WithSchema for u32 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u32)
+    }
+}
+impl WithSchema for i32 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i32)
+    }
+}
+impl WithSchema for u64 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u64)
+    }
+}
+impl WithSchema for i64 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i64)
+    }
+}
+impl WithSchema for usize {
+    fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
             8 => Schema::Primitive(SchemaPrimitive::schema_u64),
             _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
-}}
-impl WithSchema for isize {fn schema(_version:u32) -> Schema {
+    }
+}
+impl WithSchema for isize {
+    fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
             8 => Schema::Primitive(SchemaPrimitive::schema_i64),
             _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
-}}
-impl WithSchema for f32 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f32)}}
-impl WithSchema for f64 {fn schema(_version:u32) -> Schema {Schema::Primitive(SchemaPrimitive::schema_f64)}}
+    }
+}
+impl WithSchema for f32 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_f32)
+    }
+}
+impl WithSchema for f64 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_f64)
+    }
+}
 
-
-impl Introspect for bool {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for u8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for u16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for u32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for u64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for u128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for i8 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for i16 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for i32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for i64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for i128 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for f32 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for f64 {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for usize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-impl Introspect for isize {fn introspect_value(&self) -> String {self.to_string()}fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {None}}
-
-
-
+impl Introspect for bool {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for u8 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for u16 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for u32 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for u64 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for u128 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for i8 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for i16 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for i32 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for i64 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for i128 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for f32 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for f64 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for usize {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for isize {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
 
 impl Serialize for u8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u8(*self)
     }
 }
 impl Deserialize for u8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_u8()
     }
 }
 impl Serialize for bool {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_bool(*self)
     }
 }
 impl Deserialize for bool {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_bool()
     }
 }
 
-
-
 impl Serialize for f32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_f32(*self)
     }
 }
 impl Deserialize for f32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_f32()
     }
 }
 
 impl Serialize for f64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_f64(*self)
     }
 }
 impl Deserialize for f64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_f64()
     }
 }
 
 impl Serialize for i8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i8(*self)
     }
 }
 impl Deserialize for i8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i8()
     }
 }
 impl Serialize for u16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u16(*self)
     }
 }
 impl Deserialize for u16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_u16()
     }
 }
 impl Serialize for i16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i16(*self)
     }
 }
 impl Deserialize for i16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i16()
     }
 }
 
 impl Serialize for u32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u32(*self)
     }
 }
 impl Deserialize for u32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_u32()
     }
 }
 impl Serialize for i32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i32(*self)
     }
 }
 impl Deserialize for i32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i32()
     }
 }
 
 impl Serialize for u64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u64(*self)
     }
 }
 impl Deserialize for u64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_u64()
     }
 }
 impl Serialize for i64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i64(*self)
     }
 }
 impl Deserialize for i64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i64()
     }
 }
 
 impl Serialize for usize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(*self)
     }
 }
 impl Deserialize for usize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_usize()
     }
 }
 impl Serialize for isize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_isize(*self)
     }
 }
 impl Deserialize for isize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_isize()
     }
 }
 
-
-
-
-
-
-
-
 impl Serialize for AtomicBool {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_bool(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicBool {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicBool::new(deserializer.read_bool()?))
     }
 }
 
 impl Serialize for AtomicU8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u8(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicU8::new(deserializer.read_u8()?))
     }
 }
 impl Serialize for AtomicI8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i8(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicI8::new(deserializer.read_i8()?))
     }
 }
 impl Serialize for AtomicU16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u16(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicU16::new(deserializer.read_u16()?))
     }
 }
 impl Serialize for AtomicI16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i16(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicI16::new(deserializer.read_i16()?))
     }
 }
 
 impl Serialize for AtomicU32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u32(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicU32::new(deserializer.read_u32()?))
     }
 }
 impl Serialize for AtomicI32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i32(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicI32::new(deserializer.read_i32()?))
     }
 }
 
 impl Serialize for AtomicU64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u64(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicU64::new(deserializer.read_u64()?))
     }
 }
 impl Serialize for AtomicI64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_i64(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicI64::new(deserializer.read_i64()?))
     }
 }
 
 impl Serialize for AtomicUsize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicUsize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicUsize::new(deserializer.read_usize()?))
     }
 }
 impl Serialize for AtomicIsize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_isize(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicIsize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(AtomicIsize::new(deserializer.read_isize()?))
     }
 }
@@ -4609,9 +4895,8 @@ impl Deserialize for AtomicIsize {
 /// Useful zero-sized marker. It serializes to a magic value,
 /// and verifies this value on deserialization. Does not consume memory
 /// data structure. Useful to troubleshoot broken Serialize/Deserialize implementations.
-#[derive(Clone,Copy,Eq,PartialEq,Default,Debug)]
-pub struct Canary1 {
-}
+#[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
+pub struct Canary1 {}
 impl Canary1 {
     /// Create a new Canary1 object. Object has no contents.
     pub fn new() -> Canary1 {
@@ -4623,36 +4908,39 @@ impl Introspect for Canary1 {
         "Canary1".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem+'_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         None
     }
 }
 
 impl Deserialize for Canary1 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self,SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let magic = deserializer.read_u32()?;
         if magic != 0x47566843 {
-            return Err(SavefileError::GeneralError {msg:format!("Encountered bad magic value when deserializing Canary1. Expected {} but got {}",
-                                                     0x47566843,magic)});
-
+            return Err(SavefileError::GeneralError {
+                msg: format!(
+                    "Encountered bad magic value when deserializing Canary1. Expected {} but got {}",
+                    0x47566843, magic
+                ),
+            });
         }
-        Ok(Canary1{})
+        Ok(Canary1 {})
     }
 }
 
 impl Serialize for Canary1 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(),SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u32(0x47566843)
     }
 }
 
 impl WithSchema for Canary1 {
-    fn schema(_version:u32) -> Schema {
+    fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)
-    }    
+    }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 struct PathElement {
     key: String,
     key_disambiguator: usize,
@@ -4661,25 +4949,25 @@ struct PathElement {
 
 /// A helper which allows navigating an introspected object.
 /// It remembers a path down into the guts of the object.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Introspector {
     path: Vec<PathElement>,
     child_load_count: usize,
 }
 
 /// A command to navigate within an introspected object
-#[derive(Debug,PartialEq,Eq,Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IntrospectorNavCommand {
     /// Select the given object and expand its children.
     /// Use this when you know the string name of the key you wish to expand.
     ExpandElement(IntrospectedElementKey),
     /// Select the Nth object at the given depth in the tree.
     /// Use this when you know the index of the field you wish to expand.
-    SelectNth{
+    SelectNth {
         /// Depth of item to select and expand
-        select_depth:usize,
+        select_depth: usize,
         /// Index of item to select and expand
-        select_index:usize
+        select_index: usize,
     },
     /// Don't navigate
     Nothing,
@@ -4689,7 +4977,7 @@ pub enum IntrospectorNavCommand {
 
 /// Identifies an introspected element somewhere in the introspection tree
 /// of an object.
-#[derive(PartialEq,Eq,Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct IntrospectedElementKey {
     /// Depth in the tree. Fields on top level struct are at depth 0.
     pub depth: usize,
@@ -4707,11 +4995,10 @@ impl Default for IntrospectedElementKey {
             key_disambiguator: 0,
         }
     }
-
 }
 
 /// A node in the introspection tree
-#[derive(PartialEq,Eq,Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct IntrospectedElement {
     /// Identifying key
     pub key: IntrospectedElementKey,
@@ -4725,26 +5012,32 @@ pub struct IntrospectedElement {
 
 impl Debug for IntrospectedElementKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "Key({} (at depth {}, key disambig {}))",self.key,self.depth,self.key_disambiguator)
+        write!(
+            f,
+            "Key({} (at depth {}, key disambig {}))",
+            self.key, self.depth, self.key_disambiguator
+        )
     }
 }
 
 impl Debug for IntrospectedElement {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "KeyVal({} = {} (at depth {}, key disambig {}))",self.key.key,self.value,self.key.depth,self.key.key_disambiguator)
+        write!(
+            f,
+            "KeyVal({} = {} (at depth {}, key disambig {}))",
+            self.key.key, self.value, self.key.depth, self.key.key_disambiguator
+        )
     }
 }
-
 
 impl Display for IntrospectedElement {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{} = {}",self.key.key,self.value)
+        write!(f, "{} = {}", self.key.key, self.value)
     }
 }
 
-
 /// Ways in which introspection may fail
-#[derive(Debug,PartialEq,Eq,Clone,Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum IntrospectionError {
     /// The given depth value is invalid. At start of introspection,
     /// max depth value is 0, and fields of the root object are introspected. If a field
@@ -4757,8 +5050,7 @@ pub enum IntrospectionError {
     /// An attempt was made to select/expand a child with an index greater or equal to the number of children.
     IndexOutOfRange,
     /// An attempt was made to back up when already at the top.
-    AlreadyAtTop
-
+    AlreadyAtTop,
 }
 
 /// All fields at a specific depth in the introspection tree
@@ -4771,7 +5063,6 @@ pub struct IntrospectionFrame {
     /// True if there may have been more children, but expansion was stopped
     /// because the limit given to the Introspector was reached.
     pub limit_reached: bool,
-
 }
 /// An introspection tree. Note that each node in the tree can only have
 /// one expanded field, and thus at most one child (a bit of a boring 'tree' :-) ).
@@ -4781,8 +5072,6 @@ pub struct IntrospectionResult {
     pub frames: Vec<IntrospectionFrame>,
     cached_total_len: usize,
 }
-
-
 
 impl Display for IntrospectionResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -4794,12 +5083,11 @@ impl IntrospectionResult {
     /// Indexes the result with a single index, which will reach all levels in the tree.
     /// Printing all elements in the order returned here, with indentation equal to
     /// item.key.depth, will yield a readable tree.
-    pub fn total_index(&self, index:usize) -> Option<IntrospectedElement> {
+    pub fn total_index(&self, index: usize) -> Option<IntrospectedElement> {
         let mut cur = 0;
         self.total_index_impl(index, 0, &mut cur)
     }
-    fn total_index_impl(&self, index:usize, depth:usize, cur: &mut usize) -> Option<IntrospectedElement> {
-
+    fn total_index_impl(&self, index: usize, depth: usize, cur: &mut usize) -> Option<IntrospectedElement> {
         if depth >= self.frames.len() {
             return None;
         }
@@ -4810,8 +5098,8 @@ impl IntrospectionResult {
                 if index <= *cur + selection {
                     return Some(frame.keyvals[index - *cur].clone());
                 }
-                *cur  += selection+1;
-                if let Some(result) = self.total_index_impl(index, depth+1, cur) {
+                *cur += selection + 1;
+                if let Some(result) = self.total_index_impl(index, depth + 1, cur) {
                     return Some(result);
                 }
                 offset = selection + 1;
@@ -4831,16 +5119,15 @@ impl IntrospectionResult {
         self.cached_total_len
     }
 
-    fn format_result_row(self:&IntrospectionResult, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-
+    fn format_result_row(self: &IntrospectionResult, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         if self.frames.len() == 0 {
-            writeln!(f,"Introspectionresult:\n*empty*")?;
+            writeln!(f, "Introspectionresult:\n*empty*")?;
             return Ok(());
         }
         let mut idx = 0;
         let mut depth = Vec::new();
 
-        writeln!(f,"Introspectionresult:")?;
+        writeln!(f, "Introspectionresult:")?;
 
         'outer: loop {
             let cur_row = &self.frames[depth.len()];
@@ -4855,14 +5142,16 @@ impl IntrospectionResult {
             while idx < cur_row.keyvals.len() {
                 let item = &cur_row.keyvals[idx];
                 let is_selected = Some(idx) == cur_row.selected;
-                let pad = if is_selected {"*"} else {
+                let pad = if is_selected {
+                    "*"
+                } else {
                     if item.has_children {
                         ">"
                     } else {
                         " "
                     }
                 };
-                writeln!(f, "{:>indent$}{}", pad, item, indent = 1 + 2*depth.len())?;
+                writeln!(f, "{:>indent$}{}", pad, item, indent = 1 + 2 * depth.len())?;
                 idx += 1;
                 if is_selected && depth.len() + 1 < self.frames.len() {
                     depth.push(idx);
@@ -4873,18 +5162,16 @@ impl IntrospectionResult {
         }
         Ok(())
     }
-
-
 }
 impl Display for IntrospectedElementKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}",self.key)
+        write!(f, "{}", self.key)
     }
 }
 
 struct OuterIntrospectItem<'a> {
     key: String,
-    val: &'a dyn Introspect
+    val: &'a dyn Introspect,
 }
 
 impl<'a> IntrospectItem<'a> for OuterIntrospectItem<'a> {
@@ -4897,23 +5184,21 @@ impl<'a> IntrospectItem<'a> for OuterIntrospectItem<'a> {
     }
 }
 
-
 impl Introspector {
-
     /// Returns a new Introspector with no limit to the number of fields introspected per level
     pub fn new() -> Introspector {
         Introspector {
-            path : vec![],
-            child_load_count: std::usize::MAX
+            path: vec![],
+            child_load_count: std::usize::MAX,
         }
     }
     /// Returns a new Introspector which will not enumerate more than 'child_load_count'
     /// elements on each level (useful for performance reasons to stop a 1 megabyte byte array
     /// from overwhelming the user of the introspector).
-    pub fn new_with(child_load_count:usize) -> Introspector {
+    pub fn new_with(child_load_count: usize) -> Introspector {
         Introspector {
-            path : vec![],
-            child_load_count
+            path: vec![],
+            child_load_count,
         }
     }
 
@@ -4922,8 +5207,12 @@ impl Introspector {
         self.path.len()
     }
 
-    fn dive<'a>(&mut self, depth:usize, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<Vec<IntrospectionFrame>,IntrospectionError> {
-
+    fn dive<'a>(
+        &mut self,
+        depth: usize,
+        object: &'a dyn Introspect,
+        navigation_command: IntrospectorNavCommand,
+    ) -> Result<Vec<IntrospectionFrame>, IntrospectionError> {
         let mut result_vec = Vec::new();
         let mut navigation_command = Some(navigation_command);
         let mut cur_path = self.path.get(depth).cloned();
@@ -4931,7 +5220,7 @@ impl Introspector {
         let mut row = IntrospectionFrame {
             selected: None,
             keyvals: vec![],
-            limit_reached: false
+            limit_reached: false,
         };
         let mut key_disambig_map = HashMap::new();
 
@@ -4949,74 +5238,80 @@ impl Introspector {
                         self.path.push(PathElement {
                             key: elem.key.clone(),
                             key_disambiguator: elem.key_disambiguator,
-                            max_children: self.child_load_count
+                            max_children: self.child_load_count,
                         });
                         cur_path = self.path.get(depth).cloned();
                         err_if_key_not_found = true;
                     }
-                },
-                IntrospectorNavCommand::SelectNth{select_depth,select_index} => {
+                }
+                IntrospectorNavCommand::SelectNth {
+                    select_depth,
+                    select_index,
+                } => {
                     if depth == *select_depth {
                         do_select_nth = Some(*select_index);
                     }
-                },
-                IntrospectorNavCommand::Nothing => {
-
-                },
-                IntrospectorNavCommand::Up => {
-                },
+                }
+                IntrospectorNavCommand::Nothing => {}
+                IntrospectorNavCommand::Up => {}
             }
         }
 
         loop {
-
-
             if let Some(child_item) = object.introspect_child(index) {
-                let key : String = child_item.key().into();
+                let key: String = child_item.key().into();
 
-                let disambig_counter :&mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
+                let disambig_counter: &mut usize = key_disambig_map.entry(key.clone()).or_insert(0usize);
                 let has_children = child_item.val().introspect_child(0).is_some();
                 row.keyvals.push(IntrospectedElement {
-                    key: IntrospectedElementKey{
+                    key: IntrospectedElementKey {
                         depth,
                         key: key.clone(),
-                        key_disambiguator: *disambig_counter
+                        key_disambiguator: *disambig_counter,
                     },
                     value: child_item.val().introspect_value(),
                     has_children,
-                    selected: false
+                    selected: false,
                 });
 
                 if Some(index) == do_select_nth {
-                    self.path.push(PathElement{
+                    self.path.push(PathElement {
                         key: key.clone(),
                         key_disambiguator: *disambig_counter,
-                        max_children: self.child_load_count
+                        max_children: self.child_load_count,
                     });
                     do_select_nth = None;
                     cur_path = self.path.last().cloned();
                 }
 
                 if let Some(cur_path_obj) = &cur_path {
-                    if row.selected.is_none() && cur_path_obj.key == key && cur_path_obj.key_disambiguator == *disambig_counter {
+                    if row.selected.is_none()
+                        && cur_path_obj.key == key
+                        && cur_path_obj.key_disambiguator == *disambig_counter
+                    {
                         row.selected = Some(index);
                         row.keyvals.last_mut().unwrap().selected = true;
                         if has_children {
-                            let mut subresult = self.dive(depth+1, child_item.val(), navigation_command.take().unwrap())?;
+                            let mut subresult =
+                                self.dive(depth + 1, child_item.val(), navigation_command.take().unwrap())?;
                             debug_assert_eq!(result_vec.len(), 0);
                             std::mem::swap(&mut result_vec, &mut subresult);
                         }
                     }
                 }
 
-
                 *disambig_counter += 1;
             } else {
                 break;
             }
 
-            index+=1;
-            if index >= cur_path.as_ref().map(|x|x.max_children).unwrap_or(self.child_load_count) {
+            index += 1;
+            if index
+                >= cur_path
+                    .as_ref()
+                    .map(|x| x.max_children)
+                    .unwrap_or(self.child_load_count)
+            {
                 row.limit_reached = true;
                 break;
             }
@@ -5037,18 +5332,21 @@ impl Introspector {
 
     /// Navigate the introspection tree using the given navigation_command, and also
     /// return the tree as an IntrospectionResult.
-    pub fn do_introspect<'a>(&mut self, object: &'a dyn Introspect, navigation_command: IntrospectorNavCommand) -> Result<IntrospectionResult,IntrospectionError> {
-
+    pub fn do_introspect<'a>(
+        &mut self,
+        object: &'a dyn Introspect,
+        navigation_command: IntrospectorNavCommand,
+    ) -> Result<IntrospectionResult, IntrospectionError> {
         match &navigation_command {
-            IntrospectorNavCommand::ExpandElement(_) => {},
-            IntrospectorNavCommand::SelectNth{..} => {},
-            IntrospectorNavCommand::Nothing => {},
+            IntrospectorNavCommand::ExpandElement(_) => {}
+            IntrospectorNavCommand::SelectNth { .. } => {}
+            IntrospectorNavCommand::Nothing => {}
             IntrospectorNavCommand::Up => {
                 if self.path.len() == 0 {
                     return Err(IntrospectionError::AlreadyAtTop);
                 }
                 self.path.pop();
-            },
+            }
         }
         let frames = self.dive(0, object, navigation_command)?;
 
@@ -5058,11 +5356,8 @@ impl Introspector {
         }
         let accum = IntrospectionResult {
             frames: frames,
-            cached_total_len: total
+            cached_total_len: total,
         };
         Ok(accum)
     }
-
-
 }
-
