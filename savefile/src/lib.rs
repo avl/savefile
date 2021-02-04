@@ -715,7 +715,7 @@ use std::sync::atomic::{
 use self::byteorder::{LittleEndian};
 #[allow(unused_imports)]
 use std::mem::MaybeUninit;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeMap};
 use std::collections::VecDeque;
 use std::collections::BinaryHeap;
 use std::hash::Hash;
@@ -2665,6 +2665,7 @@ pub fn introspect_item<'a>(key:String,val: &'a dyn Introspect) -> Box<dyn Intros
     })
 }
 
+
 #[cfg(not(feature="nightly"))]
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect
 for HashMap<K, V, S> {
@@ -2752,6 +2753,50 @@ for HashSet<K, S> {
         self.len()
     }
 }
+
+impl<K:WithSchema+Eq+Ord, V: WithSchema> WithSchema for BTreeMap<K,V> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(
+            Schema::Struct(SchemaStruct{
+                dbg_name: "KeyValuePair".to_string(),
+                fields: vec![
+                    Field {
+                        name: "key".to_string(),
+                        value: Box::new(K::schema(version)),
+                    },
+                    Field {
+                        name: "value".to_string(),
+                        value: Box::new(V::schema(version)),
+                    },
+                ]
+            })))
+    }
+}
+impl<K:Serialize+Eq+Ord, V: Serialize> Serialize for BTreeMap<K,V> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        self.len().serialize(serializer)?;
+        for (k,v) in self {
+            k.serialize(serializer)?;
+            v.serialize(serializer)?;
+        }
+        Ok(())
+    }
+}
+impl<K:Deserialize+Eq+Ord, V: Deserialize> Deserialize for BTreeMap<K,V> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let mut ret = BTreeMap::new();
+        let count = <usize as Deserialize>::deserialize(deserializer)?;
+        for _ in 0..count {
+            ret.insert(
+                <_ as Deserialize>::deserialize(deserializer)?,
+                <_ as Deserialize>::deserialize(deserializer)?,
+            );
+        }
+        Ok(ret)
+    }
+}
+
+
 
 impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
     for HashMap<K, V, S> {

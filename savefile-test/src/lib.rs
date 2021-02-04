@@ -701,6 +701,7 @@ use std::string::ToString;
 use savefile::save_compressed;
 use std::sync::Arc;
 use std::path::PathBuf;
+use smallvec::alloc::collections::BTreeMap;
 
 #[test]
 pub fn test_atomic() {
@@ -1079,7 +1080,12 @@ pub fn test_roundtrip_arc_array() {
     assert_roundtrip(a2);
 }
 
-
+#[test]
+pub fn test_serialize_btreemap() {
+    let mut bm = BTreeMap::new();
+    bm.insert(45,32u16);
+    assert_roundtrip(bm);
+}
 
 
 #[test]
