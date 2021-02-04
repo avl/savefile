@@ -2775,7 +2775,31 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Hash
     }
 }
 
-impl<K: WithSchema + Eq + Ord, V: WithSchema> WithSchema for BTreeMap<K, V> {
+impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
+    fn introspect_value(&self) -> String {
+        format!("BTreeMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
+    }
+
+    // This has very bad performance. But with the model behind Savefile Introspect it
+    // is presently hard to do much better
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        let bucket = index / 2;
+        let off = index % 2;
+        if let Some((key, val)) = self.iter().skip(bucket).next() {
+            if off == 0 {
+                Some(introspect_item(format!("Key #{}", index), key))
+            } else {
+                Some(introspect_item(format!("Value #{}", index), val))
+            }
+        } else {
+            None
+        }
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
             dbg_name: "KeyValuePair".to_string(),
@@ -2792,7 +2816,7 @@ impl<K: WithSchema + Eq + Ord, V: WithSchema> WithSchema for BTreeMap<K, V> {
         })))
     }
 }
-impl<K: Serialize + Eq + Ord, V: Serialize> Serialize for BTreeMap<K, V> {
+impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
         for (k, v) in self {
@@ -2802,7 +2826,7 @@ impl<K: Serialize + Eq + Ord, V: Serialize> Serialize for BTreeMap<K, V> {
         Ok(())
     }
 }
-impl<K: Deserialize + Eq + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
+impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let mut ret = BTreeMap::new();
         let count = <usize as Deserialize>::deserialize(deserializer)?;
