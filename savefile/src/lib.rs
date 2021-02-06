@@ -5,6 +5,7 @@
 #![cfg_attr(feature = "nightly", feature(integer_atomics))]
 #![cfg_attr(feature = "nightly", feature(const_generics))]
 #![deny(missing_docs)]
+#![deny(warnings)]
 
 /*!
 This is the documentation for `savefile`
@@ -2689,6 +2690,8 @@ pub fn introspect_item<'a>(key: String, val: &'a dyn Introspect) -> Box<dyn Intr
     Box::new(IntrospectItemSimple { key: key, val: val })
 }
 
+
+
 #[cfg(not(feature = "nightly"))]
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for HashMap<K, V, S> {
     fn introspect_value(&self) -> String {
@@ -2835,6 +2838,31 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
                 <_ as Deserialize>::deserialize(deserializer)?,
                 <_ as Deserialize>::deserialize(deserializer)?,
             );
+        }
+        Ok(ret)
+    }
+}
+
+impl<K:WithSchema> WithSchema for HashSet<K> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(K::schema(version)))
+    }
+}
+impl<K:Serialize> Serialize for HashSet<K> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        serializer.write_usize(self.len())?;
+        for item in self {
+            item.serialize(serializer)?;
+        }
+        Ok(())
+    }
+}
+impl<K:Deserialize+Eq+Hash> Deserialize for HashSet<K> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let cnt = deserializer.read_usize()?;
+        let mut ret = HashSet::with_capacity(cnt);
+        for _ in 0..cnt {
+            ret.insert(<_ as Deserialize>::deserialize(deserializer)?);
         }
         Ok(ret)
     }

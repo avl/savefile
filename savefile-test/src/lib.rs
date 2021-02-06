@@ -702,6 +702,7 @@ use savefile::save_compressed;
 use std::sync::Arc;
 use std::path::PathBuf;
 use smallvec::alloc::collections::BTreeMap;
+use std::collections::HashSet;
 
 #[test]
 pub fn test_atomic() {
@@ -1085,6 +1086,22 @@ pub fn test_serialize_btreemap() {
     let mut bm = BTreeMap::new();
     bm.insert(45,32u16);
     assert_roundtrip(bm);
+}
+
+#[test]
+pub fn test_serialize_hashset() {
+    let hs = HashSet::<i32>::new();
+    assert_roundtrip(hs);
+    let mut hs = HashSet::new();
+    hs.insert(32u16);
+    assert_roundtrip(hs);
+    let mut hs = HashSet::new();
+    hs.insert("hej".to_string());
+    hs.insert("san".to_string());
+    hs.insert("kompis".to_string());
+    assert_roundtrip(hs);
+
+
 }
 
 

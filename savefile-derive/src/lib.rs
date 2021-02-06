@@ -1,4 +1,5 @@
 #![recursion_limit = "128"]
+#![deny(warnings)]
 //! This crate allows automatic derivation of the Savefile-traits: Serialize, Deserialize, WithSchema, ReprC and Introspect .
 //! The documentatino for this is found in the Savefile crate documentation.
 
