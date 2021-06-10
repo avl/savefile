@@ -67,6 +67,11 @@ fn main() {
 
 # Changelog
 
+## 0.8.2 Update dependencies
+
+* parking_lot from 0.7 -> 0.11
+* smallvec 1.4 -> 1.6 (made possible by parking_lot upgrade)
+
 ## 0.8.1 Stop depending on the 'failure' crate
 
 This also means that SavefileError now implements the Error trait.
