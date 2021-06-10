@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -30,7 +30,6 @@ nightly=[]
 
 [dependencies]
 byteorder="1.2"
-failure="0.1"
 bit-vec="0.6"
 arrayvec="0.5"
 smallvec="1.0"

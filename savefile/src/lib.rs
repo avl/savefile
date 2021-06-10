@@ -688,9 +688,6 @@ Rules for using the #\[savefile_versions] attribute:
 
 */
 
-#[macro_use]
-extern crate failure;
-
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
 extern crate alloc;
@@ -723,22 +720,23 @@ extern crate bzip2;
 #[cfg(feature = "nightly")]
 extern crate test;
 
+
+
+
 /// This object represents an error in deserializing or serializing
 /// an item.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 #[must_use]
 #[non_exhaustive]
 pub enum SavefileError {
     /// Error given when the schema stored in a file, does not match
     /// the schema given by the data structures in the code, taking into account
     /// versions.
-    #[fail(display = "Incompatible schema detected: {}", message)]
     IncompatibleSchema {
         /// A short description of the incompatibility
         message: String,
     },
     /// Some sort of IO failure. Permissions, broken media etc ...
-    #[fail(display = "IO Error: {}", io_error)]
     IOError {
         /// Cause
         io_error: std::io::Error,
@@ -747,47 +745,84 @@ pub enum SavefileError {
     /// where a String was expected. If this occurs, it is either a bug in savefile,
     /// a bug in an implementation of Deserialize, Serialize or WithSchema, or
     /// a corrupt data file.
-    #[fail(display = "Invalid utf8 character {}", msg)]
     InvalidUtf8 {
         /// descriptive message
         msg: String,
     },
     /// Unexpected error with regards to memory layout requirements.
-    #[fail(display = "Memory allocation failed because memory layout could not be specified.")]
     MemoryAllocationLayoutError,
-    #[fail(display = "Arrayvec: {}", msg)]
     /// An Arrayvec had smaller capacity than the size of the data in the binary file.
     ArrayvecCapacityError {
         /// Descriptive message
         msg: String,
     },
     /// The reader returned fewer bytes than expected
-    #[fail(display = "ShortRead")]
     ShortRead,
     /// Cryptographic checksum mismatch. Probably due to a corrupt file.
-    #[fail(display = "CryptographyError")]
     CryptographyError,
     /// A persisted value of isize or usize was greater than the maximum for the machine.
     /// This can happen if a file saved by a 64-bit machine contains an usize or isize which
     /// does not fit in a 32 bit word.
-    #[fail(display = "SizeOverflow")]
     SizeOverflow,
-    #[fail(display = "WrongVersion: {}", msg)]
     /// The file does not have a supported version number
     WrongVersion {
         /// Descriptive message
         msg: String,
     },
-    #[fail(display = "GeneralError: {}", msg)]
     /// The file does not have a supported version number
     GeneralError {
         /// Descriptive message
         msg: String,
     },
-    #[fail(display = "Poisoned mutex error")]
     /// A poisoned mutex was encountered when traversing the object being saved
     PoisonedMutex,
 }
+
+impl Display for SavefileError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SavefileError::IncompatibleSchema { message } => {
+                write!(f,"Incompatible schema: {}", message)
+            }
+            SavefileError::IOError { io_error } => {
+                write!(f,"IO error: {}", io_error)
+            }
+            SavefileError::InvalidUtf8 { msg } => {
+                write!(f,"Invalid UTF-8: {}", msg)
+            }
+            SavefileError::MemoryAllocationLayoutError => {
+                write!(f,"Memory allocation layout error")
+            }
+            SavefileError::ArrayvecCapacityError { msg } => {
+                write!(f,"Arrayvec capacity error: {}",msg)
+            }
+            SavefileError::ShortRead => {
+                write!(f,"Short read")
+            }
+            SavefileError::CryptographyError => {
+                write!(f,"Cryptography error")
+            }
+            SavefileError::SizeOverflow => {
+                write!(f, "Size overflow")
+            }
+            SavefileError::WrongVersion { msg } => {
+                write!(f, "Wrong version: {}", msg)
+            }
+            SavefileError::GeneralError { msg } => {
+                write!(f, "General error: {}", msg)
+            }
+            SavefileError::PoisonedMutex => {
+                write!(f, "Poisoned mutex")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SavefileError {
+
+}
+
+
 
 /// Object to which serialized data is to be written.
 /// This is basically just a wrapped `std::io::Write` object

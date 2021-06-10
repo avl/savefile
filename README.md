@@ -67,6 +67,10 @@ fn main() {
 
 # Changelog
 
+## 0.8.1 Stop depending on the 'failure' crate
+
+This also means that SavefileError now implements the Error trait.
+
 ## 0.8.0 Support for min_const_generics
 
 Savefile now supports serializing and deserializing arbitrarily sized arrays, even
