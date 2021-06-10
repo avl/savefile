@@ -107,6 +107,15 @@ This has been fixed.
 
 Also, support for serializing/deserializing PathBuf.
 
+## 0.8.0
+
+(Not published as of yet)
+
+* Support for arbitrary size arrays, even on stable (thanks to
+min_const_generics now supported in rust).
+
+Minimum supported rust version for 0.8.x is 1.51.
+
 ## 0.7.2 Support for stable compilers
 
 Savefile is now usable with a stable compiler, not just nightly.

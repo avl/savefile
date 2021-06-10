@@ -1,9 +1,6 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
-#![cfg_attr(feature = "nightly", feature(test))]
 #![cfg_attr(feature = "nightly", feature(specialization))]
-#![cfg_attr(feature = "nightly", feature(integer_atomics))]
-#![cfg_attr(feature = "nightly", feature(const_generics))]
 #![deny(missing_docs)]
 #![deny(warnings)]
 
@@ -717,8 +714,6 @@ use indexmap::IndexMap;
 use indexmap::IndexSet;
 extern crate bit_vec;
 extern crate bzip2;
-#[cfg(feature = "nightly")]
-extern crate test;
 
 
 
@@ -3768,109 +3763,7 @@ unsafe impl ReprC for () {
     }
 }
 
-/// This module contains implementations of Serialize, Deserialize, WithSchema and Introspect, for arrays of sizes
-/// 0 to 4.
-#[cfg(not(feature = "nightly"))]
-pub mod array_impls {
-    use crate::{
-        introspect_item, Deserialize, Deserializer, Introspect, IntrospectItem, SavefileError, Schema, SchemaArray,
-        Serialize, Serializer, WithSchema,
-    };
-    use std::mem::MaybeUninit;
 
-    #[cfg(not(feature = "nightly"))]
-    macro_rules! impl_array_schema {
-        ( $n:expr ) => {
-            impl<T: WithSchema> WithSchema for [T; $n] {
-                fn schema(version: u32) -> Schema {
-                    Schema::Array(SchemaArray {
-                        item_type: Box::new(T::schema(version)),
-                        count: $n,
-                    })
-                }
-            }
-        };
-    }
-    #[cfg(not(feature = "nightly"))]
-    impl_array_schema!(0);
-    impl_array_schema!(1);
-    impl_array_schema!(2);
-    impl_array_schema!(3);
-    impl_array_schema!(4);
-
-    #[cfg(not(feature = "nightly"))]
-    macro_rules! impl_array_introspect {
-        ( $n:expr ) => {
-            impl<T: Introspect> Introspect for [T; $n] {
-                fn introspect_value(&self) -> String {
-                    format!("[{}; {}]", std::any::type_name::<T>(), $n)
-                }
-
-                fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-                    if index >= self.len() {
-                        None
-                    } else {
-                        Some(introspect_item(index.to_string(), &self[index]))
-                    }
-                }
-            }
-        };
-    }
-
-    impl_array_introspect!(0);
-    impl_array_introspect!(1);
-    impl_array_introspect!(2);
-    impl_array_introspect!(3);
-    impl_array_introspect!(4);
-
-    #[cfg(not(feature = "nightly"))]
-    macro_rules! impl_array_serialize {
-        ( $n:expr ) => {
-            impl<T: Serialize> Serialize for [T; $n] {
-                fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-                    for item in self.iter() {
-                        item.serialize(serializer)?
-                    }
-                    Ok(())
-                }
-            }
-        };
-    }
-    #[cfg(not(feature = "nightly"))]
-    impl_array_serialize!(0);
-    impl_array_serialize!(1);
-    impl_array_serialize!(2);
-    impl_array_serialize!(3);
-    impl_array_serialize!(4);
-
-    #[cfg(not(feature = "nightly"))]
-    macro_rules! impl_array_deserialize {
-        ( $n:expr ) => {
-            impl<T: Deserialize> Deserialize for [T; $n] {
-                fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-                    let mut data: [MaybeUninit<T>; $n] = unsafe {
-                        MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
-                    };
-                    for idx in 0..$n {
-                        data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
-                    }
-                    let ptr = &mut data as *mut _ as *mut [T; $n];
-                    let res = unsafe { ptr.read() };
-                    core::mem::forget(data);
-                    Ok(res)
-                }
-            }
-        };
-    }
-    #[cfg(not(feature = "nightly"))]
-    impl_array_deserialize!(0);
-    impl_array_deserialize!(1);
-    impl_array_deserialize!(2);
-    impl_array_deserialize!(3);
-    impl_array_deserialize!(4);
-}
-
-#[cfg(feature = "nightly")]
 impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
     fn schema(version: u32) -> Schema {
         Schema::Array(SchemaArray {
@@ -3880,7 +3773,6 @@ impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
     }
 }
 
-#[cfg(feature = "nightly")]
 impl<T: Introspect, const N: usize> Introspect for [T; N] {
     fn introspect_value(&self) -> String {
         format!("[{}; {}]", std::any::type_name::<T>(), N)
@@ -3904,7 +3796,30 @@ impl<T: Serialize, const N: usize> Serialize for [T; N] {
         Ok(())
     }
 }
-
+#[cfg(not(feature = "nightly"))]
+impl<T: Serialize, const N: usize> Serialize for [T; N] {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        for item in self.iter() {
+            item.serialize(serializer)?
+        }
+        Ok(())
+    }
+}
+#[cfg(not(feature = "nightly"))]
+impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let mut data: [MaybeUninit<T>; N] = unsafe {
+            MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+        };
+        for idx in 0..N {
+            data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
+        }
+        let ptr = &mut data as *mut _ as *mut [T; N];
+        let res = unsafe { ptr.read() };
+        core::mem::forget(data);
+        Ok(res)
+    }
+}
 #[cfg(feature = "nightly")]
 impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
     default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
