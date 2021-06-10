@@ -67,6 +67,14 @@ fn main() {
 
 # Changelog
 
+## 0.8.0 Support for min_const_generics
+
+Savefile now supports serializing and deserializing arbitrarily sized arrays, even
+on stable rust.
+
+Note that 0.8.0 is compatible with Rust 1.51 and later only. If you need support
+for older rust versions, you should stick with 0.7.x.
+
 ## 0.7.5 Deduplicaton of Arc<str>
 
 Previously, serialization of Arc<str> was not possible. Support is now added,
