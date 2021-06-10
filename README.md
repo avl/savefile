@@ -12,15 +12,13 @@ You may ask what savefile brings to the table that serde doesn't already do
 better. The answer is: Not that much! Savefile is less capable, and not as well tested.
 It does have versioning support built-in as a first class feature.
 
-Savefile is written by its author to solve exactly the problem the author has to solve.
-It is provided here as open source in the hope that it may prove useful to others, but
-there are no guarantees and there may be bugs!
-
+Savefile is not yet a very widely used project. However, although there may be bugs, 
+the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.7"
-savefile-derive="0.7"
+savefile="0.8"
+savefile-derive="0.8"
 ````
 
 # Sample 
