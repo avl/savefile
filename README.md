@@ -67,12 +67,12 @@ fn main() {
 
 ## 0.8.2 Update dependencies
 
-* parking_lot from 0.7 -> 0.11
+* parking_lot from 0.10 -> 0.11
 * smallvec 1.4 -> 1.6 (made possible by parking_lot upgrade)
 
 ## 0.8.1 Stop depending on the 'failure' crate
 
-This also means that SavefileError now implements the Error trait.
+This also means that SavefileError now (finally) implements the Error trait.
 
 ## 0.8.0 Support for min_const_generics
 
@@ -98,7 +98,7 @@ Just file a bug if you feel that this could be a problem!
 
 ## 0.7.4 Add introspect for PathBuf
 
-PathBuf did not inmplement Introspect, which had the effect that trying to use derive(Savefile) on
+PathBuf did not implement Introspect, which had the effect that trying to use derive(Savefile) on
 anything containing a PathBuf would fail, since the derive macro requires all components to implement all
 the Savefile traits.
 
