@@ -9,7 +9,7 @@ exclude = [
     "*.bin"
 ]
 
-description = "Simple, convenient, fast, versioned, binary serialization/deserialization library. Requires nightly as of 2019-12-15"
+description = "Simple, convenient, fast, versioned, binary serialization/deserialization library. Works on stable rust, but provides much better performance with nightly."
 
 readme = "../README.md"
 
