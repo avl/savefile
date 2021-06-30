@@ -703,6 +703,7 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use smallvec::alloc::collections::BTreeMap;
 use std::collections::HashSet;
+use std::borrow::Cow;
 
 #[test]
 pub fn test_atomic() {
@@ -1132,6 +1133,19 @@ pub fn test_arc_str_dedup() {
     assert_ne!(ny,nz);
 
 
+}
+
+#[test]
+pub fn test_cow_owned() {
+    let x:Cow<String> = Cow::Owned("hej".to_string());
+    assert_roundtrip(x);
+}
+
+#[test]
+pub fn test_cow_borrowed() {
+    let borrow = "world".to_string();
+    let x:Cow<String> = Cow::Borrowed(&borrow);
+    assert_roundtrip(x);
 }
 
 #[derive(Savefile, Debug, PartialEq)]
