@@ -696,6 +696,7 @@ use parking_lot::{Mutex, MutexGuard};
 use parking_lot::{RwLock, RwLockReadGuard};
 use std::fs::File;
 use std::io::Read;
+use std::borrow::Cow;
 use std::io::{Error, ErrorKind, Write};
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
@@ -927,6 +928,38 @@ impl Introspect for PathBuf {
 
     fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
         None
+    }
+}
+
+impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
+    fn schema(version: u32) -> Schema {
+        T::schema(version)
+    }
+}
+impl<'a, T: 'a + Serialize + ToOwned + ?Sized> Serialize for Cow<'a, T> {
+    fn serialize<'b>(&self, serializer: &mut Serializer<'b>) -> Result<(), SavefileError> {
+        (**self).serialize(serializer)
+    }
+}
+impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> Deserialize for Cow<'a, T>
+where
+    T::Owned: Deserialize,
+{
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        Ok(Cow::Owned(<T as ToOwned>::Owned::deserialize(deserializer)?))
+    }
+}
+impl<'a, T: 'a + Introspect + ToOwned + ?Sized> Introspect for Cow<'a, T> {
+    fn introspect_value(&self) -> String {
+        (**self).introspect_value()
+    }
+
+    fn introspect_child<'b>(&'b self, index: usize) -> Option<Box<dyn IntrospectItem<'b> + 'b>> {
+        (**self).introspect_child(index)
+    }
+
+    fn introspect_len(&self) -> usize {
+        (**self).introspect_len()
     }
 }
 
