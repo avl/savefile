@@ -3146,7 +3146,7 @@ impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
 }
 
 /// Helper struct which represents a field which has been removed
-#[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash)]
+#[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash,Default)]
 pub struct Removed<T> {
     phantom: std::marker::PhantomData<*const T>,
 }
