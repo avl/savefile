@@ -3151,6 +3151,16 @@ pub struct Removed<T> {
     phantom: std::marker::PhantomData<*const T>,
 }
 
+/// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
+/// it doesn't implement Send or Sync per default. However, implementing these
+/// is actually safe, so implement it manually.
+unsafe impl<T> Send for Removed<T> {
+}
+/// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
+/// it doesn't implement Send or Sync per default. However, implementing these
+/// is actually safe, so implement it manually.
+unsafe impl<T> Sync for Removed<T> {
+}
 
 impl<T> Removed<T> {
     /// Helper to create an instance of Removed<T>. Removed<T> has no data.
