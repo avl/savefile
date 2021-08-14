@@ -70,6 +70,9 @@ fn main() {
 * parking_lot from 0.10 -> 0.11
 * smallvec 1.4 -> 1.6 (made possible by parking_lot upgrade)
 * Make Removed<T> implement Clone, Copy, PartialEq etc. Removed fields shouldn't limit what traits a struct can implement.
+* Also make Removed<T> implement Send and Sync. It's a zero-sized type, there are no issues with threading here.
+* Add support for std::borrow::Cow. Thanks to github user PonasKovas for this patch!
+
 
 ## 0.8.1 Stop depending on the 'failure' crate
 
