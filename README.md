@@ -65,6 +65,13 @@ fn main() {
 
 # Changelog
 
+## 0.8.3 Fix bug with savefile_introspect_ignore attribute
+
+Specifying the savefile_introspect_ignore on a field triggered a bug if
+that field was not the last field of the datatype. The bug caused a mismatch
+in the index of the field during introspect, which would make fields
+not visible through introspection.
+
 ## 0.8.2 Update dependencies
 
 * parking_lot from 0.10 -> 0.11

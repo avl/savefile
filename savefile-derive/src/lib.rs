@@ -1057,6 +1057,7 @@ fn implement_introspect(
     let mut fields = Vec::new();
     let mut fields_names = Vec::new();
     let mut introspect_key = None;
+    let mut index_number = 0usize;
     for (idx, ref field) in field_infos.iter().enumerate() {
         let verinfo = parse_attr_tag(&field.attrs, &field.ty);
         if verinfo.introspect_key {
@@ -1079,7 +1080,7 @@ fn implement_introspect(
                 fieldname = quote! {&self.#idd};
                 fieldname_raw = quote! {#idd};
             }
-            fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
+            fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
             if verinfo.introspect_key {
                 let fieldname_raw2 = fieldname_raw.clone();
                 introspect_key = Some(quote! {self.#fieldname_raw2});
@@ -1091,9 +1092,9 @@ fn implement_introspect(
                 let quoted_fieldname;
                 let raw_fieldname = id.to_string();
                 let id2 = id.clone();
-                fieldname = id; //field.ident.clone().map(|x|x).unwrap_or(Ident::new(&format!("v{}",idx),span));
+                fieldname = id;
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
                 if verinfo.introspect_key {
                     introspect_key = Some(quote!(#id2))
@@ -1105,13 +1106,14 @@ fn implement_introspect(
                 fieldname = Ident::new(&format!("v{}", idx), span);
                 let fieldname2 = fieldname.clone();
                 quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #idx { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+                fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
                 fields_names.push(quoted_fieldname);
                 if verinfo.introspect_key {
                     introspect_key = Some(quote!(#fieldname2))
                 }
             }
         }
+        index_number += 1;
     }
 
     (fields_names, fields, introspect_key)

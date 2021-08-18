@@ -33,6 +33,13 @@ pub struct ComplexStruct {
     simple2: SimpleStruct,
     an_int: u32
 }
+#[derive(Savefile)]
+pub struct ComplexStructWithIgnoredField {
+    simple1: SimpleStruct,
+    #[savefile_introspect_ignore]
+    simple2: SimpleStruct,
+    an_int: u32
+}
 
 #[derive(Savefile)]
 pub struct StructWithName {
@@ -289,6 +296,28 @@ pub fn test_introspector_simpler_case1() {
 
 }
 
+#[test]
+pub fn test_introspector_simple_case_ignored_field() {
+    let comp = ComplexStructWithIgnoredField {
+        simple1: SimpleStruct {
+            item1 : 37
+        },
+        simple2: SimpleStruct {
+            item1 : 38
+        },
+        an_int: 4
+    };
+
+    let mut base_introspector = Introspector::new();
+
+    {
+        let result = base_introspector.do_introspect(&comp, IntrospectorNavCommand::Nothing).unwrap();
+
+        assert_eq!(result.frames[0].keyvals.len(), 2);
+        assert_eq!(result.frames[0].keyvals[0].key.key,"simple1");
+        assert_eq!(result.frames[0].keyvals[1].key.key,"an_int");
+    }
+}
 #[test]
 pub fn test_introspector_simple_case() {
     let comp = ComplexStruct {
