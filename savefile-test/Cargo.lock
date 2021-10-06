@@ -361,7 +361,7 @@ dependencies = [
 
 [[package]]
 name = "savefile"
-version = "0.8.2"
+version = "0.8.4"
 dependencies = [
  "arrayvec",
  "bit-vec",
@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.8.2"
+version = "0.8.4"
 dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",

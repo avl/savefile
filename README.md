@@ -65,6 +65,20 @@ fn main() {
 
 # Changelog
 
+## 0.8.4 Add SavefileNoIntrospect-derive
+
+It's now possible to opt out of automatically deriving the Introspect-trait,
+but still automatically derive the serialization traits. It was previously
+possible to do the opposite, automatically deriving the introspect trait but
+not the serialization traits. This gap is now filled.
+
+To derive all traits: ```#[derive(Savefile)]```
+
+To derive only Introspect: ```#[derive(SavefileIntrospectOnly)]```
+
+To derive all but Introspect: ```#[derive(SavefileNoIntrospect)]```
+
+
 ## 0.8.3 Fix bug with savefile_introspect_ignore attribute
 
 Specifying the savefile_introspect_ignore on a field triggered a bug if

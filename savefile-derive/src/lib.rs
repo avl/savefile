@@ -654,6 +654,37 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     expanded.into()
 }
 #[proc_macro_derive(
+SavefileNoIntrospect,
+attributes(
+savefile_versions,
+savefile_versions_as,
+savefile_ignore,
+savefile_default_val,
+savefile_default_fn
+)
+)]
+pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse(input).unwrap();
+
+    let s = savefile_derive_crate_serialize(input.clone());
+
+    let d = savefile_derive_crate_deserialize(input.clone());
+
+    let w = savefile_derive_crate_withschema(input.clone());
+
+
+    let expanded = quote! {
+        #s
+
+        #d
+
+        #w
+    };
+
+    expanded.into()
+}
+
+#[proc_macro_derive(
     SavefileIntrospectOnly,
     attributes(
         savefile_versions,

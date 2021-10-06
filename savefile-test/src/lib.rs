@@ -1161,3 +1161,17 @@ pub fn test_pathbuf2() {
     assert_roundtrip(x);
 
 }
+
+#[derive(SavefileNoIntrospect,Debug,PartialEq)]
+struct ExampleWithoutAutomaticIntrospect {
+    x: u32
+}
+impl Introspect for ExampleWithoutAutomaticIntrospect {
+    fn introspect_value(&self) -> String {
+        "Example".into()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
