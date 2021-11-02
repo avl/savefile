@@ -1716,6 +1716,33 @@ pub trait IntrospectItem<'a> {
     fn val(&self) -> &dyn Introspect;
 }
 
+/// This is an zero-sized introspectable object with no value and no children.
+/// It is used for situations where you wish to have a key but no value.
+struct NullIntrospectable {}
+static THE_NULL_INTROSPECTABLE: NullIntrospectable = NullIntrospectable{};
+
+impl Introspect for NullIntrospectable {
+    fn introspect_value(&self) -> String {
+        String::new()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+    fn introspect_len(&self) -> usize {
+        0
+    }
+}
+impl<'a> IntrospectItem<'a> for String {
+    fn key(&self) -> &str {
+        &self
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        &THE_NULL_INTROSPECTABLE
+    }
+}
+
 /// As a sort of guard against infinite loops, the default 'len'-implementation only
 /// ever iterates this many times. This is so that broken 'introspect_child'-implementations
 /// won't case introspect_len to iterate forever.
