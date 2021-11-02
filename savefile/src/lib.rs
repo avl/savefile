@@ -107,7 +107,7 @@ fn main() {
     assert_eq!("Steve",&player.name); //The name from the previous version saved will remain
     assert_eq!(0,player.skills.len()); //Skills didn't exist when this was saved
     player.skills.push("Whistling".to_string());
-    save_player("newsave.bin", &player); //The version saved here will the vec of skills
+    save_player("newsave.bin", &player); //The version saved here will have the vec of skills
 }
 ```
 
