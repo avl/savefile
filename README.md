@@ -78,6 +78,9 @@ To derive only Introspect: ```#[derive(SavefileIntrospectOnly)]```
 
 To derive all but Introspect: ```#[derive(SavefileNoIntrospect)]```
 
+Also, the file-handling functions now accept anything implementing AsRef&lt;Path&gt; ,
+which is more ergonomic (it functions just as std lib File::open).
+
 
 ## 0.8.3 Fix bug with savefile_introspect_ignore attribute
 
