@@ -1034,7 +1034,7 @@ pub fn test_encrypted_file1() {
 #[cfg(not(miri))]
 pub fn test_encrypted_file_bad_password() {
     save_encrypted_file("test2.bin",1,&47usize,"mypassword").unwrap();
-    let result = load_encrypted_file::<usize>("test2.bin",1,"mypassword2");
+    let result = load_encrypted_file::<usize,_>("test2.bin",1,"mypassword2");
     assert!(result.is_err());
 }
 
@@ -1051,7 +1051,7 @@ pub fn test_decrypt_junk_file() {
             f.write_u8(rng.gen()).unwrap();
         }
     }
-    let result = load_encrypted_file::<usize>("test3.bin",1,"mypassword2");
+    let result = load_encrypted_file::<usize,_>("test3.bin",1,"mypassword2");
     assert!(result.is_err());
 }
 

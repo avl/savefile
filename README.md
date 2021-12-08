@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.8"
-savefile-derive="0.8"
+savefile="0.9"
+savefile-derive="0.9"
 ````
 
 # Sample 
@@ -65,7 +65,26 @@ fn main() {
 
 # Changelog
 
-## 0.8.4 Add SavefileNoIntrospect-derive
+## 0.9.0 Add SavefileNoIntrospect-derive
+
+*Migration note*: If you were specifying type parameters explicitly to load_file, or similar
+functions, you now need to add a ",_". So
+
+```rust
+
+    let object = load_file::<MyType>("save.bin",0);
+```
+Must become:
+
+```rust
+
+    let object = load_file::<MyType,_>("save.bin",0);
+```
+I hope this does not cause too many problems. The reason is that having functions which open files
+require '&amp;str' was never a good design, since in principle there could be files whose names are not
+actually valid utf8. Such files would not be possible to open using Savefile with the old design.
+
+Another change:
 
 It's now possible to opt out of automatically deriving the Introspect-trait,
 but still automatically derive the serialization traits. It was previously
@@ -80,6 +99,7 @@ To derive all but Introspect: ```#[derive(SavefileNoIntrospect)]```
 
 Also, the file-handling functions now accept anything implementing AsRef&lt;Path&gt; ,
 which is more ergonomic (it functions just as std lib File::open).
+
 
 
 ## 0.8.3 Fix bug with savefile_introspect_ignore attribute
