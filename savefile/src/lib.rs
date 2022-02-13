@@ -1645,6 +1645,7 @@ pub fn save<T: WithSchema + Serialize>(writer: &mut dyn Write, version: u32, dat
 /// The current version of data must be `version`.
 /// The resultant data can be loaded using the regular load-function (it autodetects if compressions was
 /// active or not).
+/// Note, this function will fail if the bzip2-feature is not enabled.
 pub fn save_compressed<T: WithSchema + Serialize>(
     writer: &mut dyn Write,
     version: u32,

@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.8"
-savefile-derive="0.8"
+savefile="0.9"
+savefile-derive="0.9"
 ````
 
 # Sample 
@@ -67,13 +67,16 @@ fn main() {
 
 ## 0.9.0
 
-Put bzip2 and ring dependencies behind feature flags.
+Put bzip2 and ring dependencies behind feature flags. This makes it easy
+for users who do not wish to use compression or encryption to opt out of
+these dependencies.
 
-Compatibility note: If you are using compression or encryption, you now need
-to explicitly opt-in to these features.
+These features are not active by default, so be sure to enable them in 
+Cargo.toml like this, if you want to use them:
 
-
-
+```
+savefile = { version = "0.9", features = ["ring","bzip2"] }
+```
 
 ## 0.8.4 Add SavefileNoIntrospect-derive
 
