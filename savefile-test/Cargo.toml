@@ -11,7 +11,7 @@ external_benchmarks = []
 nightly=["savefile/nightly"]
 
 [dependencies]
-savefile = { path = "../savefile", features = ["size_sanity_checks"]}
+savefile = { path = "../savefile", features = ["size_sanity_checks","ring","bzip2"]}
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.6"
 arrayvec="0.5"

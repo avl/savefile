@@ -65,6 +65,16 @@ fn main() {
 
 # Changelog
 
+## 0.9.0
+
+Put bzip2 and ring dependencies behind feature flags.
+
+Compatibility note: If you are using compression or encryption, you now need
+to explicitly opt-in to these features.
+
+
+
+
 ## 0.8.4 Add SavefileNoIntrospect-derive
 
 It's now possible to opt out of automatically deriving the Introspect-trait,

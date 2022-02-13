@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.8.4"
+version = "0.9.0"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -37,9 +37,9 @@ arrayvec="0.5"
 smallvec="1.0"
 indexmap ="1.6"
 parking_lot = { version = "0.11" }
-ring = "0.16.9"
+ring =  {version = "0.16.9", optional = true}
 rand="0.7"
-bzip2 = "0.3.2"
+bzip2 = {version = "0.3.2", optional = true}
 
 
 [dev-dependencies]
