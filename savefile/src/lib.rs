@@ -975,6 +975,7 @@ impl<'a, T: 'a + Introspect + ToOwned + ?Sized> Introspect for Cow<'a, T> {
 mod crypto {
     use std::fs::File;
     use std::io::{Error, ErrorKind, Read, Write};
+    use std::path::Path;
     use ring::aead;
     use ring::aead::{BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM};
     use ring::error::Unspecified;
@@ -1236,8 +1237,8 @@ mod crypto {
     }
     /// Like [crate::save_file], except encrypts the data with AES256, using the SHA256 hash
     /// of the password as key.
-    pub fn save_encrypted_file<T: WithSchema + Serialize>(
-        filepath: &str,
+    pub fn save_encrypted_file<T: WithSchema + Serialize, P:AsRef<Path>>(
+        filepath: P,
         version: u32,
         data: &T,
         password: &str,
@@ -1259,8 +1260,8 @@ mod crypto {
 
     /// Like [crate::load_file], except it expects the file to be an encrypted file previously stored using
     /// [crate::save_encrypted_file].
-    pub fn load_encrypted_file<T: WithSchema + Deserialize>(
-        filepath: &str,
+    pub fn load_encrypted_file<T: WithSchema + Deserialize, P:AsRef<Path>>(
+        filepath: P,
         version: u32,
         password: &str,
     ) -> Result<T, SavefileError> {
@@ -1687,29 +1688,29 @@ pub fn save_noschema<T: WithSchema + Serialize>(
 
 /// Like [crate::load] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file<T: WithSchema + Deserialize>(filepath: &str, version: u32) -> Result<T, SavefileError> {
+pub fn load_file<T: WithSchema + Deserialize,P:AsRef<Path>>(filepath: P, version: u32) -> Result<T, SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load::<T>(&mut f, version)
 }
 
 /// Like [crate::save] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
-pub fn save_file<T: WithSchema + Serialize>(filepath: &str, version: u32, data: &T) -> Result<(), SavefileError> {
+pub fn save_file<T: WithSchema + Serialize, P:AsRef<Path>>(filepath: P, version: u32, data: &T) -> Result<(), SavefileError> {
     let mut f = File::create(filepath)?;
     Serializer::save::<T>(&mut f, version, data, false)
 }
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file_noschema<T: WithSchema + Deserialize>(filepath: &str, version: u32) -> Result<T, SavefileError> {
+pub fn load_file_noschema<T: WithSchema + Deserialize, P: AsRef<Path>>(filepath: P, version: u32) -> Result<T, SavefileError> {
     let mut f = File::open(filepath)?;
     Deserializer::load_noschema::<T>(&mut f, version)
 }
 
 /// Like [crate::save_noschema] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
-pub fn save_file_noschema<T: WithSchema + Serialize>(
-    filepath: &str,
+pub fn save_file_noschema<T: WithSchema + Serialize, P:AsRef<Path>>(
+    filepath: P,
     version: u32,
     data: &T,
 ) -> Result<(), SavefileError> {
@@ -4278,7 +4279,7 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::sync::Arc;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 

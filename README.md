@@ -65,7 +65,41 @@ fn main() {
 
 # Changelog
 
-## 0.9.0
+## 0.9.1 Reduce default dependencies, and some other improvements
+
+### More ergonomic load_file-method
+
+
+The load_file method's path parameter has been changed to accept anything 
+implementing AsRef<Path>.  Previously, a &str was required, which meant that 
+the idiomatic Path and PathBuf types were not accepted.
+
+*Migration note*: If you were specifying type parameters explicitly to load_file, or similar
+functions, you now need to add a ",_". So
+
+```rust
+
+    let object = load_file::<MyType>("save.bin",0);
+```
+Must become:
+
+```rust
+
+    let object = load_file::<MyType,_>("save.bin",0);
+```
+
+However, an easier option which has always worked and continues to work is:
+
+```rust
+    let object : MyType = load_file("save.bin",0);
+```
+
+
+I hope this does not cause too many problems. The reason is that having functions which open files
+require '&amp;str' was never a good design, since in principle there could be files whose names are not
+actually valid utf8. Such files would not be possible to open using Savefile with the old design.
+
+### Make bzip2 and ring dependencies optional
 
 Put bzip2 and ring dependencies behind feature flags. This makes it easy
 for users who do not wish to use compression or encryption to opt out of
@@ -78,7 +112,12 @@ Cargo.toml like this, if you want to use them:
 savefile = { version = "0.9", features = ["ring","bzip2"] }
 ```
 
-## 0.8.4 Add SavefileNoIntrospect-derive
+Arguably, savefile should never have included this support, since it is something
+that can really be added easily by other crates. There is some convenience
+having it built-in though, hopefully making it configurable provides the best
+of both worlds.
+
+### Add SavefileNoIntrospect-derive
 
 It's now possible to opt out of automatically deriving the Introspect-trait,
 but still automatically derive the serialization traits. It was previously
@@ -90,6 +129,8 @@ To derive all traits: ```#[derive(Savefile)]```
 To derive only Introspect: ```#[derive(SavefileIntrospectOnly)]```
 
 To derive all but Introspect: ```#[derive(SavefileNoIntrospect)]```
+
+
 
 
 ## 0.8.3 Fix bug with savefile_introspect_ignore attribute
