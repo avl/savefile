@@ -688,12 +688,17 @@ Rules for using the #\[savefile_versions] attribute:
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
 extern crate alloc;
+#[cfg(feature="arrayvec")]
 extern crate arrayvec;
 extern crate byteorder;
+#[cfg(feature="parking_lot")]
 extern crate parking_lot;
+#[cfg(feature="smallvec")]
 extern crate smallvec;
-use parking_lot::{Mutex, MutexGuard};
-use parking_lot::{RwLock, RwLockReadGuard};
+
+#[cfg(feature="parking_lot")]
+use parking_lot::{Mutex, MutexGuard,RwLock, RwLockReadGuard};
+
 use std::fs::File;
 use std::io::Read;
 use std::borrow::Cow;
@@ -710,9 +715,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 #[allow(unused_imports)]
 use std::mem::MaybeUninit;
+
+#[cfg(feature="indexmap")]
 extern crate indexmap;
-use indexmap::IndexMap;
-use indexmap::IndexSet;
+#[cfg(feature="indexmap")]
+use indexmap::{IndexMap,IndexSet};
+
+#[cfg(feature="bit-vec")]
 extern crate bit_vec;
 #[cfg(feature="bzip2")]
 extern crate bzip2;
@@ -904,7 +913,7 @@ impl From<std::string::FromUtf8Error> for SavefileError {
         SavefileError::InvalidUtf8 { msg: s.to_string() }
     }
 }
-
+#[cfg(feature="arrayvec")]
 impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
     fn from(s: arrayvec::CapacityError<T>) -> SavefileError {
         SavefileError::ArrayvecCapacityError { msg: s.to_string() }
@@ -2604,10 +2613,12 @@ impl Deserialize for String {
 }
 
 /// Type of single child of introspector for Mutex
+#[cfg(feature="parking_lot")]
 pub struct IntrospectItemMutex<'a, T> {
     g: MutexGuard<'a, T>,
 }
 
+#[cfg(feature="parking_lot")]
 impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a, T> {
     fn key(&self) -> &str {
         "0"
@@ -2618,6 +2629,7 @@ impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemMutex<'a, T> {
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: Introspect> Introspect for Mutex<T> {
     fn introspect_value(&self) -> String {
         format!("Mutex<{}>", std::any::type_name::<T>())
@@ -2685,12 +2697,14 @@ impl<T: Deserialize> Deserialize for std::sync::Mutex<T> {
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: WithSchema> WithSchema for Mutex<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for Mutex<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.lock();
@@ -2698,6 +2712,7 @@ impl<T: Serialize> Serialize for Mutex<T> {
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: Deserialize> Deserialize for Mutex<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>, SavefileError> {
         Ok(Mutex::new(T::deserialize(deserializer)?))
@@ -2705,10 +2720,12 @@ impl<T: Deserialize> Deserialize for Mutex<T> {
 }
 
 /// Type of single child of introspector for RwLock
+#[cfg(feature="parking_lot")]
 pub struct IntrospectItemRwLock<'a, T> {
     g: RwLockReadGuard<'a, T>,
 }
 
+#[cfg(feature="parking_lot")]
 impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a, T> {
     fn key(&self) -> &str {
         "0"
@@ -2765,6 +2782,7 @@ impl<T: Introspect> Introspect for Arc<T> {
         self.deref().introspect_len()
     }
 }
+#[cfg(feature="parking_lot")]
 impl<T: Introspect> Introspect for RwLock<T> {
     fn introspect_value(&self) -> String {
         format!("RwLock<{}>", std::any::type_name::<T>())
@@ -2782,12 +2800,14 @@ impl<T: Introspect> Introspect for RwLock<T> {
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: WithSchema> WithSchema for RwLock<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for RwLock<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.read();
@@ -2795,6 +2815,7 @@ impl<T: Serialize> Serialize for RwLock<T> {
     }
 }
 
+#[cfg(feature="parking_lot")]
 impl<T: Deserialize> Deserialize for RwLock<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<RwLock<T>, SavefileError> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
@@ -3040,6 +3061,7 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for IndexMap<K, V, S> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
@@ -3058,7 +3080,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
     }
 }
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), feature="indexmap"))]
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S> {
     fn introspect_value(&self) -> String {
         format!(
@@ -3087,7 +3109,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
     }
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", feature="indexmap"))]
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S> {
     default fn introspect_value(&self) -> String {
         format!(
@@ -3116,7 +3138,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
     }
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", feature="indexmap"))]
 impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Introspect for IndexMap<K, V, S>
 where
     K: ToString,
@@ -3141,6 +3163,7 @@ where
         self.len()
     }
 }
+#[cfg(feature="indexmap")]
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
@@ -3152,6 +3175,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
@@ -3163,6 +3187,7 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> 
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for IndexSet<K, S> {
     fn introspect_value(&self) -> String {
         format!("IndexSet<{}>", std::any::type_name::<K>())
@@ -3181,6 +3206,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(Schema::Struct(SchemaStruct {
@@ -3193,6 +3219,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
@@ -3203,6 +3230,7 @@ impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexS
     }
 }
 
+#[cfg(feature="indexmap")]
 impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
@@ -3358,6 +3386,7 @@ impl<T: Deserialize> Deserialize for Option<T> {
     }
 }
 
+#[cfg(feature="bit-vec")]
 impl WithSchema for bit_vec::BitVec {
     fn schema(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
@@ -3380,6 +3409,7 @@ impl WithSchema for bit_vec::BitVec {
     }
 }
 
+#[cfg(feature="bit-vec")]
 impl Serialize for bit_vec::BitVec {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let l = self.len();
@@ -3390,6 +3420,7 @@ impl Serialize for bit_vec::BitVec {
         Ok(())
     }
 }
+#[cfg(feature="bit-vec")]
 impl Introspect for bit_vec::BitVec {
     fn introspect_value(&self) -> String {
         let mut ret = String::new();
@@ -3407,6 +3438,7 @@ impl Introspect for bit_vec::BitVec {
         None
     }
 }
+#[cfg(feature="bit-vec")]
 impl Deserialize for bit_vec::BitVec {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let numbits = deserializer.read_usize()?;
@@ -3464,6 +3496,7 @@ impl<T: Deserialize + Ord> Deserialize for BinaryHeap<T> {
     }
 }
 
+#[cfg(feature="smallvec")]
 impl<T: smallvec::Array> Introspect for smallvec::SmallVec<T>
 where
     T::Item: Introspect,
@@ -3485,6 +3518,7 @@ where
     }
 }
 
+#[cfg(feature="smallvec")]
 impl<T: smallvec::Array> WithSchema for smallvec::SmallVec<T>
 where
     T::Item: WithSchema,
@@ -3494,6 +3528,7 @@ where
     }
 }
 
+#[cfg(feature="smallvec")]
 impl<T: smallvec::Array> Serialize for smallvec::SmallVec<T>
 where
     T::Item: Serialize,
@@ -3507,6 +3542,7 @@ where
         Ok(())
     }
 }
+#[cfg(feature="smallvec")]
 impl<T: smallvec::Array> Deserialize for smallvec::SmallVec<T>
 where
     T::Item: Deserialize,
@@ -4090,16 +4126,19 @@ impl<T1: Deserialize> Deserialize for (T1,) {
     }
 }
 
+#[cfg(feature="arrayvec")]
 impl<T: arrayvec::Array<Item = u8> + Copy> WithSchema for arrayvec::ArrayString<T> {
     fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
+#[cfg(feature="arrayvec")]
 impl<T: arrayvec::Array<Item = u8> + Copy> Serialize for arrayvec::ArrayString<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(self.as_str())
     }
 }
+#[cfg(feature="arrayvec")]
 impl<T: arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let s = deserializer.read_string()?;
@@ -4107,6 +4146,7 @@ impl<T: arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString
     }
 }
 
+#[cfg(feature="arrayvec")]
 impl<T: arrayvec::Array<Item = u8> + Copy> Introspect for arrayvec::ArrayString<T> {
     fn introspect_value(&self) -> String {
         self.to_string()
@@ -4117,12 +4157,14 @@ impl<T: arrayvec::Array<Item = u8> + Copy> Introspect for arrayvec::ArrayString<
     }
 }
 
+#[cfg(feature="arrayvec")]
 impl<V: WithSchema, T: arrayvec::Array<Item = V>> WithSchema for arrayvec::ArrayVec<T> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(V::schema(version)))
     }
 }
 
+#[cfg(feature="arrayvec")]
 impl<V: Introspect + 'static, T: arrayvec::Array<Item = V>> Introspect for arrayvec::ArrayVec<T> {
     fn introspect_value(&self) -> String {
         return "arrayvec[]".to_string();
@@ -4141,21 +4183,22 @@ impl<V: Introspect + 'static, T: arrayvec::Array<Item = V>> Introspect for array
         self.len()
     }
 }
-#[cfg(feature = "nightly")]
+
+#[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
     default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
 impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Serialize + ReprC, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
@@ -4172,7 +4215,7 @@ impl<V: Serialize + ReprC, T: arrayvec::Array<Item = V>> Serialize for arrayvec:
         }
     }
 }
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
     default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
@@ -4184,7 +4227,7 @@ impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::Arr
     }
 }
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
 impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
@@ -4196,7 +4239,7 @@ impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::Arr
     }
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Deserialize + ReprC, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();

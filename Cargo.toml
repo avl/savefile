@@ -3,9 +3,9 @@
 members = [
     "savefile",
     "savefile-derive",
+    "savefile-test",
+    "savefile-min-build"
 ]
-
-exclude=["savefile-test"]
 
 
 
