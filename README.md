@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.9"
-savefile-derive="0.9"
+savefile="0.10"
+savefile-derive="0.10"
 ````
 
 # Sample 
@@ -64,6 +64,21 @@ fn main() {
 
 
 # Changelog
+
+## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
+
+The following configurable features have been created:
+
+ * "compression" - Enables compression and decompression (using library 'bzip2')
+ * "encryption" - Enables encryption support (using library 'ring')
+
+The following dependencies have been made configurable: 
+"bit-vec", "arrayvec", "smallvec", "indexmap", "parking_log" 
+ 
+Also, the following dependencies have been upgraded:
+ * parking_lot, from 0.11 to 0.12
+ * rand, from 0.7 to 0.8 (only used by 'encryption' feature)
+ * bzip2, from 0.3.2 to 0.4 (only used by 'compression' feature)
 
 ## 0.9.1 Reduce default dependencies, and some other improvements
 

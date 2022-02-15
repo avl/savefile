@@ -775,6 +775,11 @@ pub fn test_compressed_big() {
     save_compressed(&mut buf, 0, &zeros).unwrap();
 
     assert!(buf.len() < 100);
+
+    let roundtripped :Vec<i32> = load(&mut Cursor::new(&buf), 0).unwrap();
+
+    assert_eq!(zeros,roundtripped);
+
 }
 
 
@@ -972,10 +977,10 @@ pub fn test_crypto_big5() {
         let mut offset = 0;
         loop {
             let mut delta:usize;
-            if rng.gen_range(0,10) == 0 {
-                delta = rng.gen_range(0,300_000);
+            if rng.gen_range(0..10) == 0 {
+                delta = rng.gen_range(0..300_000);
             } else {
-                delta = rng.gen_range(0,80000);
+                delta = rng.gen_range(0..80000);
             }
             if delta + offset > kb.len() {
                 delta = kb.len() - offset;
@@ -1002,10 +1007,10 @@ pub fn test_crypto_big5() {
         let mut offset = 0;
         loop {
             let mut delta:usize;
-            if rng.gen_range(0,10) == 0 {
-                delta = rng.gen_range(0, 300_000);
+            if rng.gen_range(0..10) == 0 {
+                delta = rng.gen_range(0..300_000);
             } else {
-                delta = rng.gen_range(0, 80000);
+                delta = rng.gen_range(0..80000);
             }
             if delta + offset > kb.len() {
                 delta = kb.len() - offset;

@@ -1405,7 +1405,7 @@ impl<'a> Serializer<'a> {
 
                 #[cfg(feature="bzip2")]
                     {
-                        temp = bzip2::write::BzEncoder::new(writer, Compression::Best);
+                        temp = bzip2::write::BzEncoder::new(writer, Compression::best());
                         &mut temp
                     }
                 #[cfg(not(feature="bzip2"))]
