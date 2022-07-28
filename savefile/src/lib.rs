@@ -3387,6 +3387,10 @@ impl<T: Deserialize> Deserialize for Option<T> {
 }
 
 #[cfg(feature="bit-vec")]
+#[cfg(target_endian="big")]
+compile_error!("savefile bit-vec feature does not support big-endian machines");
+
+#[cfg(feature="bit-vec")]
 impl WithSchema for bit_vec::BitVec {
     fn schema(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
@@ -3428,19 +3432,23 @@ impl Introspect for bit_vec::BitVec {
         None
     }
 }
+
 #[cfg(feature="bit-vec")]
 impl Serialize for bit_vec::BitVec<u32> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
-        println!("Main storage: {:?}",self.storage());
-        let bytes:&[u8] = unsafe { std::mem::transmute(self.storage()) };
-        println!("Raw bytes: {:?}", bytes);
-        serializer.write_usize(bytes.len()|(1<<63))?;
-        serializer.write_bytes(&bytes)?;
+        let storage = self.storage();
+        println!("Bitvec: {:?}, storage: {:?}", self, storage);
+        let rawbytes_ptr = storage.as_ptr() as *const u8;
+        let rawbytes :&[u8] = unsafe{slice::from_raw_parts(rawbytes_ptr,4*storage.len())};
+        println!("RAwbytes: {:?}", rawbytes);
+        serializer.write_usize(rawbytes.len()|(1<<63))?;
+        serializer.write_bytes(&rawbytes)?;
         Ok(())
     }
 }
+
 #[cfg(feature="bit-vec")]
 impl Deserialize for bit_vec::BitVec<u32> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
@@ -3450,18 +3458,18 @@ impl Deserialize for bit_vec::BitVec<u32> {
         if numbytes&(1<<63)!=0 {
             //New format
             numbytes &= !(1<<63);
-            println!("Numbytes: {} bits {}",numbytes, numbits);
             let mut ret = bit_vec::BitVec::with_capacity(numbytes*8);
             unsafe {
+                let num_words = numbytes/4;
                 let storage = ret.storage_mut();
-                storage.resize((numbits+31)/32, 0);
-                let u32buf :&mut [u32] = &mut storage[0..(numbytes/4)];
-                println!("u32buf: {:?}", u32buf);
-                let bytebuf : &mut [u8] = std::mem::transmute(u32buf);
-                println!("bytebuf: {:?}", bytebuf);
-                deserializer.read_bytes_to_buf(bytebuf)?;
-                println!("Storage: {:?}", storage);
-                storage.set_len(numbits);
+                storage.resize(num_words, 0);
+                let storage_ptr = storage.as_ptr() as *mut u8;
+                println!("Num deser words {}, bytes {}, bits {}", num_words, numbytes, numbits);
+                let storage_bytes:&mut [u8] = slice::from_raw_parts_mut(storage_ptr,4*num_words);
+                deserializer.read_bytes_to_buf(storage_bytes)?;
+                println!("read bytes {:?}", storage_bytes);
+                ret.set_len(numbits);
+                println!("FInished: {:?}",ret);
             }
             Ok(ret)
         } else {
@@ -4347,6 +4355,7 @@ use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
+use std::slice;
 use std::sync::Arc;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 

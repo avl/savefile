@@ -65,6 +65,12 @@ fn main() {
 
 # Changelog
 
+## 0.10.2 Improve performance of bit-vec serialization
+
+Slight improvements to the serialization and deserialization of bit-vec.
+The on-disk format has changed, but the deserializer knows how to read the old versions.
+This feature no longer works on big-endian machines.
+
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 
 The following configurable features have been created:
@@ -73,7 +79,7 @@ The following configurable features have been created:
  * "encryption" - Enables encryption support (using library 'ring')
 
 The following dependencies have been made configurable: 
-"bit-vec", "arrayvec", "smallvec", "indexmap", "parking_log" 
+"bit-vec", "arrayvec", "smallvec", "indexmap", "parking_lot" 
  
 Also, the following dependencies have been upgraded:
  * parking_lot, from 0.11 to 0.12
