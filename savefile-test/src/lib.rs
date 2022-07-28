@@ -657,10 +657,15 @@ pub fn test_bitvec() {
     for i in 0..127 {
         bv4.push(if i%2==0 {true} else {false});
     }
+    let mut bv5 = BitVec::new();
+    for i in 0..127 {
+        bv5.push(if i%3==0 {true} else {false});
+    }
     assert_roundtrip(bv1);
     assert_roundtrip(bv2);
     assert_roundtrip(bv3);
     assert_roundtrip(bv4);
+    assert_roundtrip(bv5);
 }
 
 #[repr(u8)]
