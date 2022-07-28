@@ -3409,17 +3409,7 @@ impl WithSchema for bit_vec::BitVec {
     }
 }
 
-#[cfg(feature="bit-vec")]
-impl Serialize for bit_vec::BitVec {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        let l = self.len();
-        serializer.write_usize(l)?;
-        let bytes = self.to_bytes();
-        serializer.write_usize(bytes.len())?;
-        serializer.write_bytes(&bytes)?;
-        Ok(())
-    }
-}
+
 #[cfg(feature="bit-vec")]
 impl Introspect for bit_vec::BitVec {
     fn introspect_value(&self) -> String {
@@ -3439,14 +3429,39 @@ impl Introspect for bit_vec::BitVec {
     }
 }
 #[cfg(feature="bit-vec")]
-impl Deserialize for bit_vec::BitVec {
+impl Serialize for bit_vec::BitVec<u32> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        let bytes:&[u8] = unsafe { std::mem::transmute(self.storage()) };
+        serializer.write_usize(bytes.len()|(1<<63))?;
+        serializer.write_bytes(&bytes)?;
+        Ok(())
+    }
+}
+#[cfg(feature="bit-vec")]
+impl Deserialize for bit_vec::BitVec<u32> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+
         let numbits = deserializer.read_usize()?;
         let numbytes = deserializer.read_usize()?;
-        let bytes = deserializer.read_bytes(numbytes)?;
-        let mut ret = bit_vec::BitVec::from_bytes(&bytes);
-        ret.truncate(numbits);
-        Ok(ret)
+        if numbytes&(1<<63)!=0 {
+            //New format
+            numbytes &= !(1<<63);
+            let mut ret = bit_vec::BitVec::with_capacity(numbytes*8);
+            unsafe {
+                let storage = ret.storage_mut();
+                deserializer.read_bytes_to_buf(&mut storage[0..(numbytes/4)])?;
+                storage.set_len(numbits);
+            }
+            Ok((ret))
+        } else {
+            let bytes = deserializer.read_bytes(numbytes)?;
+            let mut ret = bit_vec::BitVec::from_bytes(&bytes);
+            ret.truncate(numbits);
+            Ok(ret)
+        }
+
     }
 }
 
