@@ -3439,10 +3439,8 @@ impl Serialize for bit_vec::BitVec<u32> {
         let l = self.len();
         serializer.write_usize(l)?;
         let storage = self.storage();
-        println!("Bitvec: {:?}, storage: {:?}", self, storage);
         let rawbytes_ptr = storage.as_ptr() as *const u8;
         let rawbytes :&[u8] = unsafe{slice::from_raw_parts(rawbytes_ptr,4*storage.len())};
-        println!("RAwbytes: {:?}", rawbytes);
         serializer.write_usize(rawbytes.len()|(1<<63))?;
         serializer.write_bytes(&rawbytes)?;
         Ok(())
@@ -3464,12 +3462,9 @@ impl Deserialize for bit_vec::BitVec<u32> {
                 let storage = ret.storage_mut();
                 storage.resize(num_words, 0);
                 let storage_ptr = storage.as_ptr() as *mut u8;
-                println!("Num deser words {}, bytes {}, bits {}", num_words, numbytes, numbits);
                 let storage_bytes:&mut [u8] = slice::from_raw_parts_mut(storage_ptr,4*num_words);
                 deserializer.read_bytes_to_buf(storage_bytes)?;
-                println!("read bytes {:?}", storage_bytes);
                 ret.set_len(numbits);
-                println!("FInished: {:?}",ret);
             }
             Ok(ret)
         } else {
