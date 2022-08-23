@@ -1338,7 +1338,14 @@ impl<'a> Serializer<'a> {
     pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v)?)
     }
-
+    /// Writes a binary little endian u128 to the dyn Write
+    pub fn write_u128(&mut self, v: u128) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u128::<LittleEndian>(v)?)
+    }
+    /// Writes a binary little endian i128 to the dyn Write
+    pub fn write_i128(&mut self, v: i128) -> Result<(), SavefileError> {
+        Ok(self.writer.write_i128::<LittleEndian>(v)?)
+    }
     /// Writes a binary little endian usize as u64 to the dyn Write
     pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
@@ -1463,7 +1470,10 @@ impl<'a> Deserializer<'a> {
     pub fn read_u64(&mut self) -> Result<u64, SavefileError> {
         Ok(self.reader.read_u64::<LittleEndian>()?)
     }
-
+    /// Reads a little endian u128
+    pub fn read_u128(&mut self) -> Result<u128, SavefileError> {
+        Ok(self.reader.read_u128::<LittleEndian>()?)
+    }
     /// Reads an i8
     pub fn read_i8(&mut self) -> Result<i8, SavefileError> {
         Ok(self.reader.read_i8()?)
@@ -1479,6 +1489,10 @@ impl<'a> Deserializer<'a> {
     /// Reads a little endian i64
     pub fn read_i64(&mut self) -> Result<i64, SavefileError> {
         Ok(self.reader.read_i64::<LittleEndian>()?)
+    }
+    /// Reads a little endian i128
+    pub fn read_i128(&mut self) -> Result<i128, SavefileError> {
+        Ok(self.reader.read_i128::<LittleEndian>()?)
     }
     /// Reads a little endian f32
     pub fn read_f32(&mut self) -> Result<f32, SavefileError> {
@@ -1980,6 +1994,10 @@ pub enum SchemaPrimitive {
     schema_bool,
     /// canary
     schema_canary1,
+    /// u128
+    schema_u128,
+    /// i128
+    schema_i128
 }
 impl SchemaPrimitive {
     fn name(&self) -> &'static str {
@@ -1997,6 +2015,8 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_f64 => "f64",
             SchemaPrimitive::schema_bool => "bool",
             SchemaPrimitive::schema_canary1 => "u32",
+            SchemaPrimitive::schema_u128 => "u128",
+            SchemaPrimitive::schema_i128 => "i128",
         }
     }
 }
@@ -2013,6 +2033,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_f64 => Some(8),
             SchemaPrimitive::schema_bool => Some(1),
             SchemaPrimitive::schema_canary1 => Some(4),
+            SchemaPrimitive::schema_i128|SchemaPrimitive::schema_u128 => Some(16),
         }
     }
 }
@@ -2464,6 +2485,8 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_f64 => 11,
             SchemaPrimitive::schema_bool => 12,
             SchemaPrimitive::schema_canary1 => 13,
+            SchemaPrimitive::schema_i128 => 14,
+            SchemaPrimitive::schema_u128 => 15,
         };
         serializer.write_u8(discr)
     }
@@ -2484,9 +2507,11 @@ impl Deserialize for SchemaPrimitive {
             11 => SchemaPrimitive::schema_f64,
             12 => SchemaPrimitive::schema_bool,
             13 => SchemaPrimitive::schema_canary1,
+            14 => SchemaPrimitive::schema_i128,
+            15 => SchemaPrimitive::schema_u128,
             c => {
                 return Err(SavefileError::GeneralError {
-                    msg: format!("Corrupt schema, type {} encountered", c),
+                    msg: format!("Corrupt schema, type {} encountered. Perhaps data is from future version?", c),
                 })
             }
         };
@@ -3908,6 +3933,16 @@ unsafe impl ReprC for u64 {
         true
     }
 }
+unsafe impl ReprC for u128 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+unsafe impl ReprC for i128 {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
 unsafe impl ReprC for i64 {
     fn repr_c_optimization_safe(_version: u32) -> bool {
         true
@@ -4672,6 +4707,16 @@ impl WithSchema for u64 {
         Schema::Primitive(SchemaPrimitive::schema_u64)
     }
 }
+impl WithSchema for u128 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_u128)
+    }
+}
+impl WithSchema for i128 {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_i128)
+    }
+}
 impl WithSchema for i64 {
     fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i64)
@@ -4922,6 +4967,7 @@ impl Deserialize for i32 {
     }
 }
 
+
 impl Serialize for u64 {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_u64(*self)
@@ -4940,6 +4986,26 @@ impl Serialize for i64 {
 impl Deserialize for i64 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i64()
+    }
+}
+impl Serialize for u128 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        serializer.write_u128(*self)
+    }
+}
+impl Deserialize for u128 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        deserializer.read_u128()
+    }
+}
+impl Serialize for i128 {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        serializer.write_i128(*self)
+    }
+}
+impl Deserialize for i128 {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        deserializer.read_i128()
     }
 }
 

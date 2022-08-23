@@ -128,6 +128,8 @@ pub struct TestStruct {
     x10: isize,
     x11: f32,
     x12 : bool,
+    x13: u128,
+    x14: i128,
 }
 
 #[test]
@@ -144,7 +146,9 @@ pub fn test_struct_reg() {
         x9: 9,
         x10: 10,
         x11 : 11.5,
-        x12 : true
+        x12 : true,
+        x13: 13,
+        x14: -14,
     });
 }
 

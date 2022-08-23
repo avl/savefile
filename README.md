@@ -67,9 +67,16 @@ fn main() {
 
 ## 0.10.2 Improve performance of bit-vec serialization
 
-Slight improvements to the serialization and deserialization of bit-vec.
+Savefile lacked support for u128 and i128 types. This is fixed.
+
+Also: Slight improvements to the serialization and deserialization of bit-vec.
 The on-disk format has changed, but the deserializer knows how to read the old versions.
-This feature no longer works on big-endian machines.
+Bit-vec are no longer supported on big-endian machines. Please get in touch if
+this is a big limitation. The reason for this change is that it allows to use a more efficient
+format. On a big-endian machine conversion would be needed, and this would be expensive and hard to test
+without access to a big-endian machine.
+
+PRs for big-endian support would be accepted.
 
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 
