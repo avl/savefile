@@ -14,6 +14,7 @@ extern crate savefile;
 extern crate savefile_derive;
 
 extern crate bit_vec;
+extern crate bit_set;
 extern crate smallvec;
 extern crate byteorder;
 extern crate rand;
@@ -672,6 +673,29 @@ pub fn test_bitvec() {
     assert_roundtrip(bv5);
 }
 
+#[test]
+pub fn test_bitset() {
+    use bit_set::BitSet;
+
+    let bs1 = BitSet::new();
+    assert_roundtrip(bs1);
+
+    let mut bs2 = BitSet::new();
+    bs2.insert(0);
+    assert_roundtrip(bs2);
+    let mut bs3 = BitSet::new();
+    bs3.insert(0);
+    bs3.insert(3);
+    bs3.insert(7);
+    assert_roundtrip(bs3);
+
+    let mut bs4 = BitSet::new();
+    bs4.insert(0);
+    bs4.insert(3);
+    bs4.insert(200);
+    assert_roundtrip(bs4);
+
+}
 #[repr(u8)]
 #[derive(Savefile, ReprC, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum TerrainType {

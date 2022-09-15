@@ -11,7 +11,7 @@ external_benchmarks = []
 nightly=["savefile/nightly"]
 
 [dependencies]
-savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression"]}
+savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec"]}
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.6"
 arrayvec="0.5"
@@ -22,6 +22,7 @@ parking_lot="0.12"
 serde="*"
 serde_derive="*"
 bincode="1.2.1"
+bit-set="0.5"
 
 [build-dependencies]
 rustc_version="0.2"

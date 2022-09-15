@@ -726,6 +726,9 @@ extern crate bit_vec;
 #[cfg(feature="bzip2")]
 extern crate bzip2;
 
+#[cfg(feature="bit-set")]
+extern crate bit_set;
+
 
 
 
@@ -3502,6 +3505,65 @@ impl Deserialize for bit_vec::BitVec<u32> {
     }
 }
 
+
+#[cfg(feature="bit-set")]
+impl WithSchema for bit_set::BitSet {
+    fn schema(version: u32) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "BitSet".to_string(),
+            fields: vec![
+                Field {
+                    name: "num_bits".to_string(),
+                    value: Box::new(usize::schema(version)),
+                },
+                Field {
+                    name: "num_bytes".to_string(),
+                    value: Box::new(usize::schema(version)),
+                },
+                Field {
+                    name: "buffer".to_string(),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                },
+            ],
+        })
+    }
+}
+
+
+#[cfg(feature="bit-set")]
+impl Introspect for bit_set::BitSet {
+    fn introspect_value(&self) -> String {
+        let mut ret = String::new();
+        for i in 0..self.len() {
+            if self.contains(i) {
+                use std::fmt::Write;
+                write!(&mut ret, "{} ",i).unwrap();
+            }
+        }
+        ret
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+
+#[cfg(feature="bit-set")]
+impl Serialize for bit_set::BitSet<u32> {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        let bitset = self.get_ref();
+        bitset.serialize(serializer)
+    }
+}
+
+#[cfg(feature="bit-set")]
+impl Deserialize for bit_set::BitSet<u32> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let bit_vec: bit_vec::BitVec = bit_vec::BitVec::deserialize(deserializer)?;
+        Ok(bit_set::BitSet::from_bit_vec(bit_vec))
+    }
+}
+
 impl<T: Introspect> Introspect for BinaryHeap<T> {
     fn introspect_value(&self) -> String {
         "BinaryHeap".to_string()
@@ -4387,6 +4449,8 @@ use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
 use std::slice;
 use std::sync::Arc;
+
+
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 impl<T: WithSchema> WithSchema for RefCell<T> {

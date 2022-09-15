@@ -22,7 +22,8 @@ license = "MIT/Apache-2.0"
 edition = "2018"
 
 [features]
-default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot"]
+default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set"]
+bit-set = ["dep:bit-set","bit-vec"]
 
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
@@ -45,6 +46,7 @@ parking_lot = { version = "0.12", optional = true }
 ring = {version = "0.16.9", optional = true}
 rand= { version = "0.8", optional = true}
 bzip2 = {version = "0.4", optional = true}
+bit-set = {version = "0.5", optional = true}
 
 byteorder = "1.2"
 

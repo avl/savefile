@@ -65,7 +65,8 @@ fn main() {
 
 # Changelog
 
-## 0.10.2 Improve performance of bit-vec serialization
+
+## 0.10.2 Improve performance of bit-vec serialization, add bit-set support
 
 Savefile lacked support for u128 and i128 types. This is fixed.
 
@@ -77,6 +78,8 @@ format. On a big-endian machine conversion would be needed, and this would be ex
 without access to a big-endian machine.
 
 PRs for big-endian support would be accepted.
+
+Also, adds support for bit-set crate.
 
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 
@@ -325,13 +328,16 @@ Features savefile has:
  * Support for old versions of the save format
  * Completely automatic implementation using "custom derive". You do not have to
  figure out how your data is to be saved.
+
+Features savefile does not have:
+ * Support for recursive data-structures
  
 Features savefile does not have, and will not have:
 
  * Support for external protocols/data formats. There'll never be json, yaml,
  xml or any other backends. Savefile uses the savefile format, period.
  * Support for serializing graphs. Savefile can serialize your data if it has a
- tree structure in RAM, _without_ loops.
+ tree structure in RAM, _without_ loops. 
  * Support for serializing boxed traits ("objects"). You can (probably) hack this in by manually
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
