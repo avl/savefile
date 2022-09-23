@@ -700,7 +700,7 @@ extern crate smallvec;
 use parking_lot::{Mutex, MutexGuard,RwLock, RwLockReadGuard};
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, BufReader, BufWriter};
 use std::borrow::Cow;
 use std::io::{Write};
 use std::sync::atomic::{
@@ -1715,21 +1715,21 @@ pub fn save_noschema<T: WithSchema + Serialize>(
 /// Like [crate::load] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
 pub fn load_file<T: WithSchema + Deserialize,P:AsRef<Path>>(filepath: P, version: u32) -> Result<T, SavefileError> {
-    let mut f = File::open(filepath)?;
+    let mut f = BufReader::new(File::open(filepath)?);
     Deserializer::load::<T>(&mut f, version)
 }
 
 /// Like [crate::save] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
 pub fn save_file<T: WithSchema + Serialize, P:AsRef<Path>>(filepath: P, version: u32, data: &T) -> Result<(), SavefileError> {
-    let mut f = File::create(filepath)?;
+    let mut f =  BufWriter::new(File::create(filepath)?);
     Serializer::save::<T>(&mut f, version, data, false)
 }
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
 pub fn load_file_noschema<T: WithSchema + Deserialize, P: AsRef<Path>>(filepath: P, version: u32) -> Result<T, SavefileError> {
-    let mut f = File::open(filepath)?;
+    let mut f = BufReader::new(File::open(filepath)?);
     Deserializer::load_noschema::<T>(&mut f, version)
 }
 
@@ -1740,7 +1740,7 @@ pub fn save_file_noschema<T: WithSchema + Serialize, P:AsRef<Path>>(
     version: u32,
     data: &T,
 ) -> Result<(), SavefileError> {
-    let mut f = File::create(filepath)?;
+    let mut f = BufWriter::new(File::create(filepath)?);
     Serializer::save_noschema::<T>(&mut f, version, data)
 }
 
