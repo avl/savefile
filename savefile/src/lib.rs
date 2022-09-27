@@ -2078,6 +2078,9 @@ pub enum Schema {
     Undefined,
     /// A zero-sized type. I.e, there is no data to serialize or deserialize.
     ZeroSize,
+    /// A user-defined, custom type. The string can be anything. The schema
+    /// only matches if the string is identical
+    Custom(String)
 }
 
 impl Schema {
@@ -2163,6 +2166,7 @@ impl Schema {
             Schema::SchemaOption(ref _content) => None,
             Schema::Undefined => None,
             Schema::ZeroSize => Some(0),
+            Schema::Custom(_) => None,
         }
     }
 }
@@ -2264,7 +2268,6 @@ fn diff_fields(
     }
     None
 }
-
 /// Return a (kind of) human-readable description of the difference
 /// between the two schemas. The schema 'a' is assumed to be the current
 /// schema (used in memory).
@@ -2280,6 +2283,7 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("struct", "undefined"),
             Schema::ZeroSize => ("struct", "zerosize"),
             Schema::Array(_) => ("struct", "array"),
+            Schema::Custom(_) => ("struct", "custom"),
         },
         Schema::Enum(ref xa) => match *b {
             Schema::Enum(ref xb) => return diff_enum(xa, xb, path),
@@ -2290,6 +2294,7 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("enum", "undefined"),
             Schema::ZeroSize => ("enum", "zerosize"),
             Schema::Array(_) => ("enum", "array"),
+            Schema::Custom(_) => ("enum", "custom"),
         },
         Schema::Primitive(ref xa) => match *b {
             Schema::Primitive(ref xb) => {
@@ -2302,6 +2307,7 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("primitive", "undefined"),
             Schema::ZeroSize => ("primitive", "zerosize"),
             Schema::Array(_) => ("primitive", "array"),
+            Schema::Custom(_) => ("primitive", "custom"),
         },
         Schema::SchemaOption(ref xa) => match *b {
             Schema::SchemaOption(ref xb) => {
@@ -2314,6 +2320,7 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("option", "undefined"),
             Schema::ZeroSize => ("option", "zerosize"),
             Schema::Array(_) => ("option", "array"),
+            Schema::Custom(_) => ("option", "custom"),
         },
         Schema::Vector(ref xa) => match *b {
             Schema::Vector(ref xb) => {
@@ -2326,6 +2333,7 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("vector", "undefined"),
             Schema::ZeroSize => ("vector", "zerosize"),
             Schema::Array(_) => ("vector", "array"),
+            Schema::Custom(_) => ("vector", "custom"),
         },
         Schema::Undefined => {
             return Some(format!("At location [{}]: Undefined schema encountered.", path));
@@ -2341,6 +2349,8 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Primitive(_) => ("zerosize", "primitive"),
             Schema::Undefined => ("zerosize", "undefined"),
             Schema::Array(_) => ("zerosize", "array"),
+            Schema::Custom(_) => ("zerosize", "custom"),
+
         },
         Schema::Array(ref xa) => match *b {
             Schema::Vector(_) => ("array", "vector"),
@@ -2351,7 +2361,29 @@ fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Undefined => ("array", "undefined"),
             Schema::ZeroSize => ("array", "zerosize"),
             Schema::Array(ref xb) => return diff_array(xa, xb, path),
+            Schema::Custom(_) => ("array", "custom"),
         },
+        Schema::Custom(ref custom_a) => match b {
+            Schema::Vector(_) => ("custom", "vector"),
+            Schema::Struct(_) => ("custom", "struct"),
+            Schema::Enum(_) => ("custom", "enum"),
+            Schema::Primitive(_) => ("custom", "primitive"),
+            Schema::SchemaOption(_) => ("custom", "option"),
+            Schema::Undefined => ("custom", "undefined"),
+            Schema::ZeroSize => ("custom", "zerosize"),
+            Schema::Array(_) => ("custom", "array"),
+            Schema::Custom(custom_b) => {
+                if a != b {
+                    return Some(format!(
+                        "At location [{}]: Application protocol has datatype Custom({}), but disk format has Custom({})",
+                        path,
+                        custom_a,
+                        custom_b
+                    ));
+                }
+                return None;
+            }
+        }
     };
     Some(format!(
         "At location [{}]: In memory schema: {}, file schema: {}",
@@ -2587,6 +2619,10 @@ impl Serialize for Schema {
                 serializer.write_u8(8)?;
                 array.serialize(serializer)
             }
+            Schema::Custom(ref custom) => {
+                serializer.write_u8(9)?;
+                custom.serialize(serializer)
+            }
         }
     }
 }
@@ -2602,6 +2638,7 @@ impl Deserialize for Schema {
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
+            9 => Schema::Custom(String::deserialize(deserializer)?),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),
