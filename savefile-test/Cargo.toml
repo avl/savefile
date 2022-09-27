@@ -14,7 +14,7 @@ nightly=["savefile/nightly"]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec"]}
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.6"
-arrayvec="0.5"
+arrayvec="0.7"
 smallvec="1.0"
 byteorder="*"
 rand="0.8"

@@ -57,7 +57,7 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     f.set_position(0);
     {
         let roundtrip_result = Deserializer::load::<E>(&mut f, version).unwrap();
-        assert_eq!(sample, roundtrip_result);        
+        assert_eq!(sample, roundtrip_result);
     }
 
     let f_internal_size = f.get_ref().len();
@@ -186,7 +186,6 @@ pub fn test_bin_heap() {
     let nv:Vec<u8>=n.iter().map(|x|*x).collect();
 
     assert_eq!(nv,vv);
-    
 }
 
 #[test]
@@ -251,16 +250,16 @@ fn bench_savefile_serialize(b: &mut Bencher) {
     	})
     }
  	b.iter(move || {
-        {            
+        {
             save_noschema(&mut f,0,&test).unwrap();
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
-            let r = load_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();            
-            assert!(r.len()==1000);  
-        }       
+            let r = load_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();
+            assert!(r.len()==1000);
+        }
 
         f.set_position(0);
     });
@@ -380,7 +379,7 @@ pub fn assert_roundtrip_to_new_version<
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    let roundtrip_result = Deserializer::load::<E2>(&mut f, version_number2).unwrap();    
+    let roundtrip_result = Deserializer::load::<E2>(&mut f, version_number2).unwrap();
     assert_eq!(expected_v2, roundtrip_result);
     roundtrip_result
 }
@@ -388,7 +387,7 @@ pub fn assert_roundtrip_to_new_version<
 #[test]
 pub fn test_array_string() {
     use arrayvec::ArrayString;
-    let arraystr:ArrayString<[u8;30]>=ArrayString::from("Hello everyone").unwrap();
+    let arraystr:ArrayString<30>=ArrayString::from("Hello everyone").unwrap();
     assert_roundtrip(arraystr);
 }
 
@@ -626,7 +625,7 @@ pub fn test_newtype2() {
 }
 
 #[derive(Savefile,Debug,PartialEq)]
-struct NoFields {    
+struct NoFields {
 }
 
 #[test]
@@ -636,7 +635,7 @@ pub fn test_struct_no_fields() {
 
 
 #[derive(Savefile,Debug,PartialEq)]
-struct OnlyRemoved {    
+struct OnlyRemoved {
     #[savefile_versions="0..0"]
     rem : Removed<u32>,
 }
@@ -737,6 +736,9 @@ use std::path::PathBuf;
 use smallvec::alloc::collections::BTreeMap;
 use std::collections::HashSet;
 use std::borrow::Cow;
+use std::convert::TryInto;
+use std::time::Instant;
+use arrayvec::ArrayString;
 
 #[test]
 pub fn test_atomic() {
@@ -752,15 +754,15 @@ pub fn test_atomic() {
     f.set_position(0);
     {
         let roundtrip_result : AtomicU8 = Deserializer::load(&mut f, 1).unwrap();
-        assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));        
+        assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));
     }
 }
 
 
 #[derive(Savefile,Debug,PartialEq)]
-struct CanaryTest {  
+struct CanaryTest {
     canary1: Canary1,
-    some_field: i32  
+    some_field: i32
 }
 
 #[test]
@@ -1212,4 +1214,67 @@ impl Introspect for ExampleWithoutAutomaticIntrospect {
     fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
         None
     }
+}
+
+#[cfg(test)]
+fn speed(len:usize, time: std::time::Duration) -> String {
+    let total_seconds = time.as_micros() as f64 * 1e-6;
+    format!("{} bytes in {:.2}s = {} GB/sec",
+        len, total_seconds,
+            (len as f64/total_seconds)/1e9
+    )
+}
+
+#[test]
+#[ignore] //A bit expensive to run in CI
+pub fn test_many_strings() {
+    let mut outer:Vec<Vec<String>> = Vec::new();
+    for _ in 0..100 {
+        let mut inner = vec![];
+        for _ in 0..1000_000 {
+            inner.push("Test thing".into());
+        }
+        outer.push(inner);
+    }
+    let mut f = Cursor::new(Vec::with_capacity(2_000_000_000));
+    {
+        let t = Instant::now();
+        Serializer::save_noschema(&mut f, 1, &outer).unwrap();
+        println!("Save-Time: {}", speed(f.get_ref().len(),t.elapsed()));
+    }
+    {
+        let t = Instant::now();
+        f.set_position(0);
+        let deserialized : Vec<Vec<String>> = Deserializer::load_noschema(&mut f, 1).unwrap();
+        println!("Load-Time: {} (last value: {})",speed(f.get_ref().len(),t.elapsed()), deserialized.last().unwrap().last().unwrap());
+    }
+    println!("Size: {}", f.get_ref().len() as f64 / 1e9f64);
+}
+
+
+#[test]
+#[ignore] //A bit expensive to run in CI
+pub fn test_many_arraystrings() {
+    let mut outer:Vec<Vec<ArrayString<20>>> = Vec::new();
+    for _ in 0..100 {
+        let mut inner = vec![];
+        for _ in 0..1000_000 {
+            inner.push("Test thing".try_into().unwrap());
+        }
+        outer.push(inner);
+    }
+    let mut f = Cursor::new(Vec::with_capacity(2_000_000_000));
+    {
+        let t = Instant::now();
+        Serializer::save_noschema(&mut f, 1, &outer).unwrap();
+        println!("Save-Time: {}", speed(f.get_ref().len(),t.elapsed()));
+    }
+    {
+        let t = Instant::now();
+        f.set_position(0);
+        let deserialized : Vec<Vec<ArrayString<20>>> = Deserializer::load_noschema(&mut f, 1).unwrap();
+        println!("Load-Time: {} (last value: {})",  speed(f.get_ref().len(),t.elapsed()), deserialized.last().unwrap().last().unwrap());
+    }
+
+    println!("Size: {}", f.get_ref().len() as f64 / 1e9f64);
 }

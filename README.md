@@ -66,7 +66,7 @@ fn main() {
 # Changelog
 
 
-## 0.10.2 Improve performance of bit-vec serialization, add bit-set support
+## 0.10.2 Improve performance of bit-vec serialization, add bit-set support, upgrade arrayvec
 
 Savefile lacked support for u128 and i128 types. This is fixed.
 
@@ -80,6 +80,9 @@ without access to a big-endian machine.
 PRs for big-endian support would be accepted.
 
 Also, adds support for bit-set crate.
+
+Arrayvec upgraded to version 0.7. They have changed their API slightly. See arrayvec docs.
+
 
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 

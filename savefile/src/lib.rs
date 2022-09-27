@@ -4251,27 +4251,35 @@ impl<T1: Deserialize> Deserialize for (T1,) {
 }
 
 #[cfg(feature="arrayvec")]
-impl<T: arrayvec::Array<Item = u8> + Copy> WithSchema for arrayvec::ArrayString<T> {
+impl<const C:usize> WithSchema for arrayvec::ArrayString<C> {
     fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string)
     }
 }
 #[cfg(feature="arrayvec")]
-impl<T: arrayvec::Array<Item = u8> + Copy> Serialize for arrayvec::ArrayString<T> {
+impl<const C:usize> Serialize for arrayvec::ArrayString<C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_string(self.as_str())
     }
 }
 #[cfg(feature="arrayvec")]
-impl<T: arrayvec::Array<Item = u8> + Copy> Deserialize for arrayvec::ArrayString<T> {
+impl<const C:usize>  Deserialize for arrayvec::ArrayString<C> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        let s = deserializer.read_string()?;
-        Ok(arrayvec::ArrayString::from(&s)?)
+        let l = deserializer.read_usize()?;
+        if l > C {
+            return Err(SavefileError::ArrayvecCapacityError {msg: format!("Deserialized data had length {}, but ArrayString capacity is {}", l,C)});
+        }
+        let mut tempbuf = [0u8;C];
+        deserializer.read_bytes_to_buf(&mut tempbuf[0..l])?;
+
+        match std::str::from_utf8(&tempbuf[0..l]) {
+            Ok(s) => Ok(ArrayString::try_from(s)?),
+            Err(_err) => Err(SavefileError::InvalidUtf8 {msg:format!("ArrayString<{}> contained invalid UTF8", C)})
+        }
     }
 }
-
 #[cfg(feature="arrayvec")]
-impl<T: arrayvec::Array<Item = u8> + Copy> Introspect for arrayvec::ArrayString<T> {
+impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
@@ -4282,14 +4290,14 @@ impl<T: arrayvec::Array<Item = u8> + Copy> Introspect for arrayvec::ArrayString<
 }
 
 #[cfg(feature="arrayvec")]
-impl<V: WithSchema, T: arrayvec::Array<Item = V>> WithSchema for arrayvec::ArrayVec<T> {
+impl<V: WithSchema, const C: usize> WithSchema for arrayvec::ArrayVec<V,C> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(V::schema(version)))
     }
 }
 
 #[cfg(feature="arrayvec")]
-impl<V: Introspect + 'static, T: arrayvec::Array<Item = V>> Introspect for arrayvec::ArrayVec<T> {
+impl<V: Introspect + 'static, const C: usize> Introspect for arrayvec::ArrayVec<V,C> {
     fn introspect_value(&self) -> String {
         return "arrayvec[]".to_string();
     }
@@ -4309,7 +4317,7 @@ impl<V: Introspect + 'static, T: arrayvec::Array<Item = V>> Introspect for array
 }
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
     default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
@@ -4322,8 +4330,14 @@ impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVe
     }
 }
 
+unsafe impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
+
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Serialize + ReprC, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+impl<V: Serialize + ReprC+Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if !V::repr_c_optimization_safe(serializer.version) {
@@ -4340,8 +4354,8 @@ impl<V: Serialize + ReprC, T: arrayvec::Array<Item = V>> Serialize for arrayvec:
     }
 }
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
+impl<V: Deserialize, const C:usize> Deserialize for arrayvec::ArrayVec<V,C> {
+    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {
@@ -4364,8 +4378,8 @@ impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::Arr
 }
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Deserialize + ReprC, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
+impl<V: Deserialize + ReprC, const C: usize > Deserialize for arrayvec::ArrayVec<V,C> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         if l > ret.capacity() {
@@ -4449,6 +4463,7 @@ use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
 use std::slice;
 use std::sync::Arc;
+use arrayvec::ArrayString;
 
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
