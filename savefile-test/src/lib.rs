@@ -228,6 +228,18 @@ pub struct BenchStruct {
 #[cfg(not(miri))]
 use test::{Bencher, black_box};
 
+#[derive(Savefile,PartialEq,Eq,Clone,Debug)]
+struct StructWithArrayString{
+    arraystr: ArrayString<30>
+}
+
+
+#[test]
+pub fn test_struct_with_arraystring() {
+    assert_roundtrip(StructWithArrayString {
+        arraystr: "hej".try_into().unwrap()
+    });
+}
 
 
 #[cfg(feature="nightly")]
@@ -1199,7 +1211,6 @@ pub fn test_pathbuf2() {
         my_pathbuf: "/d/something.txt".into()
     };
     assert_roundtrip(x);
-
 }
 
 #[derive(SavefileNoIntrospect,Debug,PartialEq)]

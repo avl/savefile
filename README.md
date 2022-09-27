@@ -83,6 +83,7 @@ Also, adds support for bit-set crate.
 
 Arrayvec upgraded to version 0.7. They have changed their API slightly. See arrayvec docs.
 
+This version updates the 'syn' and 'quote' dependencies to versions 1.0. 
 
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 

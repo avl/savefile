@@ -4,7 +4,6 @@
 //! The documentatino for this is found in the Savefile crate documentation.
 
 extern crate proc_macro;
-
 extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
@@ -48,18 +47,8 @@ fn check_is_remove(field_type: &syn::Type) -> bool {
     is_remove
 }
 
-fn parse_attr_tag(attrs: &Vec<syn::Attribute>, field_type: &syn::Type) -> AttrsResult {
-    let is_string = match field_type {
-        &syn::Type::Path(ref typepath) => {
-            if &typepath.path.segments[0].ident == "String" {
-                true
-            } else {
-                false
-            }
-        }
-        _ => false,
-    };
-    parse_attr_tag2(attrs, is_string)
+fn parse_attr_tag(attrs: &Vec<syn::Attribute>) -> AttrsResult {
+    parse_attr_tag2(attrs, false)
 }
 
 fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
@@ -71,7 +60,11 @@ fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
     }
 }
 
-fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> AttrsResult {
+fn path_to_string(path: &syn::Path) -> String {
+    path.segments.last().unwrap().ident.to_string()
+}
+
+fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) -> AttrsResult {
     let mut field_from_version = None;
     let mut field_to_version = None;
     let mut default_fn = None;
@@ -81,150 +74,156 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, is_string_default_val: bool) -> 
     let mut introspect_key = false;
     let mut deser_types = Vec::new();
     for attr in attrs.iter() {
-        if let Some(ref meta) = attr.interpret_meta() {
-            match meta {
-                &syn::Meta::Word(ref x) => {
-                    if x.to_string() == "savefile_ignore" {
-                        ignore = true;
-                    }
-                    if x.to_string() == "savefile_introspect_key" {
-                        introspect_key = true;
-                    }
-                    if x.to_string() == "savefile_introspect_ignore" {
-                        introspect_ignore = true;
-                    }
-                }
-                &syn::Meta::List(ref _x) => {}
-                &syn::Meta::NameValue(ref x) => {
-                    if x.ident.to_string() == "savefile_default_val" {
-                        let default_val_str_lit = match &x.lit {
-                            &syn::Lit::Str(ref litstr) => litstr,
-                            _ => {
-                                panic!("Unexpected attribute value, please specify default values within quotes.");
-                            }
-                        };
-                        default_val = if is_string_default_val {
-                            Some(quote! { #default_val_str_lit })
-                        } else {
-                            let default_evaled = default_val_str_lit.value();
-                            Some(quote! {#default_evaled})
-                        };
-                    };
-                    if x.ident.to_string() == "savefile_default_fn" {
-                        let default_fn_str_lit = match &x.lit {
-                            &syn::Lit::Str(ref litstr) => litstr,
-                            _ => {
-                                panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
-                            }
-                        };
-                        default_fn = Some(syn::Ident::new(
-                            &default_fn_str_lit.value(),
-                            proc_macro2::Span::call_site(),
-                        ));
-                    };
-
-                    if x.ident.to_string() == "savefile_ignore" {
-                        ignore = true;
-                    };
-                    if x.ident.to_string() == "savefile_introspect_ignore" {
-                        introspect_ignore = true;
-                    };
-                    if x.ident.to_string() == "savefile_versions_as" {
-                        match &x.lit {
-                            &syn::Lit::Str(ref litstr2) => {
-                                let output2: Vec<String> =
-                                    litstr2.value().splitn(3, ":").map(|x| x.to_string()).collect();
-                                if output2.len() != 3 && output2.len() != 2 {
-                                    panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
-                                }
-                                let litstr = &output2[0];
-
-                                let convert_fun: String;
-                                let version_type: String;
-
-                                if output2.len() == 2 {
-                                    convert_fun = "".to_string();
-                                    version_type = output2[1].to_string();
-                                } else {
-                                    convert_fun = output2[1].to_string();
-                                    version_type = output2[2].to_string();
-                                }
-
-                                let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
-                                if output.len() != 2 {
-                                    panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
-                                }
-                                let (a, b) = (output[0].to_string(), output[1].to_string());
-
-                                let from_ver = if a.trim() == "" {
-                                    0
-                                } else if let Ok(a_u32) = a.parse::<u32>() {
-                                    a_u32
-                                } else {
-                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                };
-
-                                let to_ver = if b.trim() == "" {
-                                    std::u32::MAX
-                                } else if let Ok(b_u32) = b.parse::<u32>() {
-                                    b_u32
-                                } else {
-                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                };
-                                if to_ver < from_ver {
-                                    panic!("Version ranges must specify lower number first.");
-                                }
-
-                                let item = VersionRange {
-                                    from: from_ver,
-                                    to: to_ver,
-                                    convert_fun: convert_fun.to_string(),
-                                    serialized_type: version_type.to_string(),
-                                };
-                                if deser_types.iter().any(overlap(&item)) {
-                                    panic!("#savefile_versions_as attributes may not specify overlapping ranges");
-                                }
-                                deser_types.push(item);
-                            }
-                            _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
+        match attr.parse_meta() {
+            Ok(ref meta) => {
+                match meta {
+                    &syn::Meta::Path(ref x) => {
+                        let x = path_to_string(x);
+                        if x == "savefile_ignore" {
+                            ignore = true;
+                        }
+                        if x == "savefile_introspect_key" {
+                            introspect_key = true;
+                        }
+                        if x == "savefile_introspect_ignore" {
+                            introspect_ignore = true;
                         }
                     }
+                    &syn::Meta::List(ref _x) => {
+                    }
+                    &syn::Meta::NameValue(ref x) => {
+                        let path = path_to_string(&x.path);
+                        if path == "savefile_default_val" {
+                            match &x.lit {
+                                &syn::Lit::Str(ref litstr) => {
+                                    default_val = Some(quote! { str::parse(#litstr).unwrap() })
+                                },
+                                _ => {
+                                    let lv = &x.lit;
+                                    default_val = Some(quote!{#lv});
+                                }
+                            };
 
-                    if x.ident.to_string() == "savefile_versions" {
-                        match &x.lit {
-                            &syn::Lit::Str(ref litstr) => {
-                                let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
-                                if output.len() != 2 {
-                                    panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
+                        };
+                        if path == "savefile_default_fn" {
+                            let default_fn_str_lit = match &x.lit {
+                                &syn::Lit::Str(ref litstr) => litstr,
+                                _ => {
+                                    panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
                                 }
-                                let (a, b) = (output[0].to_string(), output[1].to_string());
+                            };
+                            default_fn = Some(syn::Ident::new(
+                                &default_fn_str_lit.value(),
+                                proc_macro2::Span::call_site(),
+                            ));
+                        };
 
-                                if field_from_version.is_some() || field_to_version.is_some() {
-                                    panic!("There can only be one savefile_versions attribute on each field.")
-                                }
-                                if a.trim() == "" {
-                                    field_from_version = Some(0);
-                                } else if let Ok(a_u32) = a.parse::<u32>() {
-                                    field_from_version = Some(a_u32);
-                                } else {
-                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
-                                }
+                        if path == "savefile_ignore" {
+                            ignore = true;
+                        };
+                        if path == "savefile_introspect_ignore" {
+                            introspect_ignore = true;
+                        };
+                        if path == "savefile_versions_as" {
+                            match &x.lit {
+                                &syn::Lit::Str(ref litstr2) => {
+                                    let output2: Vec<String> =
+                                        litstr2.value().splitn(3, ":").map(|x| x.to_string()).collect();
+                                    if output2.len() != 3 && output2.len() != 2 {
+                                        panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
+                                    }
+                                    let litstr = &output2[0];
 
-                                if b.trim() == "" {
-                                    field_to_version = Some(std::u32::MAX);
-                                } else if let Ok(b_u32) = b.parse::<u32>() {
-                                    field_to_version = Some(b_u32);
-                                } else {
-                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                    let convert_fun: String;
+                                    let version_type: String;
+
+                                    if output2.len() == 2 {
+                                        convert_fun = "".to_string();
+                                        version_type = output2[1].to_string();
+                                    } else {
+                                        convert_fun = output2[1].to_string();
+                                        version_type = output2[2].to_string();
+                                    }
+
+                                    let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
+                                    if output.len() != 2 {
+                                        panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
+                                    }
+                                    let (a, b) = (output[0].to_string(), output[1].to_string());
+
+                                    let from_ver = if a.trim() == "" {
+                                        0
+                                    } else if let Ok(a_u32) = a.parse::<u32>() {
+                                        a_u32
+                                    } else {
+                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                    };
+
+                                    let to_ver = if b.trim() == "" {
+                                        std::u32::MAX
+                                    } else if let Ok(b_u32) = b.parse::<u32>() {
+                                        b_u32
+                                    } else {
+                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                    };
+                                    if to_ver < from_ver {
+                                        panic!("Version ranges must specify lower number first.");
+                                    }
+
+                                    let item = VersionRange {
+                                        from: from_ver,
+                                        to: to_ver,
+                                        convert_fun: convert_fun.to_string(),
+                                        serialized_type: version_type.to_string(),
+                                    };
+                                    if deser_types.iter().any(overlap(&item)) {
+                                        panic!("#savefile_versions_as attributes may not specify overlapping ranges");
+                                    }
+                                    deser_types.push(item);
                                 }
-                                if field_to_version.unwrap() < field_from_version.unwrap() {
-                                    panic!("savefile_versions ranges must specify lower number first.");
-                                }
+                                _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
                             }
-                            _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
+                        }
+
+                        if path == "savefile_versions" {
+                            match &x.lit {
+                                &syn::Lit::Str(ref litstr) => {
+                                    let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
+                                    if output.len() != 2 {
+                                        panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
+                                    }
+                                    let (a, b) = (output[0].to_string(), output[1].to_string());
+
+                                    if field_from_version.is_some() || field_to_version.is_some() {
+                                        panic!("There can only be one savefile_versions attribute on each field.")
+                                    }
+                                    if a.trim() == "" {
+                                        field_from_version = Some(0);
+                                    } else if let Ok(a_u32) = a.parse::<u32>() {
+                                        field_from_version = Some(a_u32);
+                                    } else {
+                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                    }
+
+                                    if b.trim() == "" {
+                                        field_to_version = Some(std::u32::MAX);
+                                    } else if let Ok(b_u32) = b.parse::<u32>() {
+                                        field_to_version = Some(b_u32);
+                                    } else {
+                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                    }
+                                    if field_to_version.unwrap() < field_from_version.unwrap() {
+                                        panic!("savefile_versions ranges must specify lower number first.");
+                                    }
+                                }
+                                _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
+                            }
                         }
                     }
                 }
+            }
+            Err(e) => {
+                panic!("Unparsable attribute: {:?} ({:?})",e, attr.tokens);
             }
         }
     }
@@ -276,7 +275,7 @@ fn implement_fields_serialize<'a>(
     let mut index_number = 0;
     for ref field in &field_infos {
         {
-            let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+            let verinfo = parse_attr_tag(&field.attrs);
 
             if verinfo.ignore {
                 continue;
@@ -495,7 +494,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                     impl #impl_generics #serialize for #name #ty_generics #where_clause {
                         #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                            #(#fields_serialize)*
+                            #fields_serialize
                             Ok(())
                         }
                     }
@@ -523,7 +522,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
 
         let is_removed = check_is_remove(field_type);
 
-        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let verinfo = parse_attr_tag(&field.attrs);
         let (field_from_version, field_to_version, default_fn, default_val) = (
             verinfo.version_from,
             verinfo.version_to,
@@ -544,7 +543,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
         let effective_default_val = if is_removed {
             quote! { #removeddef::new() }
         } else if let Some(defval) = default_val {
-            quote! { str::parse(#defval).unwrap() }
+            quote! { #defval } //str::parse(#defval).unwrap() }
         } else if let Some(default_fn) = default_fn {
             quote_spanned! { span => #default_fn() }
         } else if !exists_version_which_needs_default_value {
@@ -883,7 +882,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
 
     for ref field in &field_infos {
-        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let verinfo = parse_attr_tag(&field.attrs);
         if verinfo.ignore {
             panic!("The ReprC attribute cannot be derived for structures containing ignored fields");
         }
@@ -943,24 +942,25 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
     use quote::ToTokens;
     let mut size_u32: Option<u32> = None;
     for attr in attrs.iter() {
-        if let Some(ref meta) = attr.interpret_meta() {
+        if let Ok(ref meta) = attr.parse_meta() {
             match meta {
                 &syn::Meta::NameValue(ref _x) => {}
-                &syn::Meta::Word(ref _x) => {}
+                &syn::Meta::Path(ref _x) => {}
                 &syn::Meta::List(ref metalist) => {
-                    if &metalist.ident.to_string() == &"repr" {
+                    let path = path_to_string(&metalist.path);
+                    if path == "repr" {
                         for x in &metalist.nested {
                             let size_str: String = match *x {
                                 syn::NestedMeta::Meta(ref inner_x) => match inner_x {
                                     &syn::Meta::NameValue(ref _x) => {
                                         panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
                                     }
-                                    &syn::Meta::Word(ref lit_word) => lit_word.to_string(),
+                                    &syn::Meta::Path(ref path) => path_to_string(&path),
                                     &syn::Meta::List(ref _metalist) => {
                                         panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
                                     }
                                 },
-                                syn::NestedMeta::Literal(ref lit) => match lit {
+                                syn::NestedMeta::Lit(ref lit) => match lit {
                                     &syn::Lit::Str(ref litstr) => litstr.value(),
                                     _ => {
                                         panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
@@ -1090,7 +1090,7 @@ fn implement_introspect(
     let mut introspect_key = None;
     let mut index_number = 0usize;
     for (idx, ref field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let verinfo = parse_attr_tag(&field.attrs);
         if verinfo.introspect_key {
             if introspect_key.is_some() {
                 panic!("Type had more than one field with savefile_introspect_key - attribute");
@@ -1387,7 +1387,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
 
     let mut fields = Vec::new();
     for (idx, ref field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(&field.attrs, &field.ty);
+        let verinfo = parse_attr_tag(&field.attrs);
         if verinfo.ignore {
             continue;
         }
