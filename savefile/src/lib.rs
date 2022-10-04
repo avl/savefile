@@ -729,7 +729,8 @@ extern crate bzip2;
 #[cfg(feature="bit-set")]
 extern crate bit_set;
 
-
+#[cfg(feature="rustc-hash")]
+extern crate rustc_hash;
 
 
 /// This object represents an error in deserializing or serializing
@@ -3061,12 +3062,29 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     }
 }
 
-impl<K:WithSchema> WithSchema for HashSet<K> {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+impl<K:WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K,S> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(K::schema(version)))
     }
 }
-impl<K:Serialize> Serialize for HashSet<K> {
+impl<K:Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K,S> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for item in self {
@@ -3075,10 +3093,10 @@ impl<K:Serialize> Serialize for HashSet<K> {
         Ok(())
     }
 }
-impl<K:Deserialize+Eq+Hash> Deserialize for HashSet<K> {
+impl<K:Deserialize+Eq+Hash, S: ::std::hash::BuildHasher+Default> Deserialize for HashSet<K,S> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
-        let mut ret = HashSet::with_capacity(cnt);
+        let mut ret = HashSet::with_capacity_and_hasher(cnt, S::default());
         for _ in 0..cnt {
             ret.insert(<_ as Deserialize>::deserialize(deserializer)?);
         }
@@ -3115,10 +3133,10 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
-impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
+impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher+Default> Deserialize for HashMap<K, V, S> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
-        let mut ret = HashMap::with_capacity(l);
+        let mut ret:Self = HashMap::with_capacity_and_hasher(l, Default::default());
         for _ in 0..l {
             ret.insert(K::deserialize(deserializer)?, V::deserialize(deserializer)?);
         }
@@ -4361,7 +4379,7 @@ impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
 }
 
 #[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
-impl<V: Serialize, T: arrayvec::Array<Item = V>> Serialize for arrayvec::ArrayVec<T> {
+impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
@@ -4403,8 +4421,8 @@ impl<V: Deserialize, const C:usize> Deserialize for arrayvec::ArrayVec<V,C> {
 }
 
 #[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
-impl<V: Deserialize, T: arrayvec::Array<Item = V>> Deserialize for arrayvec::ArrayVec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<T>, SavefileError> {
+impl<V: Deserialize, const C: usize> Deserialize for arrayvec::ArrayVec<V,C> {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {

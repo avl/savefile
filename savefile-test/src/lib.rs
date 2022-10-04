@@ -19,6 +19,8 @@ extern crate smallvec;
 extern crate byteorder;
 extern crate rand;
 
+extern crate rustc_hash;
+
 use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
@@ -751,6 +753,7 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::time::Instant;
 use arrayvec::ArrayString;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[test]
 pub fn test_atomic() {
@@ -1288,4 +1291,20 @@ pub fn test_many_arraystrings() {
     }
 
     println!("Size: {}", f.get_ref().len() as f64 / 1e9f64);
+}
+
+
+#[test]
+pub fn test_fx_hashmap() {
+    let mut h = FxHashMap::default();
+    h.insert(43u32,43u64);
+    assert_roundtrip(h);
+    assert_roundtrip(FxHashMap::<u32,u32>::default());
+}
+#[test]
+pub fn test_fx_hashset() {
+    let mut h = FxHashSet::default();
+    h.insert(43u32);
+    assert_roundtrip(h);
+    assert_roundtrip(FxHashSet::<u32>::default());
 }

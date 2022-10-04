@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.10"
-savefile-derive="0.10"
+savefile="0.11"
+savefile-derive="0.11"
 ````
 
 # Sample 
@@ -66,7 +66,7 @@ fn main() {
 # Changelog
 
 
-## 0.10.2 Improve performance of bit-vec serialization, add bit-set support, upgrade arrayvec
+## 0.11 Improve performance of bit-vec serialization, upgrade arrayvec, support more datatypes
 
 Savefile lacked support for u128 and i128 types. This is fixed.
 
@@ -79,11 +79,15 @@ without access to a big-endian machine.
 
 PRs for big-endian support would be accepted.
 
-Also, adds support for bit-set crate.
+Also, adds support for bit-set crate and rustc-hash.
 
 Arrayvec upgraded to version 0.7. They have changed their API slightly. See arrayvec docs.
 
 This version updates the 'syn' and 'quote' dependencies to versions 1.0. 
+
+Savefile now supports HashSet and HashMap with custom hashers. Deserialize is only supported
+if the hasher implement Default (there's no way to provide a state-ful hasher to deserialized hashmaps).
+
 
 ## 0.10.1 Make dependencies even more configurable, and upgrade some dependencies
 
