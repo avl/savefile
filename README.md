@@ -326,7 +326,7 @@ are no users of this software except the author.
 
 # Docs
 
-The savefile docs are available at: https://docs.rs/savefile/0.6.1/savefile/
+The savefile docs are available at: https://docs.rs/savefile/latest/savefile/
 
 # Features and goals
 
