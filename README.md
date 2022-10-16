@@ -64,6 +64,15 @@ fn main() {
 
 
 # Changelog
+## 0.12 Support for unit structs
+
+Savefile-derive gains support for unit structs. I.e, the following now compiles:
+
+```rust
+#[derive(Savefile)]
+struct MyUnitStruct;
+```
+
 
 
 ## 0.11 Improve performance of bit-vec serialization, upgrade arrayvec, support more datatypes
