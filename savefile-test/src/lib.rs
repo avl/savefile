@@ -1308,3 +1308,13 @@ pub fn test_fx_hashset() {
     assert_roundtrip(h);
     assert_roundtrip(FxHashSet::<u32>::default());
 }
+
+#[derive(Savefile,Debug,PartialEq)]
+struct MyUnitStruct;
+
+#[test]
+pub fn test_unit_struct() {
+    let h = MyUnitStruct;
+    assert_roundtrip(h);
+}
+

@@ -834,11 +834,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                     ))}
                 }
                 &syn::Fields::Unit => {
-                    let output1 = implement_deserialize(Vec::new());
-
-                    quote! {Ok(#name (
-                        #(#output1,)*
-                    ))}
+                    quote! {Ok(#name )}
                 } //_ => panic!("Only regular structs supported, not tuple structs."),
             };
             quote! {
