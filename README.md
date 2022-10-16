@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.12"
-savefile-derive="0.12"
+savefile="0.11"
+savefile-derive="0.11"
 ````
 
 # Sample 
@@ -64,7 +64,7 @@ fn main() {
 
 
 # Changelog
-## 0.12 Support for unit structs
+## 0.11.1 Support for unit structs
 
 Savefile-derive gains support for unit structs. I.e, the following now compiles:
 
@@ -157,7 +157,7 @@ These features are not active by default, so be sure to enable them in
 Cargo.toml like this, if you want to use them:
 
 ```
-savefile = { version = "0.12", features = ["ring","bzip2"] }
+savefile = { version = "0.11", features = ["ring","bzip2"] }
 ```
 
 Arguably, savefile should never have included this support, since it is something
