@@ -4,8 +4,7 @@ members = [
     "savefile",
     "savefile-derive",
     "savefile-test",
-    "savefile-min-build",
-    "savefile_derive_debug"
+    "savefile-min-build"
 ]
 
 
