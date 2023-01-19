@@ -1160,6 +1160,16 @@ pub fn test_serialize_hashset() {
 
 }
 
+#[test]
+pub fn test_roundtrip_char() {
+
+    assert_roundtrip('\r');
+    assert_roundtrip('\n');
+    assert_roundtrip('H');
+    assert_roundtrip(',');
+    assert_roundtrip('\0');
+    assert_roundtrip('\u{10FFFF}');
+}
 
 #[test]
 pub fn test_pathbuf() {

@@ -787,7 +787,9 @@ pub enum SavefileError {
     /// A poisoned mutex was encountered when traversing the object being saved
     PoisonedMutex,
     /// File was compressed, or user asked for compression, but bzip2-library feature was not enabled.
-    CompressionSupportNotCompiledIn
+    CompressionSupportNotCompiledIn,
+    /// Invalid char, i.e, a serialized value expected to be a char was encountered, but it had an invalid value.
+    InvalidChar
 }
 
 impl Display for SavefileError {
@@ -828,6 +830,9 @@ impl Display for SavefileError {
             }
             SavefileError::CompressionSupportNotCompiledIn => {
                 write!(f, "Compression support missing - recompile with bzip2 feature enabled.")
+            }
+            SavefileError::InvalidChar => {
+                write!(f, "Invalid char value encountered.")
             }
         }
     }
@@ -2001,7 +2006,9 @@ pub enum SchemaPrimitive {
     /// u128
     schema_u128,
     /// i128
-    schema_i128
+    schema_i128,
+    /// char
+    schema_char
 }
 impl SchemaPrimitive {
     fn name(&self) -> &'static str {
@@ -2021,6 +2028,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_canary1 => "u32",
             SchemaPrimitive::schema_u128 => "u128",
             SchemaPrimitive::schema_i128 => "i128",
+            SchemaPrimitive::schema_char => "char",
         }
     }
 }
@@ -2038,6 +2046,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_bool => Some(1),
             SchemaPrimitive::schema_canary1 => Some(4),
             SchemaPrimitive::schema_i128|SchemaPrimitive::schema_u128 => Some(16),
+            SchemaPrimitive::schema_char => {Some(4)}
         }
     }
 }
@@ -2523,6 +2532,7 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_canary1 => 13,
             SchemaPrimitive::schema_i128 => 14,
             SchemaPrimitive::schema_u128 => 15,
+            SchemaPrimitive::schema_char => 16,
         };
         serializer.write_u8(discr)
     }
@@ -2545,6 +2555,7 @@ impl Deserialize for SchemaPrimitive {
             13 => SchemaPrimitive::schema_canary1,
             14 => SchemaPrimitive::schema_i128,
             15 => SchemaPrimitive::schema_u128,
+            16 => SchemaPrimitive::schema_char,
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, type {} encountered. Perhaps data is from future version?", c),
@@ -4065,6 +4076,11 @@ unsafe impl ReprC for i64 {
         true
     }
 }
+unsafe impl ReprC for char {
+    fn repr_c_optimization_safe(_version: u32) -> bool {
+        true
+    }
+}
 unsafe impl ReprC for f32 {
     fn repr_c_optimization_safe(_version: u32) -> bool {
         true
@@ -4512,7 +4528,7 @@ use bzip2::Compression;
 use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
@@ -4856,6 +4872,11 @@ impl WithSchema for i64 {
         Schema::Primitive(SchemaPrimitive::schema_i64)
     }
 }
+impl WithSchema for char {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_char)
+    }
+}
 impl WithSchema for usize {
     fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<usize>() {
@@ -4958,6 +4979,14 @@ impl Introspect for i32 {
     }
 }
 impl Introspect for i64 {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl Introspect for char {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
@@ -5117,9 +5146,23 @@ impl Serialize for i64 {
         serializer.write_i64(*self)
     }
 }
+impl Serialize for char {
+    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+        serializer.write_u32((*self).into())
+    }
+}
 impl Deserialize for i64 {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         deserializer.read_i64()
+    }
+}
+impl Deserialize for char {
+    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+        let uc = deserializer.read_u32()?;
+        match uc.try_into() {
+            Ok(x) => Ok(x),
+            Err(_) => Err(SavefileError::InvalidChar)
+        }
     }
 }
 impl Serialize for u128 {
