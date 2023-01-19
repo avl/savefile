@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/avl/savefile.svg?branch=master)](https://travis-ci.org/avl/savefile)
-
 # Introduction to Savefile 
 
 Savefile is a library to effortlessly serialize rust structs and enums. It uses
