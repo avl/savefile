@@ -11,7 +11,7 @@ extern crate syn;
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
-use syn::{DeriveInput, Ident};
+use syn::{DeriveInput, GenericParam, Generics, Ident, WhereClause};
 
 #[derive(Debug)]
 struct VersionRange {
@@ -345,6 +345,26 @@ fn implement_fields_serialize<'a>(
     (serialize2, fields_names)
 }
 
+fn get_extra_where_clauses(gen2: &Generics, where_clause: Option<&WhereClause>, the_trait: TokenStream) -> TokenStream {
+    let extra_where_separator;
+    if where_clause.is_some() {
+        extra_where_separator = quote!(,);
+    } else {
+        extra_where_separator = quote!(where);
+    }
+    let mut where_clauses = vec![];
+    for param in gen2.params.iter() {
+        if let GenericParam::Type(t) = param {
+            let t_name = &t.ident;
+            let clause = quote!{#t_name : #the_trait};
+            where_clauses.push(clause);
+        }
+    }
+    let extra_where = quote!{
+        #extra_where_separator #(#where_clauses),*
+    };
+    extra_where
+}
 fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let name = input.ident;
 
@@ -353,8 +373,9 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
-    let gen2 = generics.clone();
-    let (impl_generics, ty_generics, where_clause) = gen2.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Serialize});
+
 
     let uses = quote_spanned! { defspan =>
         extern crate savefile as _savefile;
@@ -434,7 +455,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
@@ -491,7 +512,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #serialize for #name #ty_generics #where_clause {
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
                             #fields_serialize
@@ -713,6 +734,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize});
 
     let deserialize = quote_spanned! {defspan=>
         _savefile::prelude::Deserialize
@@ -786,7 +808,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 #[allow(non_upper_case_globals)]
                 const #dummy_const: () = {
                     #uses
-                    impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                    impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
 
@@ -841,7 +863,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 #[allow(non_upper_case_globals)]
                 const #dummy_const: () = {
                         #uses
-                        impl #impl_generics #deserialize for #name #ty_generics #where_clause {
+                        impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
                             #output
@@ -862,6 +884,8 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: syn::Ident) -> TokenStream {
     let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::ReprC});
+
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let reprc = quote_spanned! {defspan=>
@@ -912,7 +936,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
         const #dummy_const: () = {
             extern crate std;
             #uses
-            unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause {
+            unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                 #[allow(unused_comparisons,unused_variables, unused_variables)]
                 fn repr_c_optimization_safe(file_version:u32) -> bool {
                     // The following is a debug_assert because it is slightly expensive, and the entire
@@ -1152,6 +1176,8 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Introspect});
+
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -1269,7 +1295,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #introspect for #name #ty_generics #where_clause {
+                    impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
@@ -1345,7 +1371,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #introspect for #name #ty_generics #where_clause {
+                    impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
                         fn introspect_value(&self) -> String {
@@ -1432,6 +1458,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::WithSchema});
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -1514,7 +1541,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                    impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
@@ -1574,7 +1601,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
-                    impl #impl_generics #withschema for #name #ty_generics #where_clause {
+                    impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
                         fn schema(version:u32) -> #Schema {

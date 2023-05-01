@@ -15,8 +15,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.12"
-savefile-derive="0.12"
+savefile="0.13"
+savefile-derive="0.13"
 ````
 
 # Sample 
@@ -62,6 +62,25 @@ fn main() {
 
 
 # Changelog
+
+## 0.13 Support generic structs without Savefile type-constraints
+
+Previously, if you tried to implement the following struct:
+
+```rust
+#[derive(Savefile)]
+pub struct ExampleGeneric<T> {
+    pub x: T
+}
+```
+
+You would get compiler errors, because T cannot be serialized using Savefile.
+However, as a user, it may be that the struct ExampleGeneric doesn't always need
+to be serializable. What is really required, is that whenever an attempt is made to
+serialize a particular instance, then the type of that instance has to be serializable.
+
+Other derive-macros, like the 'Debug' macro, 
+
 
 ## 0.12 Support for char
 
@@ -162,7 +181,7 @@ These features are not active by default, so be sure to enable them in
 Cargo.toml like this, if you want to use them:
 
 ```
-savefile = { version = "0.12", features = ["ring","bzip2"] }
+savefile = { version = "0.13", features = ["ring","bzip2"] }
 ```
 
 Arguably, savefile should never have included this support, since it is something

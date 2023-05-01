@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
