@@ -79,7 +79,15 @@ However, as a user, it may be that the struct ExampleGeneric doesn't always need
 to be serializable. What is really required, is that whenever an attempt is made to
 serialize a particular instance, then the type of that instance has to be serializable.
 
-Other derive-macros, like the 'Debug' macro, 
+Other derive-macros, like the 'Debug' macro, don't work like this. They
+only implement Debug for such a struct if all type parameters themselves implement Debug,
+avoiding the compiler error.
+
+Beginning with 0.13, savefile works the same way.
+
+In the future, it could be possible to make the type requirements even more clever,
+only requiring that types which are actually used during serialization support the
+savefile-traits. 
 
 
 ## 0.12 Support for char
