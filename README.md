@@ -62,6 +62,9 @@ fn main() {
 
 
 # Changelog
+## 0.14.1 Very minor fix to this readme
+The example in the 0.14 update note was wrong (search-and-replace error).
+
 ## 0.14 Major changes to ReprC-system
 
 One of the strong points of Savefile is the support for very quickly serializing
@@ -70,8 +73,7 @@ and deserializing vectors of simple copy-datatypes.
 The previous way to do this was to define a struct like this:
 
 ```rust
-#[derive(Savefile)]
-#[savefile_unsafe_and_fast]
+#[derive(Savefile,ReprC)]
 #[repr(C)]
 pub struct Example {
     pub x: u32,
