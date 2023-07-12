@@ -216,7 +216,8 @@ pub fn test_string() {
 }
 
 
-#[derive(ReprC, Clone, Copy, Debug, Savefile, PartialEq)]
+#[derive(Clone, Copy, Debug, Savefile, PartialEq)]
+#[savefile_unsafe_and_fast]
 pub struct BenchStruct {
     x: usize,
     y: usize,
@@ -711,7 +712,8 @@ pub fn test_bitset() {
 
 }
 #[repr(u8)]
-#[derive(Savefile, ReprC, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Savefile, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[savefile_unsafe_and_fast]
 pub enum TerrainType {
     Wheat,
     Forest,
@@ -723,7 +725,8 @@ pub enum TerrainType {
 }
 
 #[repr(C)]
-#[derive(ReprC, Savefile, Clone, Copy, Debug,PartialEq)]
+#[derive(Savefile, Clone, Copy, Debug,PartialEq)]
+#[savefile_unsafe_and_fast]
 pub struct TerrainTile
 {
     pub curtype: TerrainType,

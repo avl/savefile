@@ -1,7 +1,8 @@
 
 use ::savefile::prelude::*;
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
+#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
+#[savefile_unsafe_and_fast]
 struct Inner {
 	x: u32
 }
@@ -13,7 +14,8 @@ struct Nested {
 }
 
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
+#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
+#[savefile_unsafe_and_fast]
 #[repr(u8)]
 pub enum TestReprEnum {
     A,
@@ -46,23 +48,27 @@ fn test_not_raw_memcpy2() {
 }
 
 
-#[derive(Savefile,Clone,Copy,ReprC)]
+#[derive(Savefile,Clone,Copy)]
+#[savefile_unsafe_and_fast]
+#[repr(C)]
 struct MyUnitStruct {
 
 }
 
-#[derive(Savefile,Clone,Copy,ReprC)]
+#[derive(Savefile,Clone,Copy)]
+#[savefile_unsafe_and_fast]
+#[repr(C)]
 struct UnnamedFieldsStruct(usize);
 
 
 #[test]
 fn test_various_types_for_reprc() {
 
-    assert_eq!(<() as ReprC>::repr_c_optimization_safe(0), true);
-    assert_eq!(<u8>::repr_c_optimization_safe(0),true);
+    assert_eq!(unsafe { <() as ReprC>::repr_c_optimization_safe(0).is_yes() }, true);
+    assert_eq!(unsafe{<u8>::repr_c_optimization_safe(0)}.is_yes(),true);
 
-    assert_eq!(<MyUnitStruct>::repr_c_optimization_safe(0), true);
-    assert_eq!(UnnamedFieldsStruct::repr_c_optimization_safe(0), true);
+    assert_eq!(unsafe { <MyUnitStruct>::repr_c_optimization_safe(0)}.is_yes(), true);
+    assert_eq!(unsafe { UnnamedFieldsStruct::repr_c_optimization_safe(0)}.is_yes(), true);
 
 
 }

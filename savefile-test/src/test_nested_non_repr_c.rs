@@ -1,7 +1,8 @@
 use ::savefile::prelude::*;
 
 
-#[derive(ReprC, Clone, Copy, Debug, PartialEq, Savefile)]
+#[derive(Clone, Copy, Debug, PartialEq, Savefile)]
+#[savefile_unsafe_and_fast]
 struct Inner {
 	misaligner : u8, 
 	x: u32

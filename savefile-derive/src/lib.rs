@@ -12,6 +12,7 @@ use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
 use syn::{DeriveInput, GenericParam, Generics, Ident, WhereClause};
+use syn::__private::bool;
 
 #[derive(Debug)]
 struct VersionRange {
@@ -641,6 +642,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
 #[proc_macro_derive(
     Savefile,
     attributes(
+        savefile_unsafe_and_fast,
         savefile_versions,
         savefile_versions_as,
         savefile_introspect_ignore,
@@ -659,7 +661,9 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let w = savefile_derive_crate_withschema(input.clone());
 
-    let i = savefile_derive_crate_introspect(input);
+    let i = savefile_derive_crate_introspect(input.clone());
+
+    let r = derive_reprc_new(input);
 
     let expanded = quote! {
         #s
@@ -669,19 +673,22 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #w
 
         #i
+
+        #r
     };
 
     expanded.into()
 }
 #[proc_macro_derive(
-SavefileNoIntrospect,
-attributes(
-savefile_versions,
-savefile_versions_as,
-savefile_ignore,
-savefile_default_val,
-savefile_default_fn
-)
+    SavefileNoIntrospect,
+    attributes(
+        savefile_unsafe_and_fast,
+        savefile_versions,
+        savefile_versions_as,
+        savefile_ignore,
+        savefile_default_val,
+        savefile_default_fn
+    )
 )]
 pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
@@ -692,6 +699,7 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
 
     let w = savefile_derive_crate_withschema(input.clone());
 
+    let r = derive_reprc_new(input);
 
     let expanded = quote! {
         #s
@@ -699,6 +707,8 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
         #d
 
         #w
+
+        #r
     };
 
     expanded.into()
@@ -879,6 +889,38 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
     expanded
 }
+#[allow(non_snake_case)]
+fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) -> TokenStream {
+    let defspan = proc_macro2::Span::call_site();
+
+    let magic = format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();
+    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::WithSchema});
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile as _savefile;
+    };
+    let reprc = quote_spanned! {defspan=>
+        _savefile::prelude::ReprC
+    };
+    let isreprc = quote_spanned! {defspan=>
+        _savefile::prelude::IsReprC
+    };
+    quote! {
+
+        #[allow(non_upper_case_globals)]
+        const #dummy_const: () = {
+            extern crate std;
+            #uses
+            impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+                #[allow(unused_comparisons,unused_variables, unused_variables)]
+                unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
+                    #isreprc::no()
+                }
+            }
+        };
+    }
+}
 
 #[allow(non_snake_case)]
 fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: syn::Ident) -> TokenStream {
@@ -890,6 +932,9 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let defspan = proc_macro2::Span::call_site();
     let reprc = quote_spanned! {defspan=>
         _savefile::prelude::ReprC
+    };
+    let isreprc = quote_spanned! {defspan=>
+        _savefile::prelude::IsReprC
     };
     let local_file_version = quote_spanned! { defspan => local_file_version};
     let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema};
@@ -915,7 +960,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
             }
             optsafe_outputs
-                .push(quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)));
+                .push(quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()));
         } else {
             if field_to_version < std::u32::MAX {
                 min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
@@ -925,20 +970,22 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
 
             if !removed {
                 optsafe_outputs.push(
-                    quote_spanned!( span => <#field_type as ReprC>::repr_c_optimization_safe(#local_file_version)),
+                    quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()),
                 );
             }
         }
     }
+
+
     quote! {
 
         #[allow(non_upper_case_globals)]
         const #dummy_const: () = {
             extern crate std;
             #uses
-            unsafe impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+            impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                 #[allow(unused_comparisons,unused_variables, unused_variables)]
-                fn repr_c_optimization_safe(file_version:u32) -> bool {
+                unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
                     // The following is a debug_assert because it is slightly expensive, and the entire
                     // point of the ReprC trait is to speed things up.
                     if cfg!(debug_assertions) {
@@ -950,8 +997,11 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
                         }
                     }
                     let local_file_version = file_version;
-                    file_version >= #min_safe_version
-                    #( && #optsafe_outputs)*
+                    if file_version >= #min_safe_version #( && #optsafe_outputs)* {
+                        unsafe { #isreprc::yes() }
+                    } else {
+                        #isreprc::no()
+                    }
                 }
             }
         };
@@ -1016,10 +1066,36 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
         savefile_default_fn
     )
 )]
-pub fn reprc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+
+    panic!("The #[derive(ReprC)] style of unsafe performance opt-in has been changed. Add a #[savefile_unsafe_and_fast] attribute on a new line, after the #[derive(Savefile)] attribute instead.")
+}
+fn derive_reprc_new(input: DeriveInput) -> TokenStream {
+
 
     let name = input.ident;
+
+    let mut hardcode_false = true;
+    for attr in input.attrs.iter() {
+        match attr.parse_meta() {
+            Ok(ref meta) => {
+                match meta {
+                    &syn::Meta::Path(ref x) => {
+                        let x = path_to_string(x);
+                        if x == "savefile_unsafe_and_fast" {
+                            hardcode_false = false;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if hardcode_false {
+        return implement_reprc_hardcoded_false(name, input.generics);
+    }
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {

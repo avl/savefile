@@ -62,6 +62,58 @@ fn main() {
 
 
 # Changelog
+## 0.14 Major changes to ReprC-system
+
+One of the strong points of Savefile is the support for very quickly serializing
+and deserializing vectors of simple copy-datatypes.
+
+The previous way to do this was to define a struct like this:
+
+```rust
+#[derive(Savefile,ReprC)]
+#[repr(C)]
+pub struct Example {
+    pub x: u32,
+    pub y: u32,
+}
+```
+
+The new way is:
+
+```rust
+#[derive(Savefile)]
+#[savefile_unsafe_and_fast]
+#[repr(C)]
+pub struct Example {
+    pub x: u32,
+    pub y: u32,
+}
+```
+
+The old solution implemented a marker trait 'ReprC' for the type. Then, Savefile relied on
+specialization to be able to serialize vectors and arrays of these types much faster
+by simply copying large regions of bytes.
+
+At the time, it seemed like the fact that specialization was only available on nightly would
+be a temporary nuisance. Today, 2023, it is starting to seem like specialization might _never_
+land in stable rust.
+
+Because of this, we are now bringing the speedups to stable, by abandoning specialization!
+
+We are now implementing ReprC for _all_ types, and then just returning false for types
+which don't support the optimization. 
+
+This has some drawbacks. Previously, ReprC was an unsafe trait. It wasn't mandatory, but
+if you knew what you were doing you could get extra performance, under responsibility.
+
+But now, ReprC is to be implemented by all types. And we don't want it to be necessary to use
+unsafe code to be able to use Savefile. However, to the user of Savefile, there isn't much
+difference, except the ReprC trait always being derived, and another way being used to opt-in
+to the unsafe but performant optimization.
+
+I don't know of a way to require 'unsafe' keyword to a derive macro, so we use a deliberately
+eye-catching non-conforming name ```#[savefile_unsafe_and_fast]``` to signal danger.
+
 
 ## 0.13 Support generic structs without Savefile type-constraints
 

@@ -441,8 +441,9 @@ Rules for using the #\[savefile_versions] attribute:
  #[macro_use]
  extern crate savefile_derive;
 
- #[derive(ReprC, Clone, Copy, Savefile)]
+ #[derive(Clone, Copy, Savefile)]
  #[repr(C)]
+ #[savefile_unsafe_and_fast]
  struct Position {
      x : u32,
      y : u32,
@@ -886,23 +887,74 @@ impl<'a> Deserializer<'a> {
     }
 }
 
-/// This is a marker trait for types which have an in-memory layout that is packed
-/// and therefore identical to the layout that savefile will use on disk.
-/// This means that types for which this trait is implemented can be serialized
-/// very quickly by just writing their raw bits to disc.
-///
-/// Rules to implement this trait:
-///
-/// * The type must be copy
-/// * The type must not contain any padding
-/// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
-/// * All the constituent types of the type must also implement `ReprC` (correctly).
-pub unsafe trait ReprC: Copy {
+/// Marker used to promise that some type fulfills all rules
+/// for the "ReprC"-optimization.
+#[derive(Default, Debug)]
+pub struct IsReprC(bool);
+
+impl IsReprC {
+    /// # SAFETY:
+    /// Must only ever be created and immediately returned from
+    /// ReprC::repr_c_optimization_safe. Any other use, such
+    /// that the value could conceivably be smuggled to
+    /// a repr_c_optimization_safe-implementation is forbidden.
+    ///
+    /// Also, see description of ReprC trait and repr_c_optimization_safe.
+    pub unsafe fn yes() -> IsReprC {
+        IsReprC(true)
+    }
+    /// No, the type is not compatible with the "ReprC"-optimization.
+    /// It cannot be just blitted.
+    /// This is always safe, it just misses out on some optimizations.
+    pub fn no() -> IsReprC {
+        IsReprC(false)
+    }
+
+
+    /// Optimization not allowed
+    #[inline(always)]
+    pub fn is_false(self) -> bool {
+        !self.0
+    }
+
+    /// Optimization not allowed. Beware
+    #[inline(always)]
+    pub fn is_yes(self) -> bool {
+        self.0
+    }
+}
+
+/// This trait describes whether a type is such that it can just be blitted.
+/// See method repr_c_optimization_safe.
+pub trait ReprC {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
     /// This may return true if and only if the given protocol version
     /// has a serialized format identical to the given protocol version.
-    fn repr_c_optimization_safe(version: u32) -> bool;
+    ///
+    /// This can return true for types which have an in-memory layout that is packed
+    /// and therefore identical to the layout that savefile will use on disk.
+    /// This means that types for which this trait is implemented can be serialized
+    /// very quickly by just writing their raw bits to disc.
+    ///
+    /// Rules to allow returning true:
+    ///
+    /// * The type must be copy
+    /// * The type must not contain any padding (if there is padding, backward compatibility will fail, since in fallback mode regular savefile-deserialize will be used, and it will not use padding)
+    /// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
+    /// * All the constituent types of the type must also implement `ReprC` (correctly).
+    ///
+    /// Constructing an instance of 'IsReprC' with value 'true' is not safe. See
+    /// documentation of 'IsReprC'. The idea is that the ReprC-trait itself
+    /// can still be safe to implement, it just won't be possible to get hold of an
+    /// instance of IsReprC(true). To make it impossible to just
+    /// 'steal' such a value from some other thing implementign 'ReprC',
+    /// this method is marked unsafe.
+    ///
+    /// # SAFETY
+    /// The returned value must not be used, except by the Savefile-framework.
+    /// It must be be forwarded somewhere else.
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC { IsReprC::no()}
 }
 
 impl From<std::io::Error> for SavefileError {
@@ -3804,23 +3856,10 @@ impl Deserialize for Arc<str> {
     }
 }
 
-#[cfg(feature = "nightly")]
-impl<T: Serialize> Serialize for Arc<[T]> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
-    }
-}
-#[cfg(not(feature = "nightly"))]
-impl<T: Serialize> Serialize for Arc<[T]> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
-    }
-}
-#[cfg(feature = "nightly")]
 impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
-            if !T::repr_c_optimization_safe(serializer.version) {
+            if T::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(&*self, serializer)
             } else {
                 let l = self.len();
@@ -3834,11 +3873,15 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     }
 }
 
-impl<T: Deserialize> Deserialize for Arc<[T]> {
+impl<T: Deserialize+ReprC> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
+
+impl<T> ReprC for Vec<T> {}
+
+impl ReprC for String {}
 
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version: u32) -> Schema {
@@ -3862,23 +3905,10 @@ impl<T: Introspect> Introspect for Vec<T> {
     }
 }
 
-#[cfg(feature = "nightly")]
-impl<T: Serialize> Serialize for Vec<T> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
-    }
-}
-#[cfg(not(feature = "nightly"))]
-impl<T: Serialize> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
-    }
-}
-#[cfg(feature = "nightly")]
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
-            if !T::repr_c_optimization_safe(serializer.version) {
+            if T::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
@@ -3910,24 +3940,9 @@ fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> R
     Ok(ret)
 }
 
-#[cfg(feature = "nightly")]
-impl<T: Deserialize> Deserialize for Vec<T> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        Ok(regular_deserialize_vec::<T>(deserializer)?)
-    }
-}
-
-#[cfg(not(feature = "nightly"))]
-impl<T: Deserialize> Deserialize for Vec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        Ok(regular_deserialize_vec::<T>(deserializer)?)
-    }
-}
-
-#[cfg(feature = "nightly")]
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        if !T::repr_c_optimization_safe(deserializer.file_version) {
+        if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             Ok(regular_deserialize_vec::<T>(deserializer)?)
         } else {
             use std::mem;
@@ -4021,89 +4036,89 @@ fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer)
     Ok(ret)
 }
 
-unsafe impl ReprC for bool {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for bool {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 } //It isn't really guaranteed that bool is an u8 or i8 where false = 0 and true = 1. But it's true in practice. And the breakage would be hard to measure if this were ever changed, so a change is unlikely.
-unsafe impl ReprC for u8 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for u8 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for i8 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for i8 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for u16 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for u16 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for i16 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for i16 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for u32 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for u32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for i32 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for i32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for u64 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for u64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for u128 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for u128 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for i128 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for i128 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for i64 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for i64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for char {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for char {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for f32 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for f32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for f64 {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for f64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for usize {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for usize {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for isize {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for isize {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
-unsafe impl ReprC for () {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl ReprC for () {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
 
@@ -4131,60 +4146,12 @@ impl<T: Introspect, const N: usize> Introspect for [T; N] {
     }
 }
 
-#[cfg(feature = "nightly")]
-impl<T: Serialize, const N: usize> Serialize for [T; N] {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        for item in self.iter() {
-            item.serialize(serializer)?
-        }
-        Ok(())
-    }
-}
-#[cfg(not(feature = "nightly"))]
-impl<T: Serialize, const N: usize> Serialize for [T; N] {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
-        for item in self.iter() {
-            item.serialize(serializer)?
-        }
-        Ok(())
-    }
-}
-#[cfg(not(feature = "nightly"))]
-impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        let mut data: [MaybeUninit<T>; N] = unsafe {
-            MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
-        };
-        for idx in 0..N {
-            data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
-        }
-        let ptr = &mut data as *mut _ as *mut [T; N];
-        let res = unsafe { ptr.read() };
-        core::mem::forget(data);
-        Ok(res)
-    }
-}
-#[cfg(feature = "nightly")]
-impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        let mut data: [MaybeUninit<T>; N] = unsafe {
-            MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
-        };
-        for idx in 0..N {
-            data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
-        }
-        let ptr = &mut data as *mut _ as *mut [T; N];
-        let res = unsafe { ptr.read() };
-        core::mem::forget(data);
-        Ok(res)
-    }
-}
 
-#[cfg(feature = "nightly")]
+
 impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
-            if !T::repr_c_optimization_safe(serializer.version) {
+            if T::repr_c_optimization_safe(serializer.version).is_false() {
                 for item in self.iter() {
                     item.serialize(serializer)?
                 }
@@ -4199,10 +4166,9 @@ impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
     }
 }
 
-#[cfg(feature = "nightly")]
 impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
-        if !T::repr_c_optimization_safe(deserializer.file_version) {
+        if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
                 MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
             };
@@ -4321,6 +4287,7 @@ impl<T1: Deserialize> Deserialize for (T1,) {
     }
 }
 
+
 #[cfg(feature="arrayvec")]
 impl<const C:usize> WithSchema for arrayvec::ArrayString<C> {
     fn schema(_version: u32) -> Schema {
@@ -4401,9 +4368,9 @@ impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
     }
 }
 
-unsafe impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
-    fn repr_c_optimization_safe(_version: u32) -> bool {
-        true
+impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        unsafe{IsReprC::yes()}
     }
 }
 
@@ -4411,7 +4378,7 @@ unsafe impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
 impl<V: Serialize + ReprC+Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
-            if !V::repr_c_optimization_safe(serializer.version) {
+            if unsafe{V::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
@@ -4458,7 +4425,7 @@ impl<V: Deserialize + ReprC, const C: usize > Deserialize for arrayvec::ArrayVec
                 msg: format!("ArrayVec with capacity {} can't hold {} items", ret.capacity(), l),
             });
         }
-        if !V::repr_c_optimization_safe(deserializer.memory_version) {
+        if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             for _ in 0..l {
                 ret.push(V::deserialize(deserializer)?);
             }
