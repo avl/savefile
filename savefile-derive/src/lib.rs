@@ -949,7 +949,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     for ref field in &field_infos {
         let verinfo = parse_attr_tag(&field.attrs);
         if verinfo.ignore {
-            panic!("The ReprC attribute cannot be derived for structures containing ignored fields");
+            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for structures containing ignored fields");
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
@@ -1102,7 +1102,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             let enum_size = get_enum_size(&input.attrs);
             if let Some(enum_size) = enum_size {
                 if enum_size != 1 {
-                    panic!("The ReprC trait assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 255 variants. Sorry.");
+                    panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 255 variants. Sorry.");
                 }
             }
 
@@ -1110,14 +1110,14 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
                     &syn::Fields::Named(ref _fields_named) => {
-                        panic!("The ReprC trait cannot be derived for enums with fields.");
+                        panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
                     }
                     &syn::Fields::Unnamed(ref _fields_unnamed) => {
-                        panic!("The ReprC trait cannot be derived for enums with fields.");
+                        panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
                     }
                     &syn::Fields::Unit => {
                         if enum_size.is_none() {
-                            panic!("Enums which derive the ReprC trait must specify the enum size using the repr-attribute, like #[repr(u8)].");
+                            panic!("Enums which use the #[savefile_unsafe_and_fast] attribute must specify the enum size using the repr-attribute, like #[repr(u8)].");
                         }
                     }
                 }

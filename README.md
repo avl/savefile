@@ -70,7 +70,8 @@ and deserializing vectors of simple copy-datatypes.
 The previous way to do this was to define a struct like this:
 
 ```rust
-#[derive(Savefile,ReprC)]
+#[derive(Savefile)]
+#[savefile_unsafe_and_fast]
 #[repr(C)]
 pub struct Example {
     pub x: u32,

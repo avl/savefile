@@ -110,7 +110,9 @@ mod savefile_benchmark {
     use test::{Bencher, black_box};
     use savefile::prelude::*;
 
-    #[derive(Savefile, PartialEq, Debug, Clone, Copy, ReprC)]
+    #[derive(Savefile, PartialEq, Debug, Clone, Copy)]
+    #[savefile_unsafe_and_fast]
+    #[repr(C)]
     struct Entity {
         x: f32,
         y: f32,
