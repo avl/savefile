@@ -4378,7 +4378,7 @@ impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
 impl<V: Serialize + ReprC+Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
-            if unsafe{V::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
+            if V::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
@@ -4425,7 +4425,7 @@ impl<V: Deserialize + ReprC, const C: usize > Deserialize for arrayvec::ArrayVec
                 msg: format!("ArrayVec with capacity {} can't hold {} items", ret.capacity(), l),
             });
         }
-        if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
+        if unsafe{V::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             for _ in 0..l {
                 ret.push(V::deserialize(deserializer)?);
             }
