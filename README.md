@@ -63,6 +63,11 @@ fn main() {
 
 # Changelog
 
+## 0.14.3 Bugfixes to 0.14 release
+
+The 0.14 release contained some bugs. It was actually impossible to serialize
+collections containing many standard types. This is fixed in 0.14.3.
+
 ## 0.14 Major changes to ReprC-system
 
 One of the strong points of Savefile is the support for very quickly serializing

@@ -376,25 +376,28 @@ Rules for using the #\[savefile_versions] attribute:
  really long, so we want to make sure that the overhead when serializing this is
  as low as possible.
 
- Savefile has an unsafe trait [crate::ReprC] that you can implement for a type T. This instructs
- Savefile to optimize serialization of Vec<T> into being a very fast, raw memory copy.
+ Savefile has an unsafe trait [crate::ReprC] that you must implement for each T. This trait
+ has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
+ - Is this type such that it can safely be copied byte-per-byte?
+ Answering yes for a specific type T, causes savefile to optimize serialization of Vec<T> into being
+ a very fast, raw memory copy.
 
- This is dangerous. You, as implementor of the `ReprC` trait take full responsibility
+ This is dangerous. You, as implementor of the `ReprC` trait () (or supplier of attribute
+ ```[savefile_unsafe_and_fast]``` to derive-macro) take full responsibility
  that all the following rules are upheld:
 
  The type T is Copy
- The host platform is little endian. The savefile disk format uses little endian. Automatic validation of this should
- probably be added to savefile.
- The type T is a struct or an enum without fields. Using it on enums with fields will probably lead to silent data corruption.
+ The host platform is little endian. The savefile disk format uses little endian.
  The type is represented in memory in an ordered, packed representation. Savefile is not
-  clever enough to inspect the actual memory layout and adapt to this, so the memory representation
-  has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
-  that the #\[repr(C)] trait does not do this - it will include padding if needed for alignment
-  reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
-  Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
- If the type is an enum, it must be #\[repr(u8)] .
+ clever enough to inspect the actual memory layout and adapt to this, so the memory representation
+ has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
+ that the #\[repr(C)] attribute is not enough to do this - it will include padding if needed for alignment
+ reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
+ Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
+ If the type is an enum, it must be #\[repr(u8)]. Enums with fields should work, as long as they
+ are #\[repr(u8,C)], but this has not been tested.
 
- For example, don't do:
+ Now, for example, don't do:
  ```
  #[repr(C)]
  struct Bad {
@@ -430,9 +433,14 @@ Rules for using the #\[savefile_versions] attribute:
  This restriction may be lifted at a later time.
 
  Note that having a struct with bad alignment will be detected, at runtime, for debug-builds. It may not be
- detected in release builds. Serializing or deserializing each [crate::ReprC] struct at least once somewhere in your test suite
+ detected in release builds. Serializing or deserializing each optimized type at least once somewhere in your test suite
  is recommended.
 
+ When deriving the savefile-traits automatically, specify the attribute ```#[savefile_unsafe_and_fast]``` to opt-in to
+ the optimized behaviour. Note that this is _unsafe_ . It is up to you as a developer to ensure that the rules
+ described above are followed. It may be prudent to only use ```#[savefile_unsafe_and_fast]``` when performance
+ measurements demonstrate that there is a pressing need. However, performance can be 10x faster when using
+```#[savefile_unsafe_and_fast]```.
 
  ```
  extern crate savefile;
@@ -517,6 +525,8 @@ Rules for using the #\[savefile_versions] attribute:
      fn schema(_version: u32) -> Schema {
          Schema::Primitive(SchemaPrimitive::schema_string)
      }
+ }
+ impl ReprC for MyPathBuf {
  }
  impl Serialize for MyPathBuf {
      fn serialize<'a>(&self, serializer: &mut Serializer<'a>) -> Result<(), SavefileError> {
@@ -617,7 +627,7 @@ Rules for using the #\[savefile_versions] attribute:
  of parts of an introspectable object. The Introspector has a 'path' which looks in to the
  introspection tree and shows values for this tree. The advantage of using this compared to
  just using ```format!("{:#?}",mystuff)``` is that for very large data structures, unconditionally
- dumping all data may be unwieldy. The author has a state struct which becomes hundreds of megabytes
+ dumping all data may be unwieldy. The author has a struct which becomes hundreds of megabytes
  when formatted using the Debug-trait in this way.
 
  An example:
@@ -684,6 +694,21 @@ Rules for using the #\[savefile_versions] attribute:
  which can traverse the tree downward or upward. In the example in the previous chapter,
  SelectNth is used to select the 2nd children at the 0th level in the tree.
 
+
+# Troubleshooting
+
+## The compiler complains that it cannot find item 'deserialize' on a type
+
+Maybe you get an error like:
+
+```the function or associated item `deserialize` exists for struct `Vec<T>`, but its trait bounds were not satisfied```
+
+First, check that you've derived 'Savefile' for the type in question. If you've implemented the Savefile traits
+manually, check that you've implemented both ```[crate::prelude::Deserialize]``` and ```[crate::prelude::ReprC]```.
+Without ReprC, vectors cannot be deserialized, since savefile can't determine if they are safe to serialize
+through simple copying of bytes.
+
+
 */
 
 /// The prelude contains all definitions thought to be needed by typical users of the library
@@ -732,6 +757,7 @@ extern crate bit_set;
 
 #[cfg(feature="rustc-hash")]
 extern crate rustc_hash;
+extern crate core;
 
 
 /// This object represents an error in deserializing or serializing
@@ -953,7 +979,7 @@ pub trait ReprC {
     ///
     /// # SAFETY
     /// The returned value must not be used, except by the Savefile-framework.
-    /// It must be be forwarded somewhere else.
+    /// It must *not* be be forwarded anywhere else.
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC { IsReprC::no()}
 }
 
@@ -992,6 +1018,7 @@ impl Serialize for PathBuf {
         as_string.serialize(serializer)
     }
 }
+impl ReprC for PathBuf {}
 impl Deserialize for PathBuf {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(PathBuf::from(String::deserialize(deserializer)?))
@@ -1012,6 +1039,8 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
         T::schema(version)
     }
 }
+impl<'a, T: 'a + ToOwned +?Sized> ReprC for Cow<'a, T> {}
+
 impl<'a, T: 'a + Serialize + ToOwned + ?Sized> Serialize for Cow<'a, T> {
     fn serialize<'b>(&self, serializer: &mut Serializer<'b>) -> Result<(), SavefileError> {
         (**self).serialize(serializer)
@@ -2465,6 +2494,7 @@ impl Serialize for Field {
         self.value.serialize(serializer)
     }
 }
+impl ReprC for Field {}
 impl Deserialize for Field {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Field {
@@ -2490,6 +2520,7 @@ impl Serialize for Variant {
     }
 }
 
+impl ReprC for Variant {}
 impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         Ok(Variant {
@@ -2516,6 +2547,7 @@ impl Serialize for SchemaArray {
         Ok(())
     }
 }
+impl ReprC for SchemaArray {}
 impl Deserialize for SchemaArray {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let count = deserializer.read_usize()?;
@@ -2544,6 +2576,7 @@ impl Serialize for SchemaStruct {
         Ok(())
     }
 }
+impl ReprC for SchemaStruct {}
 impl Deserialize for SchemaStruct {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
@@ -2589,6 +2622,7 @@ impl Serialize for SchemaPrimitive {
         serializer.write_u8(discr)
     }
 }
+impl ReprC for SchemaPrimitive {}
 impl Deserialize for SchemaPrimitive {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let var = match deserializer.read_u8()? {
@@ -2634,6 +2668,7 @@ impl Serialize for SchemaEnum {
         Ok(())
     }
 }
+impl ReprC for SchemaEnum {}
 impl Deserialize for SchemaEnum {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
@@ -2691,6 +2726,7 @@ impl Serialize for Schema {
     }
 }
 
+impl ReprC for Schema {}
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let schema = match deserializer.read_u8()? {
@@ -2734,6 +2770,8 @@ impl Serialize for String {
         serializer.write_string(self)
     }
 }
+
+impl ReprC for String {}
 
 impl Deserialize for String {
     fn deserialize(deserializer: &mut Deserializer) -> Result<String, SavefileError> {
@@ -2812,7 +2850,7 @@ impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
         T::schema(version)
     }
 }
-
+impl<T> ReprC for std::sync::Mutex<T> {}
 impl<T: Serialize> Serialize for std::sync::Mutex<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let data = self.lock()?;
@@ -2832,6 +2870,9 @@ impl<T: WithSchema> WithSchema for Mutex<T> {
         T::schema(version)
     }
 }
+
+#[cfg(feature="parking_lot")]
+impl<T> ReprC for Mutex<T> {}
 
 #[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for Mutex<T> {
@@ -2935,6 +2976,9 @@ impl<T: WithSchema> WithSchema for RwLock<T> {
         T::schema(version)
     }
 }
+
+#[cfg(feature="parking_lot")]
+impl<T> ReprC for RwLock<T> {}
 
 #[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for RwLock<T> {
@@ -3101,6 +3145,7 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
         })))
     }
 }
+impl<K, V> ReprC for BTreeMap<K, V> {}
 impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
@@ -3141,7 +3186,7 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
 
 
 
-
+impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K,S> {}
 impl<K:WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K,S> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(K::schema(version)))
@@ -3184,7 +3229,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
         })))
     }
 }
-
+impl<K:Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
@@ -3310,6 +3355,9 @@ where
     }
 }
 #[cfg(feature="indexmap")]
+impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for IndexMap<K, V, S> {}
+
+#[cfg(feature="indexmap")]
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
@@ -3351,6 +3399,9 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
         self.len()
     }
 }
+
+#[cfg(feature="indexmap")]
+impl<K:Eq + Hash, S: ::std::hash::BuildHasher> ReprC for IndexSet<K, S> {}
 
 #[cfg(feature="indexmap")]
 impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
@@ -3428,6 +3479,11 @@ impl<T: Introspect> Introspect for Removed<T> {
         None
     }
 }
+impl<T> ReprC for Removed<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        IsReprC::yes()
+    }
+}
 impl<T: WithSchema> Serialize for Removed<T> {
     fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
@@ -3456,7 +3512,11 @@ impl<T> WithSchema for std::marker::PhantomData<T> {
         Schema::ZeroSize
     }
 }
-
+impl<T> ReprC for std::marker::PhantomData<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        IsReprC::yes()
+    }
+}
 impl<T> Serialize for std::marker::PhantomData<T> {
     fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
         Ok(())
@@ -3509,7 +3569,7 @@ impl<T: WithSchema> WithSchema for Option<T> {
         Schema::SchemaOption(Box::new(T::schema(version)))
     }
 }
-
+impl<T> ReprC for Option<T> { } //Sadly, Option does not allow the #"reprC"-optimization
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         match self {
@@ -3594,6 +3654,9 @@ impl Serialize for bit_vec::BitVec<u32> {
 }
 
 #[cfg(feature="bit-vec")]
+impl ReprC for bit_vec::BitVec<u32> {}
+
+#[cfg(feature="bit-vec")]
 impl Deserialize for bit_vec::BitVec<u32> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
 
@@ -3667,6 +3730,9 @@ impl Introspect for bit_set::BitSet {
 }
 
 #[cfg(feature="bit-set")]
+impl ReprC for bit_set::BitSet<u32> {}
+
+#[cfg(feature="bit-set")]
 impl Serialize for bit_set::BitSet<u32> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         let bitset = self.get_ref();
@@ -3702,6 +3768,7 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
     }
 }
 
+impl<T> ReprC for BinaryHeap<T> {}
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
@@ -3759,6 +3826,8 @@ where
         Schema::Vector(Box::new(T::Item::schema(version)))
     }
 }
+#[cfg(feature="smallvec")]
+impl<T: smallvec::Array> ReprC for smallvec::SmallVec<T>{}
 
 #[cfg(feature="smallvec")]
 impl<T: smallvec::Array> Serialize for smallvec::SmallVec<T>
@@ -3841,6 +3910,9 @@ impl Serialize for Arc<str> {
         serializer.write_string(&*self)
     }
 }
+
+impl ReprC for Arc<str> {}
+
 impl Deserialize for Arc<str> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         let s = deserializer.read_string()?;
@@ -3880,8 +3952,6 @@ impl<T: Deserialize+ReprC> Deserialize for Arc<[T]> {
 }
 
 impl<T> ReprC for Vec<T> {}
-
-impl ReprC for String {}
 
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version: u32) -> Schema {
@@ -4003,6 +4073,7 @@ impl<T: WithSchema> WithSchema for VecDeque<T> {
     }
 }
 
+impl<T> ReprC for VecDeque<T> {}
 impl<T: Serialize> Serialize for VecDeque<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vecdeque::<T>(self, serializer)
@@ -4038,87 +4109,87 @@ fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer)
 
 impl ReprC for bool {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 } //It isn't really guaranteed that bool is an u8 or i8 where false = 0 and true = 1. But it's true in practice. And the breakage would be hard to measure if this were ever changed, so a change is unlikely.
 impl ReprC for u8 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for i8 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for u16 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for i16 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for u32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for i32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for u64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for u128 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for i128 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for i64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for char {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for f32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for f64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for usize {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for isize {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 impl ReprC for () {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
+        IsReprC::yes()
     }
 }
 
@@ -4147,7 +4218,11 @@ impl<T: Introspect, const N: usize> Introspect for [T; N] {
 }
 
 
-
+impl<T: ReprC, const N: usize> ReprC for [T; N] {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        T::repr_c_optimization_safe(version)
+    }
+}
 impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
@@ -4170,7 +4245,7 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
         if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
-                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html, see chapter 'Initializing an array element-by-element'
             };
             for idx in 0..N {
                 data[idx] = MaybeUninit::new(T::deserialize(deserializer)?); //This leaks on panic, but we shouldn't panic and at least it isn't UB!
@@ -4181,7 +4256,7 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
             Ok(res)
         } else {
             let mut data: [MaybeUninit<T>; N] = unsafe {
-                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html
+                MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html, see chapter 'Initializing an array element-by-element'
             };
 
             {
@@ -4199,6 +4274,7 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
     }
 }
 
+impl<T1> ReprC for Range<T1> {}
 impl<T1: WithSchema> WithSchema for Range<T1> {
     fn schema(version: u32) -> Schema {
         Schema::new_tuple2::<T1, T1>(version)
@@ -4231,6 +4307,11 @@ impl<T1: Introspect> Introspect for Range<T1> {
         return None;
     }
 }
+
+impl<T1> ReprC for (T1,) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
+impl<T1, T2> ReprC for (T1, T2) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
+impl<T1, T2, T3> ReprC for (T1, T2, T3) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
+impl<T1, T2, T3, T4> ReprC for (T1, T2, T3, T4) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
 
 impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3) {
     fn schema(version: u32) -> Schema {
@@ -4286,6 +4367,10 @@ impl<T1: Deserialize> Deserialize for (T1,) {
         Ok((T1::deserialize(deserializer)?,))
     }
 }
+
+
+#[cfg(feature="arrayvec")]
+impl<const C:usize> ReprC for arrayvec::ArrayString<C> {}
 
 
 #[cfg(feature="arrayvec")]
@@ -4355,6 +4440,10 @@ impl<V: Introspect + 'static, const C: usize> Introspect for arrayvec::ArrayVec<
 }
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
+impl<V, const C: usize> ReprC for arrayvec::ArrayVec<V,C> {}
+
+
+#[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
     default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
@@ -4368,14 +4457,8 @@ impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
     }
 }
 
-impl<const C:usize> ReprC for arrayvec::ArrayString<C> {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        unsafe{IsReprC::yes()}
-    }
-}
-
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Serialize + ReprC+Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
+impl<V: Serialize + ReprC + Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         unsafe {
             if V::repr_c_optimization_safe(serializer.version).is_false() {
@@ -4446,6 +4529,7 @@ impl<T: WithSchema> WithSchema for Box<T> {
         T::schema(version)
     }
 }
+impl<T> ReprC for Box<T> {}
 impl<T: Serialize> Serialize for Box<T> {
     fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
@@ -4459,6 +4543,7 @@ impl<T: Deserialize> Deserialize for Box<T> {
 
 use std::rc::Rc;
 
+impl<T> ReprC for Rc<T> {}
 impl<T: WithSchema> WithSchema for Rc<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
@@ -4475,6 +4560,7 @@ impl<T: Deserialize> Deserialize for Rc<T> {
     }
 }
 
+impl<T> ReprC for Arc<T> {}
 impl<T: WithSchema> WithSchema for Arc<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
@@ -4506,6 +4592,7 @@ use arrayvec::ArrayString;
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
+impl<T> ReprC for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
@@ -4522,6 +4609,11 @@ impl<T: Deserialize> Deserialize for RefCell<T> {
     }
 }
 
+impl<T: ReprC> ReprC for Cell<T> {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        T::repr_c_optimization_safe(version)
+    }
+}
 impl<T: WithSchema> WithSchema for Cell<T> {
     fn schema(version: u32) -> Schema {
         T::schema(version)
@@ -4549,6 +4641,7 @@ impl Serialize for () {
         Ok(())
     }
 }
+
 impl Introspect for () {
     fn introspect_value(&self) -> String {
         "()".to_string()
@@ -5289,6 +5382,18 @@ impl Deserialize for AtomicIsize {
     }
 }
 
+impl ReprC for AtomicBool{}
+impl ReprC for AtomicI8{}
+impl ReprC for AtomicU8{}
+impl ReprC for AtomicI16{}
+impl ReprC for AtomicU16{}
+impl ReprC for AtomicI32{}
+impl ReprC for AtomicU32{}
+impl ReprC for AtomicI64{}
+impl ReprC for AtomicU64{}
+impl ReprC for AtomicIsize{}
+impl ReprC for AtomicUsize{}
+
 /// Useful zero-sized marker. It serializes to a magic value,
 /// and verifies this value on deserialization. Does not consume memory
 /// data structure. Useful to troubleshoot broken Serialize/Deserialize implementations.
@@ -5330,7 +5435,7 @@ impl Serialize for Canary1 {
         serializer.write_u32(0x47566843)
     }
 }
-
+impl ReprC for Canary1 {}
 impl WithSchema for Canary1 {
     fn schema(_version: u32) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)
