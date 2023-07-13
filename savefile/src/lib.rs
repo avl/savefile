@@ -64,6 +64,29 @@ fn main() {
 
 ```
 
+# Limitations of Savefile
+
+Savefile does make a few tradeoffs:
+
+1: It only supports the "savefile-format". It does not support any sort of pluggable
+architecture with different formats. This format is generally pretty 'raw', data is mostly
+formatted the same way as it is in RAM. There is support for bzip2, but this is just a simple
+post-processing step.
+
+2: It does not support serializing 'graphs'. I.e, it does not have a concept of object identity,
+and cannot handle situations where the same object is reachable through many paths. If two
+objects both have a reference to a common object, it will be serialized twice and deserialized
+twice.
+
+3: Since it doesn't support 'graphs', it doesn't do well with recursive data structures. When
+schema serialization is activated (which is the default), it also doesn't support 'potentially
+recursive' data structures. I.e, serializing a tree-object where the same node type can occur
+on different levels is not possible, even if the actual links in the tree do not cause any cycles.
+This is because the serialized schema is very detailed, and tries to describe exactly what
+types may be contained in each node. In a tree, it will determine that children of the node
+may be another node, which may itself have children of the same type, which may have children
+of the same type, and so on.
+
 # Handling old versions
 
 Let's expand the above example, by creating a 2nd version of the Player struct. Let's say

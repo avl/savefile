@@ -375,7 +375,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Serialize});
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Serialize + _savefile::prelude::ReprC});
 
 
     let uses = quote_spanned! { defspan =>
@@ -744,7 +744,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize});
+    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize + _savefile::prelude::ReprC});
 
     let deserialize = quote_spanned! {defspan=>
         _savefile::prelude::Deserialize
