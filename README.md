@@ -15,8 +15,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile="0.13"
-savefile-derive="0.13"
+savefile = "0.14"
+savefile-derive = "0.14"
 ````
 
 # Sample 
@@ -62,8 +62,6 @@ fn main() {
 
 
 # Changelog
-## 0.14.1 Very minor fix to this readme
-The example in the 0.14 update note was wrong (search-and-replace error).
 
 ## 0.14 Major changes to ReprC-system
 
@@ -143,6 +141,9 @@ Beginning with 0.13, savefile works the same way.
 In the future, it could be possible to make the type requirements even more clever,
 only requiring that types which are actually used during serialization support the
 savefile-traits. 
+
+Versions 0.14 and 0.14.1 contained minor errors in the Readme. This is fixed in 0.14.2, 
+it is otherwise the same.
 
 
 ## 0.12 Support for char
@@ -244,7 +245,7 @@ These features are not active by default, so be sure to enable them in
 Cargo.toml like this, if you want to use them:
 
 ```
-savefile = { version = "0.13", features = ["ring","bzip2"] }
+savefile = { version = "0.14", features = ["ring","bzip2"] }
 ```
 
 Arguably, savefile should never have included this support, since it is something
