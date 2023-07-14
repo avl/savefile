@@ -405,13 +405,15 @@ Rules for using the #\[savefile_versions] attribute:
  Answering yes for a specific type T, causes savefile to optimize serialization of Vec<T> into being
  a very fast, raw memory copy.
 
- This is dangerous. You, as implementor of the `ReprC` trait () (or supplier of attribute
- ```[savefile_unsafe_and_fast]``` to derive-macro) take full responsibility
- that all the following rules are upheld:
+ Most of the time, the user doesn't need to implement ReprC, as it can be derived automatically
+ by the savefile derive macro.
 
- The type T is Copy
- The host platform is little endian. The savefile disk format uses little endian.
- The type is represented in memory in an ordered, packed representation. Savefile is not
+ However, implementing it manually can be done, but requires care. You, as implementor of the `ReprC`
+ trait ()  take full responsibility that all the following rules are upheld:
+
+ * The type T is Copy
+ * The host platform is little endian. The savefile disk format uses little endian.
+ * The type is represented in memory in an ordered, packed representation. Savefile is not
  clever enough to inspect the actual memory layout and adapt to this, so the memory representation
  has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
  that the #\[repr(C)] attribute is not enough to do this - it will include padding if needed for alignment
@@ -459,11 +461,11 @@ Rules for using the #\[savefile_versions] attribute:
  detected in release builds. Serializing or deserializing each optimized type at least once somewhere in your test suite
  is recommended.
 
- When deriving the savefile-traits automatically, specify the attribute ```#[savefile_unsafe_and_fast]``` to opt-in to
- the optimized behaviour. Note that this is _unsafe_ . It is up to you as a developer to ensure that the rules
- described above are followed. It may be prudent to only use ```#[savefile_unsafe_and_fast]``` when performance
- measurements demonstrate that there is a pressing need. However, performance can be 10x faster when using
-```#[savefile_unsafe_and_fast]```.
+ When deriving the savefile-traits automatically, specify the attribute ```#[savefile_unsafe_and_fast]``` to require
+ the optimized behaviour. If the type doesn't fulfill the required characteristics, a diagnostic will be printed in
+ many situations. Using 'savefile_unsafe_and_fast' is not actually unsafe, althought it used to be in an old version.
+ Since the speedups it produces are now produced regardless, it is mostly recommended to not use savefile_unsafe_and_fast
+ anymore.
 
  ```
  extern crate savefile;
@@ -474,7 +476,6 @@ Rules for using the #\[savefile_versions] attribute:
 
  #[derive(Clone, Copy, Savefile)]
  #[repr(C)]
- #[savefile_unsafe_and_fast]
  struct Position {
      x : u32,
      y : u32,

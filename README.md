@@ -67,6 +67,22 @@ fn main() {
 
 Automatic activation of #[savefile_unsafe_and_fast] for types which can support it.
 
+It had always been a bit sad that Savefile didn't perform as fast as it could have
+on stable rust. With 0.14, this restriction is mostly lifted.
+
+However, getting the speed boost still required unsafe code. 
+
+With 0.15, unsafe code is no longer required to get a speed boost. In fact,
+in many situations, nothing special at all needs to be done.
+
+Savefile now contains code to automatically check if a struct has a packed
+representation, and if it does, it automatically behaves just the same as with
+the manual opt-in we hade before. The difference is that the derived serializers
+now automatically determine if the type actually fulfills the requirements needed.
+
+Note! It might in some situations be necessary to use `#[repr(C)]` to get the speedup.
+
+
 ## 0.14.3 Bugfixes to 0.14 release
 
 The 0.14 release contained some bugs. It was actually impossible to serialize
@@ -124,6 +140,10 @@ to the unsafe but performant optimization.
 I don't know of a way to require 'unsafe' keyword to a derive macro, so we use a deliberately
 eye-catching non-conforming name ```#[savefile_unsafe_and_fast]``` to signal danger.
 
+Update: With 0.15, savefile_unsafe_and_fast is mostly not needed. Using it, however,
+means we give an error if fast operation was not possible, except if the problem
+is due to mis-alignment or padding. Savefile still operates correctly in that case,
+it just goes slower.
 
 ## 0.13 Support generic structs without Savefile type-constraints
 
