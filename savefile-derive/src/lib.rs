@@ -1030,7 +1030,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
 }
 
 fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
-    use quote::ToTokens;
+
     let mut size_u32: Option<u32> = None;
     for attr in attrs.iter() {
         if let Ok(ref meta) = attr.parse_meta() {
@@ -1044,17 +1044,18 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
                             let size_str: String = match *x {
                                 syn::NestedMeta::Meta(ref inner_x) => match inner_x {
                                     &syn::Meta::NameValue(ref _x) => {
-                                        panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
+                                        continue;
                                     }
                                     &syn::Meta::Path(ref path) => path_to_string(&path),
                                     &syn::Meta::List(ref _metalist) => {
-                                        panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
+                                        continue;
                                     }
                                 },
                                 syn::NestedMeta::Lit(ref lit) => match lit {
                                     &syn::Lit::Str(ref litstr) => litstr.value(),
                                     _ => {
-                                        panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
+                                        continue;
+                                        //panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
                                     }
                                 },
                             };
