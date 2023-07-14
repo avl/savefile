@@ -3969,6 +3969,7 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
         }
     }
 }
+impl<T: ReprC> ReprC for Arc<[T]> { }
 
 impl<T: Deserialize+ReprC> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
