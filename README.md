@@ -63,6 +63,10 @@ fn main() {
 
 # Changelog
 
+## 0.15
+
+Automatic activation of #[savefile_unsafe_and_fast] for types which can support it.
+
 ## 0.14.3 Bugfixes to 0.14 release
 
 The 0.14 release contained some bugs. It was actually impossible to serialize

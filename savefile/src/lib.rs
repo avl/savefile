@@ -782,6 +782,8 @@ extern crate bit_set;
 extern crate rustc_hash;
 extern crate core;
 
+extern crate memoffset;
+
 
 /// This object represents an error in deserializing or serializing
 /// an item.

@@ -923,7 +923,7 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
 }
 
 #[allow(non_snake_case)]
-fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: syn::Ident) -> TokenStream {
+fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: syn::Ident, expect_fast: bool) -> TokenStream {
     let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::ReprC});
@@ -936,8 +936,11 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let isreprc = quote_spanned! {defspan=>
         _savefile::prelude::IsReprC
     };
+    let spanof = quote_spanned! {defspan=>
+        _savefile::prelude::span_of
+    };
     let local_file_version = quote_spanned! { defspan => local_file_version};
-    let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema};
+    //let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema};
     let mut min_safe_version = 0;
     let mut optsafe_outputs = Vec::new();
     let uses = quote_spanned! { defspan =>
@@ -946,10 +949,34 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let magic = format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();
     let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
 
+    for field in field_infos.windows(2) {
+        let field_name1 = field[0].ident.as_ref().expect("Field was expected to have a name");
+        let field_name2 = field[1].ident.as_ref().expect("Field was expected to have a name");
+        optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
+
+    }
+    if field_infos.len() > 0 {
+        if field_infos.len() == 1 {
+            optsafe_outputs.push(quote_spanned!( span => (#spanof!( #name #ty_generics, ..).start == 0 )));
+            optsafe_outputs.push(quote_spanned!( span => (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
+
+        } else {
+            let first = field_infos.first().unwrap().ident.as_ref().unwrap();
+            let last = field_infos.last().unwrap().ident.as_ref().unwrap();
+            optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics, #first).start == 0 )));
+            optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
+        }
+
+    }
+
     for ref field in &field_infos {
         let verinfo = parse_attr_tag(&field.attrs);
         if verinfo.ignore {
-            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for structures containing ignored fields");
+            if expect_fast{
+                panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for structures containing ignored fields");
+            } else {
+                return implement_reprc_hardcoded_false(name, generics);
+            }
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
@@ -957,7 +984,11 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
             if removed {
-                panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
+                if expect_fast {
+                    panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
+                } else {
+                    return implement_reprc_hardcoded_false(name, generics);
+                }
             }
             optsafe_outputs
                 .push(quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()));
@@ -986,16 +1017,6 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
             impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                 #[allow(unused_comparisons,unused_variables, unused_variables)]
                 unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
-                    // The following is a debug_assert because it is slightly expensive, and the entire
-                    // point of the ReprC trait is to speed things up.
-                    if cfg!(debug_assertions) {
-                        if Some(std::mem::size_of::<#name>()) != <#name as #WithSchema>::schema(file_version).serialized_size() {
-                            panic!("Size mismatch for struct {}. In memory size: {}, schema size: {:?}. Maybe use repr(C)?",
-                                stringify!(#name),
-                                std::mem::size_of::<#name>(),
-                                <#name as #WithSchema>::schema(file_version).serialized_size());
-                        }
-                    }
                     let local_file_version = file_version;
                     if file_version >= #min_safe_version #( && #optsafe_outputs)* {
                         unsafe { #isreprc::yes() }
@@ -1075,7 +1096,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let name = input.ident;
 
-    let mut hardcode_false = true;
+    let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
         match attr.parse_meta() {
             Ok(ref meta) => {
@@ -1083,7 +1104,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     &syn::Meta::Path(ref x) => {
                         let x = path_to_string(x);
                         if x == "savefile_unsafe_and_fast" {
-                            hardcode_false = false;
+                            opt_in_fast = true;
                         }
                     }
                     _ => {}
@@ -1093,16 +1114,19 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
         }
     }
 
-    if hardcode_false {
+    /*if !opt_in_fast {
         return implement_reprc_hardcoded_false(name, input.generics);
-    }
+    }*/
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let enum_size = get_enum_size(&input.attrs);
             if let Some(enum_size) = enum_size {
                 if enum_size != 1 {
-                    panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 255 variants. Sorry.");
+                    if opt_in_fast {
+                        panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 255 variants. Sorry.");
+                    }
+                    return implement_reprc_hardcoded_false(name, input.generics);
                 }
             }
 
@@ -1110,19 +1134,29 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
                     &syn::Fields::Named(ref _fields_named) => {
-                        panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                        if opt_in_fast {
+                            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                        }
+                        return implement_reprc_hardcoded_false(name, input.generics);
                     }
                     &syn::Fields::Unnamed(ref _fields_unnamed) => {
-                        panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                        if opt_in_fast {
+                            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                        }
+                        return implement_reprc_hardcoded_false(name, input.generics);
+
                     }
                     &syn::Fields::Unit => {
                         if enum_size.is_none() {
-                            panic!("Enums which use the #[savefile_unsafe_and_fast] attribute must specify the enum size using the repr-attribute, like #[repr(u8)].");
+                            if opt_in_fast {
+                                panic!("Enums which use the #[savefile_unsafe_and_fast] attribute must specify the enum size using the repr-attribute, like #[repr(u8)].");
+                            }
+                            return implement_reprc_hardcoded_false(name, input.generics);
                         }
                     }
                 }
             }
-            implement_reprc(field_infos, input.generics, name)
+            implement_reprc(field_infos, input.generics, name,opt_in_fast)
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
@@ -1136,9 +1170,10 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc(field_infos, input.generics, name)
+                implement_reprc(field_infos, input.generics, name,opt_in_fast)
             }
             &syn::Fields::Unnamed(ref fields_unnamed) => {
+
                 let field_infos: Vec<FieldInfo> = fields_unnamed
                     .unnamed
                     .iter()
@@ -1153,12 +1188,23 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc(field_infos, input.generics, name)
+                if field_infos.len() == 1 {
+                    implement_reprc(field_infos, input.generics, name,opt_in_fast)
+                } else {
+                    if opt_in_fast {
+                        panic!("Enums with unnamed fields don't support #[savefile_unsafe_and_fast] attribute.");
+                    }
+                    return implement_reprc_hardcoded_false(name, input.generics);
+                }
             }
-            &syn::Fields::Unit => implement_reprc(Vec::new(), input.generics, name),
+            &syn::Fields::Unit =>
+                implement_reprc(Vec::new(), input.generics, name,opt_in_fast),
         },
         _ => {
-            panic!("Unsupported data type");
+            if opt_in_fast {
+                panic!("Unsupported data type");
+            }
+            return implement_reprc_hardcoded_false(name, input.generics);
         }
     };
 

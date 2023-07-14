@@ -5,5 +5,7 @@ pub use {
     super::SchemaPrimitive, super::SchemaStruct, super::Serialize, super::Serializer, super::Variant, super::WithSchema, super::IsReprC
 };
 
+pub use memoffset::span_of;
+
 #[cfg(feature="ring")]
 pub use super::{CryptoReader, CryptoWriter, save_encrypted_file, load_encrypted_file};
