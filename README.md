@@ -65,7 +65,8 @@ fn main() {
 
 ## 0.15
 
-Automatic activation of #[savefile_unsafe_and_fast] for types which can support it.
+Automatic activation of #[savefile_unsafe_and_fast]-optimization for types which can
+safely support it.
 
 It had always been a bit sad that Savefile didn't perform as fast as it could have
 on stable rust. With 0.14, this restriction is mostly lifted.
