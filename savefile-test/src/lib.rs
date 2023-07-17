@@ -1332,3 +1332,17 @@ pub fn test_unit_struct() {
     assert_roundtrip(h);
 }
 
+#[test]
+pub fn test_zero_size_vec_items() {
+    let mut test = Vec::new();
+    assert_roundtrip(test.clone());
+    test.push(());
+    assert_roundtrip(test.clone());
+    test.push(());
+    test.push(());
+    test.push(());
+    test.push(());
+    test.push(());
+    assert_roundtrip(test);
+}
+

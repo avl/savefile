@@ -553,12 +553,12 @@ Rules for using the #\[savefile_versions] attribute:
  impl ReprC for MyPathBuf {
  }
  impl Serialize for MyPathBuf {
-     fn serialize<'a>(&self, serializer: &mut Serializer<'a>) -> Result<(), SavefileError> {
+     fn serialize<'a>(&self, serializer: &mut Serializer<impl std::io::Write>) -> Result<(), SavefileError> {
          self.path.serialize(serializer)
      }
  }
  impl Deserialize for MyPathBuf {
-     fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+     fn deserialize(deserializer: &mut Deserializer<impl std::io::Read>) -> Result<Self, SavefileError> {
          Ok(MyPathBuf { path : String::deserialize(deserializer)? } )
      }
  }
@@ -900,8 +900,10 @@ impl std::error::Error for SavefileError {
 /// Object to which serialized data is to be written.
 /// This is basically just a wrapped `std::io::Write` object
 /// and a file protocol version number.
-pub struct Serializer<'a> {
-    writer: &'a mut dyn Write,
+/// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
+/// It now requires a type parameter with the type of writer to operate on.
+pub struct Serializer<'a, W:Write> {
+    writer: &'a mut W,
     /// The version of the data structures in memory which are being serialized.
     pub version: u32,
 }
@@ -910,8 +912,8 @@ pub struct Serializer<'a> {
 /// This is basically just a wrapped `std::io::Read` object,
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
-pub struct Deserializer<'a> {
-    reader: &'a mut dyn Read,
+pub struct Deserializer<'a, R: Read> {
+    reader: &'a mut R,
     /// The version of the input file
     pub file_version: u32,
     /// The version of the data structures in memory
@@ -921,7 +923,7 @@ pub struct Deserializer<'a> {
     ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
-impl<'a> Deserializer<'a> {
+impl<'a, TR: Read> Deserializer<'a, TR> {
     /// This function constructs a temporary state object of type R, and returns a mutable
     /// reference to it. This object can be used to store data that needs to live for the entire
     /// deserialization session. An example is de-duplicating Arc and other reference counted objects.
@@ -944,6 +946,14 @@ impl<'a> Deserializer<'a> {
 #[derive(Default, Debug)]
 pub struct IsReprC(bool);
 
+impl std::ops::BitAnd<IsReprC> for IsReprC {
+    type Output = IsReprC;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        IsReprC(self.0 && rhs.0)
+    }
+}
+
 impl IsReprC {
     /// # SAFETY:
     /// Must only ever be created and immediately returned from
@@ -963,13 +973,13 @@ impl IsReprC {
     }
 
 
-    /// Optimization not allowed
+    /// "ReprC"-Optimization not allowed.
     #[inline(always)]
     pub fn is_false(self) -> bool {
         !self.0
     }
 
-    /// Optimization not allowed. Beware
+    /// "ReprC"-Optimization allowed. Beware.
     #[inline(always)]
     pub fn is_yes(self) -> bool {
         self.0
@@ -1039,14 +1049,14 @@ impl WithSchema for PathBuf {
     }
 }
 impl Serialize for PathBuf {
-    fn serialize<'a>(&self, serializer: &mut Serializer<'a>) -> Result<(), SavefileError> {
+    fn serialize<'a>(&self, serializer: &mut Serializer<'a,impl Write>) -> Result<(), SavefileError> {
         let as_string: String = self.to_string_lossy().to_string();
         as_string.serialize(serializer)
     }
 }
 impl ReprC for PathBuf {}
 impl Deserialize for PathBuf {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(PathBuf::from(String::deserialize(deserializer)?))
     }
 }
@@ -1068,7 +1078,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
 impl<'a, T: 'a + ToOwned +?Sized> ReprC for Cow<'a, T> {}
 
 impl<'a, T: 'a + Serialize + ToOwned + ?Sized> Serialize for Cow<'a, T> {
-    fn serialize<'b>(&self, serializer: &mut Serializer<'b>) -> Result<(), SavefileError> {
+    fn serialize<'b>(&self, serializer: &mut Serializer<'b, impl Write>) -> Result<(), SavefileError> {
         (**self).serialize(serializer)
     }
 }
@@ -1076,7 +1086,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> Deserialize for Cow<'a, T>
 where
     T::Owned: Deserialize,
 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Cow::Owned(<T as ToOwned>::Owned::deserialize(deserializer)?))
     }
 }
@@ -1378,7 +1388,7 @@ mod crypto {
         let mut f = File::create(filepath)?;
         let mut writer = CryptoWriter::new(&mut f, key)?;
 
-        Serializer::save::<T>(&mut writer, version, data, true)?;
+        Serializer::<CryptoWriter>::save::<T>(&mut writer, version, data, true)?;
         writer.flush()?;
         Ok(())
     }
@@ -1399,88 +1409,106 @@ mod crypto {
 
         let mut f = File::open(filepath)?;
         let mut reader = CryptoReader::new(&mut f, key).unwrap();
-        Deserializer::load::<T>(&mut reader, version)
+        Deserializer::<CryptoReader>::load::<T>(&mut reader, version)
     }
 }
 #[cfg(feature="ring")]
 pub use crypto::{CryptoReader,CryptoWriter, save_encrypted_file, load_encrypted_file};
 
-impl<'a> Serializer<'a> {
+impl<'a, W:Write+'a> Serializer<'a, W> {
     /// Writes a binary bool to the dyn Write
+    #[inline(always)]
     pub fn write_bool(&mut self, v: bool) -> Result<(), SavefileError> {
         Ok(self.writer.write_u8(if v { 1 } else { 0 })?)
     }
     /// Writes a binary u8 to the dyn Write
+    #[inline(always)]
     pub fn write_u8(&mut self, v: u8) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(&[v])?)
     }
     /// Writes a binary i8 to the dyn Write
+    #[inline(always)]
     pub fn write_i8(&mut self, v: i8) -> Result<(), SavefileError> {
         Ok(self.writer.write_i8(v)?)
     }
 
     /// Writes a binary little endian u16 to the dyn Write
+    #[inline(always)]
     pub fn write_u16(&mut self, v: u16) -> Result<(), SavefileError> {
         Ok(self.writer.write_u16::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i16 to the dyn Write
+    #[inline(always)]
     pub fn write_i16(&mut self, v: i16) -> Result<(), SavefileError> {
         Ok(self.writer.write_i16::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian u32 to the dyn Write
+    #[inline(always)]
     pub fn write_u32(&mut self, v: u32) -> Result<(), SavefileError> {
         Ok(self.writer.write_u32::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i32 to the dyn Write
+    #[inline(always)]
     pub fn write_i32(&mut self, v: i32) -> Result<(), SavefileError> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian f32 to the dyn Write
+    #[inline(always)]
     pub fn write_f32(&mut self, v: f32) -> Result<(), SavefileError> {
         Ok(self.writer.write_f32::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian f64 to the dyn Write
+    #[inline(always)]
     pub fn write_f64(&mut self, v: f64) -> Result<(), SavefileError> {
         Ok(self.writer.write_f64::<LittleEndian>(v)?)
     }
 
     /// Writes a binary little endian u64 to the dyn Write
+    #[inline(always)]
     pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i64 to the dyn Write
+    #[inline(always)]
     pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian u128 to the dyn Write
+    #[inline(always)]
     pub fn write_u128(&mut self, v: u128) -> Result<(), SavefileError> {
         Ok(self.writer.write_u128::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian i128 to the dyn Write
+    #[inline(always)]
     pub fn write_i128(&mut self, v: i128) -> Result<(), SavefileError> {
         Ok(self.writer.write_i128::<LittleEndian>(v)?)
     }
     /// Writes a binary little endian usize as u64 to the dyn Write
+    #[inline(always)]
     pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
     }
     /// Writes a binary little endian isize as i64 to the dyn Write
+    #[inline(always)]
     pub fn write_isize(&mut self, v: isize) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
     }
     /// Writes a binary u8 array to the dyn Write
+    #[inline(always)]
     pub fn write_buf(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
     /// Writes as a string as 64 bit length + utf8 data
+    #[inline(always)]
     pub fn write_string(&mut self, v: &str) -> Result<(), SavefileError> {
         let asb = v.as_bytes();
         self.write_usize(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
     /// Writes a binary u8 array to the dyn Write. Synonym of write_buf.
+    #[inline(always)]
     pub fn write_bytes(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
@@ -1488,7 +1516,7 @@ impl<'a> Serializer<'a> {
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save] function instead.
     pub fn save<T: WithSchema + Serialize>(
-        writer: &mut dyn Write,
+        writer: &mut W,
         version: u32,
         data: &T,
         with_compression: bool,
@@ -1498,14 +1526,14 @@ impl<'a> Serializer<'a> {
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save_noschema] function instead.
     pub fn save_noschema<T: WithSchema + Serialize>(
-        writer: &mut dyn Write,
+        writer: &mut W,
         version: u32,
         data: &T,
     ) -> Result<(), SavefileError> {
         Ok(Self::save_impl(writer, version, data, false, false)?)
     }
     fn save_impl<T: WithSchema + Serialize>(
-        writer: &mut dyn Write,
+        writer: &mut W,
         version: u32,
         data: &T,
         with_schema: bool,
@@ -1521,15 +1549,23 @@ impl<'a> Serializer<'a> {
 
         {
 
-            #[cfg(feature="bzip2")]
-            let mut temp;
-            let writer: &mut dyn Write = if with_compression {
+            if with_compression {
                 writer.write_u8(1)?; //15 + 1 = 16
 
                 #[cfg(feature="bzip2")]
                     {
-                        temp = bzip2::write::BzEncoder::new(writer, Compression::best());
-                        &mut temp
+                        let mut compressed_writer = bzip2::write::BzEncoder::new(writer, Compression::best());
+                        if with_schema {
+                            let schema = T::schema(version);
+                            let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(&mut compressed_writer);
+                            schema.serialize(&mut schema_serializer)?;
+                        }
+
+                        let mut serializer = Serializer { writer: &mut compressed_writer, version };
+                        data.serialize(&mut serializer)?;
+                        compressed_writer.flush()?;
+                        return Ok(())
+
                     }
                 #[cfg(not(feature="bzip2"))]
                     {
@@ -1538,32 +1574,30 @@ impl<'a> Serializer<'a> {
 
             } else {
                 writer.write_u8(0)?;
-                writer
-            };
+                if with_schema {
+                    let schema = T::schema(version);
+                    let mut schema_serializer = Serializer::<W>::new_raw(writer);
+                    schema.serialize(&mut schema_serializer)?;
+                }
 
-            if with_schema {
-                let schema = T::schema(version);
-                let mut schema_serializer = Serializer::new_raw(writer);
-                schema.serialize(&mut schema_serializer)?;
+                let mut serializer = Serializer { writer, version };
+                data.serialize(&mut serializer)?;
+                writer.flush()?;
+                Ok(())
             }
-
-            let mut serializer = Serializer { writer, version };
-            data.serialize(&mut serializer)?;
-            writer.flush()?;
         }
 
-        Ok(())
     }
 
     /// Create a Serializer.
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
-    pub fn new_raw(writer: &mut dyn Write) -> Serializer {
+    pub fn new_raw(writer: &mut impl Write) -> Serializer<impl Write> {
         Serializer { writer, version: 0 }
     }
 }
 
-impl<'a> Deserializer<'a> {
+impl<'a, TR:Read> Deserializer<'a, TR> {
     /// Reads a u8 and return true if equal to 1
     pub fn read_bool(&mut self) -> Result<bool, SavefileError> {
         Ok(self.reader.read_u8()? == 1)
@@ -1668,18 +1702,18 @@ impl<'a> Deserializer<'a> {
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
-    pub fn load<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
-        Deserializer::load_impl::<T>(reader, version, true)
+    pub fn load<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
+        Deserializer::<_>::load_impl::<T>(reader, version, true)
     }
 
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load_noschema] function
     /// instead.
-    pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
-        Deserializer::load_impl::<T>(reader, version, false)
+    pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
+        Deserializer::<TR>::load_impl::<T>(reader, version, false)
     }
     fn load_impl<T: WithSchema + Deserialize>(
-        reader: &mut dyn Read,
+        reader: &mut TR,
         version: u32,
         fetch_schema: bool,
     ) -> Result<T, SavefileError> {
@@ -1706,49 +1740,66 @@ impl<'a> Deserializer<'a> {
         }
         let with_compression = reader.read_u8()? != 0;
 
-        #[cfg(feature="bzip2")]
-        let mut temp;
-        let reader: &mut dyn Read = if with_compression {
+        if with_compression {
             #[cfg(feature="bzip2")]
                 {
-                    temp = bzip2::read::BzDecoder::new(reader);
-                    &mut temp
+                    let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
+                    if fetch_schema {
+                        let mut schema_deserializer = Deserializer::<bzip2::read::BzDecoder<TR>>::new_raw(&mut compressed_reader);
+                        let memory_schema = T::schema(file_ver);
+                        let file_schema = Schema::deserialize(&mut schema_deserializer)?;
+
+                        if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
+                            return Err(SavefileError::IncompatibleSchema {
+                                message: format!(
+                                    "Saved schema differs from in-memory schema for version {}. Error: {}",
+                                    file_ver, err
+                                ),
+                            });
+                        }
+                    }
+                    let mut deserializer = Deserializer {
+                        reader: &mut compressed_reader,
+                        file_version: file_ver,
+                        memory_version: version,
+                        ephemeral_state: HashMap::new(),
+                    };
+                    Ok(T::deserialize(&mut deserializer)?)
                 }
             #[cfg(not(feature="bzip2"))]
                 {
                     return Err(SavefileError::CompressionSupportNotCompiledIn);
                 }
         } else {
-            reader
-        };
+            if fetch_schema {
+                let mut schema_deserializer = Deserializer::<TR>::new_raw(reader);
+                let memory_schema = T::schema(file_ver);
+                let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
-        if fetch_schema {
-            let mut schema_deserializer = Deserializer::new_raw(reader);
-            let memory_schema = T::schema(file_ver);
-            let file_schema = Schema::deserialize(&mut schema_deserializer)?;
-
-            if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
-                return Err(SavefileError::IncompatibleSchema {
-                    message: format!(
-                        "Saved schema differs from in-memory schema for version {}. Error: {}",
-                        file_ver, err
-                    ),
-                });
+                if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
+                    return Err(SavefileError::IncompatibleSchema {
+                        message: format!(
+                            "Saved schema differs from in-memory schema for version {}. Error: {}",
+                            file_ver, err
+                        ),
+                    });
+                }
             }
+            let mut deserializer = Deserializer {
+                reader,
+                file_version: file_ver,
+                memory_version: version,
+                ephemeral_state: HashMap::new(),
+            };
+            Ok(T::deserialize(&mut deserializer)?)
         }
-        let mut deserializer = Deserializer {
-            reader,
-            file_version: file_ver,
-            memory_version: version,
-            ephemeral_state: HashMap::new(),
-        };
-        Ok(T::deserialize(&mut deserializer)?)
+
     }
 
     /// Create a Deserializer.
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
-    pub fn new_raw(reader: &mut dyn Read) -> Deserializer {
+    pub fn new_raw(reader: &mut impl Read) -> Deserializer<impl Read> {
         Deserializer {
             reader,
             file_version: 0,
@@ -1762,8 +1813,8 @@ impl<'a> Deserializer<'a> {
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
-pub fn load<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
-    Deserializer::load::<T>(reader, version)
+pub fn load<T: WithSchema + Deserialize>(reader: &mut impl Read, version: u32) -> Result<T, SavefileError> {
+    Deserializer::<_>::load::<T>(reader, version)
 }
 
 /// Deserialize an instance of type T from the given u8 slice .
@@ -1777,7 +1828,7 @@ pub fn load_from_mem<T: WithSchema + Deserialize>(input: &[u8], version: u32) ->
 
 /// Write the given `data` to the `writer`.
 /// The current version of data must be `version`.
-pub fn save<T: WithSchema + Serialize>(writer: &mut dyn Write, version: u32, data: &T) -> Result<(), SavefileError> {
+pub fn save<T: WithSchema + Serialize>(writer: &mut impl Write, version: u32, data: &T) -> Result<(), SavefileError> {
     Serializer::save::<T>(writer, version, data, false)
 }
 
@@ -1787,7 +1838,7 @@ pub fn save<T: WithSchema + Serialize>(writer: &mut dyn Write, version: u32, dat
 /// active or not).
 /// Note, this function will fail if the bzip2-feature is not enabled.
 pub fn save_compressed<T: WithSchema + Serialize>(
-    writer: &mut dyn Write,
+    writer: &mut impl Write,
     version: u32,
     data: &T,
 ) -> Result<(), SavefileError> {
@@ -1804,8 +1855,8 @@ pub fn save_to_mem<T: WithSchema + Serialize>(version: u32, data: &T) -> Result<
 
 /// Like [crate::load] , but used to open files saved without schema,
 /// by one of the _noschema versions of the save functions.
-pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut dyn Read, version: u32) -> Result<T, SavefileError> {
-    Deserializer::load_noschema::<T>(reader, version)
+pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut impl Read, version: u32) -> Result<T, SavefileError> {
+    Deserializer::<_>::load_noschema::<T>(reader, version)
 }
 
 /// Write the given `data` to the `writer`.
@@ -1818,7 +1869,7 @@ pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut dyn Read, version
 /// Serialize or Deserialize traits will cause hard-to-troubleshoot
 /// data corruption instead of a nice error message.
 pub fn save_noschema<T: WithSchema + Serialize>(
-    writer: &mut dyn Write,
+    writer: &mut impl Write,
     version: u32,
     data: &T,
 ) -> Result<(), SavefileError> {
@@ -1882,7 +1933,9 @@ pub trait WithSchema {
 /// and the use #\[derive(Serialize)]
 pub trait Serialize: WithSchema {
     /// Serialize self into the given serializer.
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError>; //TODO: Do error handling
+    /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
+    /// It now requires a type parameter with the type of writer expected.
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError>; //TODO: Do error handling
 }
 
 /// A child of an object implementing Introspect. Is a key-value pair. The only reason this is not
@@ -1973,7 +2026,7 @@ pub trait Introspect {
 /// and the use #\[derive(Deserialize)]
 pub trait Deserialize: WithSchema + Sized {
     /// Deserialize and return an instance of Self from the given deserializer.
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError>; //TODO: Do error handling
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError>; //TODO: Do error handling
 }
 
 /// A field is serialized according to its value.
@@ -2515,14 +2568,14 @@ impl WithSchema for Field {
 }
 
 impl Serialize for Field {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
         self.value.serialize(serializer)
     }
 }
 impl ReprC for Field {}
 impl Deserialize for Field {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Field {
             name: deserializer.read_string()?,
             value: Box::new(Schema::deserialize(deserializer)?),
@@ -2535,7 +2588,7 @@ impl WithSchema for Variant {
     }
 }
 impl Serialize for Variant {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
         serializer.write_u8(self.discriminator)?;
         serializer.write_usize(self.fields.len())?;
@@ -2548,7 +2601,7 @@ impl Serialize for Variant {
 
 impl ReprC for Variant {}
 impl Deserialize for Variant {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Variant {
             name: deserializer.read_string()?,
             discriminator: deserializer.read_u8()?,
@@ -2567,7 +2620,7 @@ impl Deserialize for Variant {
     }
 }
 impl Serialize for SchemaArray {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.count)?;
         self.item_type.serialize(serializer)?;
         Ok(())
@@ -2575,7 +2628,7 @@ impl Serialize for SchemaArray {
 }
 impl ReprC for SchemaArray {}
 impl Deserialize for SchemaArray {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let count = deserializer.read_usize()?;
         let item_type = Box::new(Schema::deserialize(deserializer)?);
         Ok(SchemaArray { count, item_type })
@@ -2593,7 +2646,7 @@ impl WithSchema for SchemaStruct {
     }
 }
 impl Serialize for SchemaStruct {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.fields.len())?;
         for field in &self.fields {
@@ -2604,7 +2657,7 @@ impl Serialize for SchemaStruct {
 }
 impl ReprC for SchemaStruct {}
 impl Deserialize for SchemaStruct {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
@@ -2626,7 +2679,7 @@ impl WithSchema for SchemaPrimitive {
     }
 }
 impl Serialize for SchemaPrimitive {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let discr = match *self {
             SchemaPrimitive::schema_i8 => 1,
             SchemaPrimitive::schema_u8 => 2,
@@ -2650,7 +2703,7 @@ impl Serialize for SchemaPrimitive {
 }
 impl ReprC for SchemaPrimitive {}
 impl Deserialize for SchemaPrimitive {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let var = match deserializer.read_u8()? {
             1 => SchemaPrimitive::schema_i8,
             2 => SchemaPrimitive::schema_u8,
@@ -2685,7 +2738,7 @@ impl WithSchema for SchemaEnum {
 }
 
 impl Serialize for SchemaEnum {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.variants.len())?;
         for var in &self.variants {
@@ -2696,7 +2749,7 @@ impl Serialize for SchemaEnum {
 }
 impl ReprC for SchemaEnum {}
 impl Deserialize for SchemaEnum {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
         let l = deserializer.read_usize()?;
         let mut ret = Vec::new();
@@ -2716,7 +2769,7 @@ impl WithSchema for Schema {
     }
 }
 impl Serialize for Schema {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match *self {
             Schema::Struct(ref schema_struct) => {
                 serializer.write_u8(1)?;
@@ -2754,7 +2807,7 @@ impl Serialize for Schema {
 
 impl ReprC for Schema {}
 impl Deserialize for Schema {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let schema = match deserializer.read_u8()? {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
@@ -2792,7 +2845,7 @@ impl Introspect for String {
     }
 }
 impl Serialize for String {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(self)
     }
 }
@@ -2800,7 +2853,7 @@ impl Serialize for String {
 impl ReprC for String {}
 
 impl Deserialize for String {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<String, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<String, SavefileError> {
         deserializer.read_string()
     }
 }
@@ -2878,14 +2931,14 @@ impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
 }
 impl<T> ReprC for std::sync::Mutex<T> {}
 impl<T: Serialize> Serialize for std::sync::Mutex<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let data = self.lock()?;
         data.serialize(serializer)
     }
 }
 
 impl<T: Deserialize> Deserialize for std::sync::Mutex<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<std::sync::Mutex<T>, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<std::sync::Mutex<T>, SavefileError> {
         Ok(std::sync::Mutex::new(T::deserialize(deserializer)?))
     }
 }
@@ -2902,7 +2955,7 @@ impl<T> ReprC for Mutex<T> {}
 
 #[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for Mutex<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let data = self.lock();
         data.serialize(serializer)
     }
@@ -2910,7 +2963,7 @@ impl<T: Serialize> Serialize for Mutex<T> {
 
 #[cfg(feature="parking_lot")]
 impl<T: Deserialize> Deserialize for Mutex<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Mutex<T>, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Mutex<T>, SavefileError> {
         Ok(Mutex::new(T::deserialize(deserializer)?))
     }
 }
@@ -3008,7 +3061,7 @@ impl<T> ReprC for RwLock<T> {}
 
 #[cfg(feature="parking_lot")]
 impl<T: Serialize> Serialize for RwLock<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let data = self.read();
         data.serialize(serializer)
     }
@@ -3016,7 +3069,7 @@ impl<T: Serialize> Serialize for RwLock<T> {
 
 #[cfg(feature="parking_lot")]
 impl<T: Deserialize> Deserialize for RwLock<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<RwLock<T>, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<RwLock<T>, SavefileError> {
         Ok(RwLock::new(T::deserialize(deserializer)?))
     }
 }
@@ -3173,7 +3226,7 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
 }
 impl<K, V> ReprC for BTreeMap<K, V> {}
 impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
         for (k, v) in self {
             k.serialize(serializer)?;
@@ -3183,7 +3236,7 @@ impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
     }
 }
 impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let mut ret = BTreeMap::new();
         let count = <usize as Deserialize>::deserialize(deserializer)?;
         for _ in 0..count {
@@ -3219,7 +3272,7 @@ impl<K:WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K,S> {
     }
 }
 impl<K:Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K,S> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for item in self {
             item.serialize(serializer)?;
@@ -3228,7 +3281,7 @@ impl<K:Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K,S> {
     }
 }
 impl<K:Deserialize+Eq+Hash, S: ::std::hash::BuildHasher+Default> Deserialize for HashSet<K,S> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
         let mut ret = HashSet::with_capacity_and_hasher(cnt, S::default());
         for _ in 0..cnt {
@@ -3257,7 +3310,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
 }
 impl<K:Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
@@ -3268,7 +3321,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
 }
 
 impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher+Default> Deserialize for HashMap<K, V, S> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret:Self = HashMap::with_capacity_and_hasher(l, Default::default());
         for _ in 0..l {
@@ -3385,7 +3438,7 @@ impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for IndexMap<K, V, S> {
 
 #[cfg(feature="indexmap")]
 impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
@@ -3397,7 +3450,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
 
 #[cfg(feature="indexmap")]
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexMap::with_capacity(l);
         for _ in 0..l {
@@ -3444,7 +3497,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
 
 #[cfg(feature="indexmap")]
 impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for k in self.iter() {
             k.serialize(serializer)?;
@@ -3455,7 +3508,7 @@ impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexS
 
 #[cfg(feature="indexmap")]
 impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexSet::with_capacity(l);
         for _ in 0..l {
@@ -3511,12 +3564,12 @@ impl<T> ReprC for Removed<T> {
     }
 }
 impl<T: WithSchema> Serialize for Removed<T> {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, _serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         panic!("Something is wrong with version-specification of fields - there was an attempt to actually serialize a removed field!");
     }
 }
 impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         T::deserialize(deserializer)?;
         Ok(Removed {
             phantom: std::marker::PhantomData,
@@ -3544,12 +3597,12 @@ impl<T> ReprC for std::marker::PhantomData<T> {
     }
 }
 impl<T> Serialize for std::marker::PhantomData<T> {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, _serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         Ok(())
     }
 }
 impl<T> Deserialize for std::marker::PhantomData<T> {
-    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(_deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(std::marker::PhantomData)
     }
 }
@@ -3597,7 +3650,7 @@ impl<T: WithSchema> WithSchema for Option<T> {
 }
 impl<T> ReprC for Option<T> { } //Sadly, Option does not allow the #"reprC"-optimization
 impl<T: Serialize> Serialize for Option<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match self {
             &Some(ref x) => {
                 serializer.write_bool(true)?;
@@ -3608,7 +3661,7 @@ impl<T: Serialize> Serialize for Option<T> {
     }
 }
 impl<T: Deserialize> Deserialize for Option<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let issome = deserializer.read_bool()?;
         if issome {
             Ok(Some(T::deserialize(deserializer)?))
@@ -3645,7 +3698,6 @@ impl WithSchema for bit_vec::BitVec {
     }
 }
 
-
 #[cfg(feature="bit-vec")]
 impl Introspect for bit_vec::BitVec {
     fn introspect_value(&self) -> String {
@@ -3667,7 +3719,7 @@ impl Introspect for bit_vec::BitVec {
 
 #[cfg(feature="bit-vec")]
 impl Serialize for bit_vec::BitVec<u32> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
         let storage = self.storage();
@@ -3684,7 +3736,7 @@ impl ReprC for bit_vec::BitVec<u32> {}
 
 #[cfg(feature="bit-vec")]
 impl Deserialize for bit_vec::BitVec<u32> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
 
         let numbits = deserializer.read_usize()?;
         let mut numbytes = deserializer.read_usize()?;
@@ -3760,7 +3812,7 @@ impl ReprC for bit_set::BitSet<u32> {}
 
 #[cfg(feature="bit-set")]
 impl Serialize for bit_set::BitSet<u32> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let bitset = self.get_ref();
         bitset.serialize(serializer)
     }
@@ -3768,7 +3820,7 @@ impl Serialize for bit_set::BitSet<u32> {
 
 #[cfg(feature="bit-set")]
 impl Deserialize for bit_set::BitSet<u32> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let bit_vec: bit_vec::BitVec = bit_vec::BitVec::deserialize(deserializer)?;
         Ok(bit_set::BitSet::from_bit_vec(bit_vec))
     }
@@ -3801,7 +3853,7 @@ impl<T: WithSchema> WithSchema for BinaryHeap<T> {
     }
 }
 impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
         for item in self.iter() {
@@ -3811,7 +3863,7 @@ impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
     }
 }
 impl<T: Deserialize + Ord> Deserialize for BinaryHeap<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = BinaryHeap::with_capacity(l);
         for _ in 0..l {
@@ -3860,7 +3912,7 @@ impl<T: smallvec::Array> Serialize for smallvec::SmallVec<T>
 where
     T::Item: Serialize,
 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
         for item in self.iter() {
@@ -3874,7 +3926,7 @@ impl<T: smallvec::Array> Deserialize for smallvec::SmallVec<T>
 where
     T::Item: Deserialize,
 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = Self::with_capacity(l);
         for _ in 0..l {
@@ -3884,13 +3936,31 @@ where
     }
 }
 
-fn regular_serialize_vec<T: Serialize>(item: &[T], serializer: &mut Serializer) -> Result<(), SavefileError> {
-    let l = item.len();
+fn regular_serialize_vec<T: Serialize>(items: &[T], serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+    let l = items.len();
     serializer.write_usize(l)?;
-    for item in item.iter() {
-        item.serialize(serializer)?
+    if std::mem::size_of::<T>() == 0 {
+        return Ok(());
     }
-    Ok(())
+
+    if std::mem::size_of::<T>() < 32 { //<-- This optimization seems to help a little actually, but maybe not enough to warrant it
+        let chunks = items.chunks_exact((64/std::mem::size_of::<T>()).max(1));
+        let remainder = chunks.remainder();
+        for chunk in chunks {
+            for item in chunk {
+                item.serialize(serializer)?;
+            }
+        }
+        for item in remainder {
+            item.serialize(serializer)?;
+        }
+        Ok(())
+    } else {
+        for item in items {
+            item.serialize(serializer)?;
+        }
+        Ok(())
+    }
 }
 
 impl<T: WithSchema> WithSchema for Arc<[T]> {
@@ -3932,7 +4002,7 @@ impl Introspect for Arc<str> {
     }
 }
 impl Serialize for Arc<str> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&*self)
     }
 }
@@ -3940,7 +4010,7 @@ impl Serialize for Arc<str> {
 impl ReprC for Arc<str> {}
 
 impl Deserialize for Arc<str> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let s = deserializer.read_string()?;
 
         let state = deserializer.get_state::<Arc<str>, HashMap<String, Arc<str>>>();
@@ -3955,7 +4025,7 @@ impl Deserialize for Arc<str> {
 }
 
 impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(&*self, serializer)
@@ -3973,7 +4043,7 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
 impl<T: ReprC> ReprC for Arc<[T]> { }
 
 impl<T: Deserialize+ReprC> Deserialize for Arc<[T]> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
@@ -4003,7 +4073,7 @@ impl<T: Introspect> Introspect for Vec<T> {
 }
 
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(self, serializer)
@@ -4019,7 +4089,7 @@ impl<T: Serialize + ReprC> Serialize for Vec<T> {
     }
 }
 
-fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> Result<Vec<T>, SavefileError> {
+fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer<impl Read>) -> Result<Vec<T>, SavefileError> {
     let l = deserializer.read_usize()?;
 
     #[cfg(feature = "size_sanity_checks")]
@@ -4038,7 +4108,7 @@ fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer) -> R
 }
 
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             Ok(regular_deserialize_vec::<T>(deserializer)?)
         } else {
@@ -4102,20 +4172,20 @@ impl<T: WithSchema> WithSchema for VecDeque<T> {
 
 impl<T> ReprC for VecDeque<T> {}
 impl<T: Serialize> Serialize for VecDeque<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vecdeque::<T>(self, serializer)
     }
 }
 
 impl<T: Deserialize> Deserialize for VecDeque<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vecdeque::<T>(deserializer)?)
     }
 }
 
 fn regular_serialize_vecdeque<T: Serialize>(
     item: &VecDeque<T>,
-    serializer: &mut Serializer,
+    serializer: &mut Serializer<impl Write>,
 ) -> Result<(), SavefileError> {
     let l = item.len();
     serializer.write_usize(l)?;
@@ -4125,7 +4195,7 @@ fn regular_serialize_vecdeque<T: Serialize>(
     Ok(())
 }
 
-fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer) -> Result<VecDeque<T>, SavefileError> {
+fn regular_deserialize_vecdeque<T: Deserialize>(deserializer: &mut Deserializer<impl Read>) -> Result<VecDeque<T>, SavefileError> {
     let l = deserializer.read_usize()?;
     let mut ret = VecDeque::with_capacity(l);
     for _ in 0..l {
@@ -4251,7 +4321,7 @@ impl<T: ReprC, const N: usize> ReprC for [T; N] {
     }
 }
 impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.version).is_false() {
                 for item in self.iter() {
@@ -4269,7 +4339,7 @@ impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
 }
 
 impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
                 MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html, see chapter 'Initializing an array element-by-element'
@@ -4308,14 +4378,14 @@ impl<T1: WithSchema> WithSchema for Range<T1> {
     }
 }
 impl<T1: Serialize> Serialize for Range<T1> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.start.serialize(serializer)?;
         self.end.serialize(serializer)?;
         Ok(())
     }
 }
 impl<T1: Deserialize> Deserialize for Range<T1> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(T1::deserialize(deserializer)?..T1::deserialize(deserializer)?)
     }
 }
@@ -4335,10 +4405,47 @@ impl<T1: Introspect> Introspect for Range<T1> {
     }
 }
 
-impl<T1> ReprC for (T1,) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
-impl<T1, T2> ReprC for (T1, T2) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
-impl<T1, T2, T3> ReprC for (T1, T2, T3) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
-impl<T1, T2, T3, T4> ReprC for (T1, T2, T3, T4) {} // Tuples can't use ReprC-optimization - their memory layout is not defined
+impl<T1:ReprC> ReprC for (T1,) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        if offset_of_tuple!((T1,),0) == 0 && std::mem::size_of::<T1>() == std::mem::size_of::<(T1, )>() {
+            T1::repr_c_optimization_safe(version)
+        } else {
+            IsReprC::no()
+        }
+    }
+}
+impl<T1:ReprC, T2:ReprC> ReprC for (T1, T2) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        if offset_of_tuple!((T1,T2),0) == 0 && std::mem::size_of::<T1>()+std::mem::size_of::<T2>() == std::mem::size_of::<(T1, T2)>() {
+            T1::repr_c_optimization_safe(version) & T2::repr_c_optimization_safe(version)
+        } else {
+            IsReprC::no()
+        }
+    }
+}
+impl<T1:ReprC, T2:ReprC, T3:ReprC> ReprC for (T1, T2, T3) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        if offset_of_tuple!((T1,T2,T3),0) == 0 &&
+            offset_of_tuple!((T1,T2,T3),1) == std::mem::size_of::<T1>() &&
+            std::mem::size_of::<T1>()+std::mem::size_of::<T2>()+std::mem::size_of::<T3>() == std::mem::size_of::<(T1, T2, T3)>() {
+            T1::repr_c_optimization_safe(version) & T2::repr_c_optimization_safe(version) & T3::repr_c_optimization_safe(version)
+        } else {
+            IsReprC::no()
+        }
+    }
+}
+impl<T1:ReprC, T2:ReprC, T3:ReprC, T4:ReprC> ReprC for (T1, T2, T3, T4) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        if offset_of_tuple!((T1,T2,T3,T4),0) == 0 &&
+            offset_of_tuple!((T1,T2,T3,T4),1) == std::mem::size_of::<T1>() &&
+            offset_of_tuple!((T1,T2,T3,T4),2) == std::mem::size_of::<T1>() + std::mem::size_of::<T2>() &&
+            std::mem::size_of::<T1>()+std::mem::size_of::<T2>()+std::mem::size_of::<T3>()+std::mem::size_of::<T4>() == std::mem::size_of::<(T1, T2, T3, T4)>() {
+            T1::repr_c_optimization_safe(version) & T2::repr_c_optimization_safe(version) & T3::repr_c_optimization_safe(version) & T4::repr_c_optimization_safe(version)
+        } else {
+            IsReprC::no()
+        }
+    }
+}
 
 impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3) {
     fn schema(version: u32) -> Schema {
@@ -4346,14 +4453,14 @@ impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3)
     }
 }
 impl<T1: Serialize, T2: Serialize, T3: Serialize> Serialize for (T1, T2, T3) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.0.serialize(serializer)?;
         self.1.serialize(serializer)?;
         self.2.serialize(serializer)
     }
 }
 impl<T1: Deserialize, T2: Deserialize, T3: Deserialize> Deserialize for (T1, T2, T3) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok((
             T1::deserialize(deserializer)?,
             T2::deserialize(deserializer)?,
@@ -4368,13 +4475,13 @@ impl<T1: WithSchema, T2: WithSchema> WithSchema for (T1, T2) {
     }
 }
 impl<T1: Serialize, T2: Serialize> Serialize for (T1, T2) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.0.serialize(serializer)?;
         self.1.serialize(serializer)
     }
 }
 impl<T1: Deserialize, T2: Deserialize> Deserialize for (T1, T2) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok((T1::deserialize(deserializer)?, T2::deserialize(deserializer)?))
     }
 }
@@ -4385,12 +4492,12 @@ impl<T1: WithSchema> WithSchema for (T1,) {
     }
 }
 impl<T1: Serialize> Serialize for (T1,) {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.0.serialize(serializer)
     }
 }
 impl<T1: Deserialize> Deserialize for (T1,) {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok((T1::deserialize(deserializer)?,))
     }
 }
@@ -4408,13 +4515,13 @@ impl<const C:usize> WithSchema for arrayvec::ArrayString<C> {
 }
 #[cfg(feature="arrayvec")]
 impl<const C:usize> Serialize for arrayvec::ArrayString<C> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(self.as_str())
     }
 }
 #[cfg(feature="arrayvec")]
 impl<const C:usize>  Deserialize for arrayvec::ArrayString<C> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         if l > C {
             return Err(SavefileError::ArrayvecCapacityError {msg: format!("Deserialized data had length {}, but ArrayString capacity is {}", l,C)});
@@ -4472,7 +4579,7 @@ impl<V, const C: usize> ReprC for arrayvec::ArrayVec<V,C> {}
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
-    default fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    default fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
@@ -4486,7 +4593,7 @@ impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Serialize + ReprC + Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if V::repr_c_optimization_safe(serializer.version).is_false() {
                 regular_serialize_vec(self, serializer)
@@ -4503,7 +4610,7 @@ impl<V: Serialize + ReprC + Copy, const C:usize> Serialize for arrayvec::ArrayVe
 }
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Deserialize, const C:usize> Deserialize for arrayvec::ArrayVec<V,C> {
-    default fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
+    default fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {
@@ -4515,7 +4622,7 @@ impl<V: Deserialize, const C:usize> Deserialize for arrayvec::ArrayVec<V,C> {
 
 #[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
 impl<V: Deserialize, const C: usize> Deserialize for arrayvec::ArrayVec<V,C> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         for _ in 0..l {
@@ -4527,7 +4634,7 @@ impl<V: Deserialize, const C: usize> Deserialize for arrayvec::ArrayVec<V,C> {
 
 #[cfg(all(feature = "nightly", feature="arrayvec"))]
 impl<V: Deserialize + ReprC, const C: usize > Deserialize for arrayvec::ArrayVec<V,C> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
         if l > ret.capacity() {
@@ -4558,12 +4665,12 @@ impl<T: WithSchema> WithSchema for Box<T> {
 }
 impl<T> ReprC for Box<T> {}
 impl<T: Serialize> Serialize for Box<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Box<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Box::new(T::deserialize(deserializer)?))
     }
 }
@@ -4577,12 +4684,12 @@ impl<T: WithSchema> WithSchema for Rc<T> {
     }
 }
 impl<T: Serialize> Serialize for Rc<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Rc<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Rc::new(T::deserialize(deserializer)?))
     }
 }
@@ -4594,12 +4701,12 @@ impl<T: WithSchema> WithSchema for Arc<T> {
     }
 }
 impl<T: Serialize> Serialize for Arc<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Arc<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Arc::new(T::deserialize(deserializer)?))
     }
 }
@@ -4618,6 +4725,7 @@ use arrayvec::ArrayString;
 
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use memoffset::offset_of_tuple;
 
 impl<T> ReprC for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
@@ -4626,12 +4734,12 @@ impl<T: WithSchema> WithSchema for RefCell<T> {
     }
 }
 impl<T: Serialize> Serialize for RefCell<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.borrow().serialize(serializer)
     }
 }
 impl<T: Deserialize> Deserialize for RefCell<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(RefCell::new(T::deserialize(deserializer)?))
     }
 }
@@ -4647,13 +4755,13 @@ impl<T: WithSchema> WithSchema for Cell<T> {
     }
 }
 impl<T: Serialize + Copy> Serialize for Cell<T> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let t: T = self.get();
         t.serialize(serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Cell<T> {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Cell::new(T::deserialize(deserializer)?))
     }
 }
@@ -4664,7 +4772,7 @@ impl WithSchema for () {
     }
 }
 impl Serialize for () {
-    fn serialize(&self, _serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, _serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         Ok(())
     }
 }
@@ -4678,7 +4786,7 @@ impl Introspect for () {
     }
 }
 impl Deserialize for () {
-    fn deserialize(_deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(_deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(())
     }
 }
@@ -5123,128 +5231,128 @@ impl Introspect for isize {
 }
 
 impl Serialize for u8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u8(*self)
     }
 }
 impl Deserialize for u8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_u8()
     }
 }
 impl Serialize for bool {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_bool(*self)
     }
 }
 impl Deserialize for bool {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_bool()
     }
 }
 
 impl Serialize for f32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_f32(*self)
     }
 }
 impl Deserialize for f32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_f32()
     }
 }
 
 impl Serialize for f64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_f64(*self)
     }
 }
 impl Deserialize for f64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_f64()
     }
 }
 
 impl Serialize for i8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i8(*self)
     }
 }
 impl Deserialize for i8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_i8()
     }
 }
 impl Serialize for u16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u16(*self)
     }
 }
 impl Deserialize for u16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_u16()
     }
 }
 impl Serialize for i16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i16(*self)
     }
 }
 impl Deserialize for i16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_i16()
     }
 }
 
 impl Serialize for u32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u32(*self)
     }
 }
 impl Deserialize for u32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_u32()
     }
 }
 impl Serialize for i32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i32(*self)
     }
 }
 impl Deserialize for i32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_i32()
     }
 }
 
 
 impl Serialize for u64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u64(*self)
     }
 }
 impl Deserialize for u64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_u64()
     }
 }
 impl Serialize for i64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i64(*self)
     }
 }
 impl Serialize for char {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u32((*self).into())
     }
 }
 impl Deserialize for i64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_i64()
     }
 }
 impl Deserialize for char {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let uc = deserializer.read_u32()?;
         match uc.try_into() {
             Ok(x) => Ok(x),
@@ -5253,158 +5361,158 @@ impl Deserialize for char {
     }
 }
 impl Serialize for u128 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u128(*self)
     }
 }
 impl Deserialize for u128 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_u128()
     }
 }
 impl Serialize for i128 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i128(*self)
     }
 }
 impl Deserialize for i128 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_i128()
     }
 }
 
 impl Serialize for usize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(*self)
     }
 }
 impl Deserialize for usize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_usize()
     }
 }
 impl Serialize for isize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_isize(*self)
     }
 }
 impl Deserialize for isize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         deserializer.read_isize()
     }
 }
 
 impl Serialize for AtomicBool {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_bool(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicBool {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicBool::new(deserializer.read_bool()?))
     }
 }
 
 impl Serialize for AtomicU8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u8(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicU8::new(deserializer.read_u8()?))
     }
 }
 impl Serialize for AtomicI8 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i8(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI8 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicI8::new(deserializer.read_i8()?))
     }
 }
 impl Serialize for AtomicU16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u16(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicU16::new(deserializer.read_u16()?))
     }
 }
 impl Serialize for AtomicI16 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i16(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI16 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicI16::new(deserializer.read_i16()?))
     }
 }
 
 impl Serialize for AtomicU32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u32(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicU32::new(deserializer.read_u32()?))
     }
 }
 impl Serialize for AtomicI32 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i32(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI32 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicI32::new(deserializer.read_i32()?))
     }
 }
 
 impl Serialize for AtomicU64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u64(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicU64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicU64::new(deserializer.read_u64()?))
     }
 }
 impl Serialize for AtomicI64 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_i64(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicI64 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicI64::new(deserializer.read_i64()?))
     }
 }
 
 impl Serialize for AtomicUsize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicUsize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicUsize::new(deserializer.read_usize()?))
     }
 }
 impl Serialize for AtomicIsize {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_isize(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicIsize {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AtomicIsize::new(deserializer.read_isize()?))
     }
 }
@@ -5443,7 +5551,7 @@ impl Introspect for Canary1 {
 }
 
 impl Deserialize for Canary1 {
-    fn deserialize(deserializer: &mut Deserializer) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let magic = deserializer.read_u32()?;
         if magic != 0x47566843 {
             return Err(SavefileError::GeneralError {
@@ -5458,7 +5566,7 @@ impl Deserialize for Canary1 {
 }
 
 impl Serialize for Canary1 {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u32(0x47566843)
     }
 }

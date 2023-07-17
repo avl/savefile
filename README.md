@@ -15,8 +15,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile = "0.14"
-savefile-derive = "0.14"
+savefile = "0.16"
+savefile-derive = "0.16"
 ````
 
 # Sample 
@@ -62,6 +62,9 @@ fn main() {
 
 
 # Changelog
+
+## 0.16
+Upcoming, unreleased. Major performance improvements, slight API adjustments.
 
 ## 0.15
 

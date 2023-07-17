@@ -386,7 +386,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
         _savefile::prelude::Serialize
     };
     let serializer = quote_spanned! {defspan=>
-        _savefile::prelude::Serializer
+        _savefile::prelude::Serializer<impl std::io::Write>
     };
     let saveerr = quote_spanned! {defspan=>
         Result<(),_savefile::prelude::SavefileError>
@@ -755,7 +755,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
     };
 
     let deserializer = quote_spanned! {defspan=>
-        _savefile::prelude::Deserializer
+        _savefile::prelude::Deserializer<impl std::io::Read>
     };
 
     let saveerr = quote_spanned! {defspan=>
