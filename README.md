@@ -66,6 +66,15 @@ fn main() {
 ## 0.16
 Upcoming, unreleased. Major performance improvements, slight API adjustments.
 
+The Serializer and Deserializer types now are parameterized on the type of Write-implementation
+they take. Previously, a ```&mut dyn Write``` type was used, but it turns out this performs
+very much worse than having the type of the writer be generic.
+
+This only affects manual implementations of the Serialize and Deserialize traits, usage
+of the derive-macro is not affected. To fix any manual implementation of Serialize
+and Deserialize, all you have to do is to change ```Serializer``` into ```Serializer<impl Write>``` 
+and ```Deserializer``` into ```Deserializer<impl Write>```.
+
 ## 0.15
 
 Automatic activation of #[savefile_unsafe_and_fast]-optimization for types which can

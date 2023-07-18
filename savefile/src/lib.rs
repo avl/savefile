@@ -903,7 +903,8 @@ impl std::error::Error for SavefileError {
 /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
 /// It now requires a type parameter with the type of writer to operate on.
 pub struct Serializer<'a, W:Write> {
-    writer: &'a mut W,
+    /// The underlying writer. You should not access this.
+    pub writer: &'a mut W,
     /// The version of the data structures in memory which are being serialized.
     pub version: u32,
 }
@@ -973,13 +974,13 @@ impl IsReprC {
     }
 
 
-    /// "ReprC"-Optimization not allowed.
+    /// If this returns false, "ReprC"-Optimization is not allowed.
     #[inline(always)]
     pub fn is_false(self) -> bool {
         !self.0
     }
 
-    /// "ReprC"-Optimization allowed. Beware.
+    /// If this returns true, "ReprC"-Optimization is allowed. Beware.
     #[inline(always)]
     pub fn is_yes(self) -> bool {
         self.0
@@ -1416,86 +1417,86 @@ mod crypto {
 pub use crypto::{CryptoReader,CryptoWriter, save_encrypted_file, load_encrypted_file};
 
 impl<'a, W:Write+'a> Serializer<'a, W> {
-    /// Writes a binary bool to the dyn Write
+    /// Writes a binary bool to the output
     #[inline(always)]
     pub fn write_bool(&mut self, v: bool) -> Result<(), SavefileError> {
         Ok(self.writer.write_u8(if v { 1 } else { 0 })?)
     }
-    /// Writes a binary u8 to the dyn Write
+    /// Writes a binary u8 to the output
     #[inline(always)]
     pub fn write_u8(&mut self, v: u8) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(&[v])?)
     }
-    /// Writes a binary i8 to the dyn Write
+    /// Writes a binary i8 to the output
     #[inline(always)]
     pub fn write_i8(&mut self, v: i8) -> Result<(), SavefileError> {
         Ok(self.writer.write_i8(v)?)
     }
 
-    /// Writes a binary little endian u16 to the dyn Write
+    /// Writes a binary little endian u16 to the output
     #[inline(always)]
     pub fn write_u16(&mut self, v: u16) -> Result<(), SavefileError> {
         Ok(self.writer.write_u16::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian i16 to the dyn Write
+    /// Writes a binary little endian i16 to the output
     #[inline(always)]
     pub fn write_i16(&mut self, v: i16) -> Result<(), SavefileError> {
         Ok(self.writer.write_i16::<LittleEndian>(v)?)
     }
 
-    /// Writes a binary little endian u32 to the dyn Write
+    /// Writes a binary little endian u32 to the output
     #[inline(always)]
     pub fn write_u32(&mut self, v: u32) -> Result<(), SavefileError> {
         Ok(self.writer.write_u32::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian i32 to the dyn Write
+    /// Writes a binary little endian i32 to the output
     #[inline(always)]
     pub fn write_i32(&mut self, v: i32) -> Result<(), SavefileError> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
-    /// Writes a binary little endian f32 to the dyn Write
+    /// Writes a binary little endian f32 to the output
     #[inline(always)]
     pub fn write_f32(&mut self, v: f32) -> Result<(), SavefileError> {
         Ok(self.writer.write_f32::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian f64 to the dyn Write
+    /// Writes a binary little endian f64 to the output
     #[inline(always)]
     pub fn write_f64(&mut self, v: f64) -> Result<(), SavefileError> {
         Ok(self.writer.write_f64::<LittleEndian>(v)?)
     }
 
-    /// Writes a binary little endian u64 to the dyn Write
+    /// Writes a binary little endian u64 to the output
     #[inline(always)]
     pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian i64 to the dyn Write
+    /// Writes a binary little endian i64 to the output
     #[inline(always)]
     pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian u128 to the dyn Write
+    /// Writes a binary little endian u128 to the output
     #[inline(always)]
     pub fn write_u128(&mut self, v: u128) -> Result<(), SavefileError> {
         Ok(self.writer.write_u128::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian i128 to the dyn Write
+    /// Writes a binary little endian i128 to the output
     #[inline(always)]
     pub fn write_i128(&mut self, v: i128) -> Result<(), SavefileError> {
         Ok(self.writer.write_i128::<LittleEndian>(v)?)
     }
-    /// Writes a binary little endian usize as u64 to the dyn Write
+    /// Writes a binary little endian usize as u64 to the output
     #[inline(always)]
     pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
     }
-    /// Writes a binary little endian isize as i64 to the dyn Write
+    /// Writes a binary little endian isize as i64 to the output
     #[inline(always)]
     pub fn write_isize(&mut self, v: isize) -> Result<(), SavefileError> {
         Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
     }
-    /// Writes a binary u8 array to the dyn Write
+    /// Writes a binary u8 array to the output
     #[inline(always)]
     pub fn write_buf(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
@@ -1507,11 +1508,32 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
         self.write_usize(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
-    /// Writes a binary u8 array to the dyn Write. Synonym of write_buf.
+    /// Writes a binary u8 array to the output. Synonym of write_buf.
     #[inline(always)]
     pub fn write_bytes(&mut self, v: &[u8]) -> Result<(), SavefileError> {
         Ok(self.writer.write_all(v)?)
     }
+
+    /// Writes an interval of memory to the output
+    /// #SAFETY:
+    /// All the memory between the start of t1 and up to the end of t2 must
+    /// be contiguous, without padding and safe to transmute to a u8-slice([u8]).
+    #[inline(always)]
+    #[doc(hidden)]
+    pub unsafe fn raw_write_region<T1:ReprC,T2:ReprC>(&mut self, t1: &T1, t2: &T2, version: u32) -> Result<(), SavefileError> {
+        assert!(T1::repr_c_optimization_safe(version).is_yes());
+        assert!(T2::repr_c_optimization_safe(version).is_yes());
+        unsafe {
+            let p1 = t1 as *const T1;
+            let p2 = t2 as *const T2;
+            let pb1 = p1 as *const u8;
+            let pb2 = p2 as *const u8;
+            let len = (pb2 as usize - pb1 as usize) + std::mem::size_of::<T2>();
+            let slice = std::slice::from_raw_parts(pb1, len);
+            Ok(self.writer.write_all(slice)?)
+        }
+    }
+
 
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save] function instead.
@@ -4276,13 +4298,13 @@ impl ReprC for f64 {
 }
 impl ReprC for usize {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
-    }
+        IsReprC::no()
+    } // Doesn't have a fixed size
 }
 impl ReprC for isize {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
-    }
+        IsReprC::no()
+    } // Doesn't have a fixed size
 }
 impl ReprC for () {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {

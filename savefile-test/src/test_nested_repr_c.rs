@@ -68,7 +68,7 @@ fn test_various_types_for_reprc() {
     assert_eq!(unsafe{<u8>::repr_c_optimization_safe(0)}.is_yes(),true);
 
     assert_eq!(unsafe { <MyUnitStruct>::repr_c_optimization_safe(0)}.is_yes(), true);
-    assert_eq!(unsafe { UnnamedFieldsStruct::repr_c_optimization_safe(0)}.is_yes(), true);
+    assert_eq!(unsafe { UnnamedFieldsStruct::repr_c_optimization_safe(0)}.is_yes(), false); //usize is 32 bit on 32 bit platforms.
 
     assert_eq!(unsafe { <(u32,u32)>::repr_c_optimization_safe(0)}.is_yes(), true);
     assert_eq!(unsafe { <(u32,u8)>::repr_c_optimization_safe(0)}.is_yes(), false);

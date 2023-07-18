@@ -11,7 +11,7 @@ extern crate syn;
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
-use syn::{DeriveInput, GenericParam, Generics, Ident, WhereClause};
+use syn::{DeriveInput, Expr, GenericParam, Generics, Ident, Lit, Type, WhereClause};
 use syn::__private::bool;
 
 #[derive(Debug)]
@@ -258,8 +258,123 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
 
 struct FieldInfo<'a> {
     ident: Option<syn::Ident>,
+    index: u32,
     ty: &'a syn::Type,
     attrs: &'a Vec<syn::Attribute>,
+}
+fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*alignment*/)> {
+    match typ {
+        Type::Path(p) => {
+            if let Some(ident) = p.path.get_ident() {
+                match ident.to_string().as_str() {
+                    "u8" => Some((1,1)),
+                    "i8" => Some((1,1)),
+                    "u16" => Some((2,2)),
+                    "i16" => Some((2,2)),
+                    "u32" => Some((4,4)),
+                    "i32" => Some((4,4)),
+                    "u64" => Some((8,8)),
+                    "i64" => Some((8,8)),
+                    "char" => Some((4,4)),
+                    "bool" => Some((1,1)),
+                    "f32" => Some((4,4)),
+                    "f64" => Some((8,8)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        Type::Tuple(t) => {
+            let mut itemsize_align = None;
+            let mut result_size = 0;
+            if t.elems.iter().next().is_none() { //Empty tuple
+                return Some((0,1));
+            }
+            for item in t.elems.iter() {
+                let (cursize,curalign) = compile_time_size(item)?;
+                if let Some(itemsize_align) = itemsize_align {
+                    if itemsize_align != (cursize,curalign) {
+                        // All items not the same size and have same alignment. Otherwise: Might be padding issues.
+                        return None; //It could conceivably still be reprC, safe, but we're conservative here.
+                    }
+                } else {
+                    itemsize_align = Some((cursize,curalign));
+                }
+                result_size += cursize;
+            }
+            if let Some((_itemsize, itemalign)) = itemsize_align {
+                Some((result_size, itemalign))
+            } else {
+                None
+            }
+        }
+        Type::Array(a) => {
+            let (itemsize, itemalign) = compile_time_size(&a.elem)?;
+            match &a.len {
+                Expr::Lit(l) => {
+                    match &l.lit {
+                        Lit::Int(t) => {
+                            let size : usize = t.base10_parse().ok()?;
+                            Some((size*itemsize, itemalign))
+                        }
+                        _ => None
+                    }
+                }
+                _ => None
+            }
+        }
+        _ => None
+    }
+}
+fn compile_time_check_reprc(typ: &Type) -> bool {
+
+    match typ {
+        Type::Path(p) => {
+            if let Some(name) = p.path.get_ident() {
+                let name = name.to_string();
+                match name.as_str() {
+                    "u8" => true,
+                    "i8" => true,
+                    "u16" => true,
+                    "i16" => true,
+                    "u32" => true,
+                    "i32" => true,
+                    "u64" => true,
+                    "i64" => true,
+                    "char" => true,
+                    "bool" => true,
+                    "f32" => true,
+                    "f64" => true,
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        }
+        Type::Array(x) => {
+            compile_time_check_reprc(&*x.elem)
+        }
+        Type::Tuple(t) => {
+            let mut size = None;
+            for x in &t.elems {
+                if !compile_time_check_reprc(&x)
+                {
+                    return false;
+                }
+                let xsize = if let Some(s) = compile_time_size(x) {s} else {return false};
+                if let Some(size) = size {
+                    if xsize != size {
+                        return false;
+                    }
+                } else {
+                    size = Some(xsize);
+                }
+            }
+            true
+        }
+        _ => false
+    }
 }
 
 fn implement_fields_serialize<'a>(
@@ -273,7 +388,72 @@ fn implement_fields_serialize<'a>(
     let defspan = proc_macro2::Span::call_site();
     let span = proc_macro2::Span::call_site();
     let local_serializer = quote_spanned! { defspan => local_serializer};
-    let mut index_number = 0;
+
+    let reprc = quote! {
+        _savefile::prelude::ReprC
+    };
+
+    let mut deferred_reprc : Option<(usize/*align*/,Vec<TokenStream>)> = None;
+    fn realize_any_deferred(local_serializer: &TokenStream, deferred_reprc: &mut Option<(usize,Vec<TokenStream>)>, output: &mut Vec<TokenStream>) {
+        let local_serializer:TokenStream = local_serializer.clone();
+        if let Some((_align, deferred)) = deferred_reprc.take() {
+            assert_eq!(deferred.is_empty(), false);
+            let mut conditions = vec![];
+            for item in deferred.windows(2) {
+                let a = item[0].clone();
+                let b = item[1].clone();
+                if conditions.is_empty() == false {
+                    conditions.push(quote!(&&));
+                }
+                conditions.push(quote!( std::ptr::addr_of!(#a).add(1) as *const u8 == std::ptr::addr_of!(#b) as *const u8 ));
+            }
+            if conditions.is_empty() {
+                conditions.push(quote!( true ));
+            }
+            let mut fallbacks = vec![];
+            for item in deferred.iter() {
+                fallbacks.push(quote!(
+                <_ as _savefile::prelude::Serialize>::serialize(&#item, #local_serializer)?;
+                ));
+            }
+            let mut iter = deferred.into_iter();
+            let deferred_from = iter.next().unwrap();
+            let deferred_to = iter.last().unwrap_or(deferred_from.clone());
+
+            output.push(
+                quote!(
+                    unsafe {
+                        if #(#conditions)* {
+                         #local_serializer.raw_write_region(&#deferred_from,&#deferred_to, local_serializer.version)?;
+                        } else {
+                            #(#fallbacks)*
+                        }
+                    }
+            ));
+        }
+    }
+
+    let get_obj_id = |field:&FieldInfo| -> TokenStream {
+        let objid = if index {
+            assert!(implicit_self);
+            let id = syn::Index {
+                index: field.index,
+                span: span,
+            };
+            quote! { self.#id}
+        } else {
+            let id = field.ident.clone().unwrap();
+            if implicit_self {
+                quote! { self.#id}
+            } else {
+                quote! { *#id}
+            }
+        };
+        objid
+    };
+
+
+
     for ref field in &field_infos {
         {
             let verinfo = parse_attr_tag(&field.attrs);
@@ -285,22 +465,10 @@ fn implement_fields_serialize<'a>(
 
             let removed = check_is_remove(&field.ty);
 
-            let objid = if index {
-                assert!(implicit_self);
-                let id = syn::Index {
-                    index: index_number,
-                    span: span,
-                };
-                index_number += 1;
-                quote! { &self.#id}
-            } else {
-                let id = field.ident.clone().unwrap();
-                if implicit_self {
-                    quote! { &self.#id}
-                } else {
-                    quote! { #id}
-                }
-            };
+            let type_size_align = compile_time_size(&field.ty);
+            let compile_time_reprc = compile_time_check_reprc(&field.ty) && type_size_align.is_some();
+
+            let obj_id = get_obj_id(field);
 
             if field_from_version == 0 && field_to_version == std::u32::MAX {
                 if removed {
@@ -308,10 +476,28 @@ fn implement_fields_serialize<'a>(
                         "The Removed type can only be used for removed fields. Use the savefile_versions attribute."
                     );
                 }
+
+                if compile_time_reprc {
+                    let (_cursize, curalign) = type_size_align.unwrap();
+                    if let Some((deferred_align, deferred_items)) = &mut deferred_reprc {
+                        if *deferred_align == curalign {
+                            deferred_items.push(obj_id);
+                            continue;
+                        }
+                    } else {
+                        deferred_reprc = Some((curalign, vec![obj_id]));
+                        continue;
+                    }
+                }
+                realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
+
                 output.push(quote!(
-                <_ as _savefile::prelude::Serialize>::serialize(#objid, #local_serializer)?;
+                <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
                 ));
             } else {
+
+                realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
+
                 if field_to_version < std::u32::MAX {
                     min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
                 }
@@ -321,26 +507,44 @@ fn implement_fields_serialize<'a>(
                 }
                 output.push(quote!(
                 if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
-                    <_ as _savefile::prelude::Serialize>::serialize(#objid, #local_serializer)?;
+                    <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
                 }));
             }
         }
     }
+    realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
+
+    //let contents = format!("//{:?}",output);
+
+    let total_reprc_opt: TokenStream;
+    if field_infos.is_empty() == false {
+        let first_field = get_obj_id(field_infos.first().unwrap());
+        let last_field = get_obj_id(field_infos.last().unwrap());
+        total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(&#first_field, &#last_field, local_serializer.version)?; } );
+    } else {
+        total_reprc_opt = quote!( );
+    }
+
     let serialize2 = quote! {
         let local_serializer = serializer;
+
         if #min_safe_version > local_serializer.version {
                 panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory version: {}",
                     #min_safe_version.saturating_sub(1), local_serializer.version);
             }
 
-        #(#output)*
+        if unsafe { <Self as #reprc>::repr_c_optimization_safe(local_serializer.version).is_yes() } {
+            #total_reprc_opt
+        } else {
+            #(#output)*
+        }
     };
 
     let fields_names = field_infos
         .iter()
         .map(|field| {
             let fieldname = field.ident.clone();
-            quote! { ref #fieldname }
+            quote! { #fieldname }
         })
         .collect();
     (serialize2, fields_names)
@@ -406,14 +610,16 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                 let var_idx = var_idx as u8;
                 let var_ident = (variant.ident).clone();
                 let variant_name = quote! { #name::#var_ident };
-                let variant_name_spanned = quote_spanned! { span => &#variant_name};
+                let variant_name_spanned = quote_spanned! { span => #variant_name};
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         let field_infos: Vec<FieldInfo> = fields_named
                             .named
                             .iter()
-                            .map(|field| FieldInfo {
+                            .enumerate()
+                            .map(|(field_index,field)| FieldInfo {
                                 ident: Some(field.ident.clone().unwrap()),
+                                index: field_index as u32,
                                 ty: &field.ty,
                                 attrs: &field.attrs,
                             })
@@ -435,6 +641,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                                     &("x".to_string() + &idx.to_string()),
                                     Span::call_site(),
                                 )),
+                                index: idx as u32,
                                 ty: &field.ty,
                                 attrs: &field.attrs,
                             })
@@ -477,9 +684,11 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = namedfields
                         .named
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(field_index,field)| FieldInfo {
                             ident: Some(field.ident.clone().unwrap()),
                             ty: &field.ty,
+                            index: field_index as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
@@ -492,9 +701,11 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
                         .unnamed
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(field_index,field)| FieldInfo {
                             ident: None,
                             ty: &field.ty,
+                            index: field_index as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
@@ -783,9 +994,11 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         let field_infos: Vec<FieldInfo> = fields_named
                             .named
                             .iter()
-                            .map(|field| FieldInfo {
+                            .enumerate()
+                            .map(|(field_index,field)| FieldInfo {
                                 ident: Some(field.ident.clone().unwrap()),
                                 ty: &field.ty,
+                                index: field_index as u32,
                                 attrs: &field.attrs,
                             })
                             .collect();
@@ -798,9 +1011,11 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         let field_infos: Vec<FieldInfo> = fields_unnamed
                             .unnamed
                             .iter()
-                            .map(|field| FieldInfo {
+                            .enumerate()
+                            .map(|(field_index,field)| FieldInfo {
                                 ident: None,
                                 ty: &field.ty,
+                                index: field_index as u32,
                                 attrs: &field.attrs,
                             })
                             .collect();
@@ -837,8 +1052,10 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = namedfields
                         .named
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(field_index,field)| FieldInfo {
                             ident: Some(field.ident.clone().unwrap()),
+                            index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
                         })
@@ -853,8 +1070,10 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
                         .unnamed
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(field_index,field)| FieldInfo {
                             ident: None,
+                            index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
                         })
@@ -952,19 +1171,19 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     for field in field_infos.windows(2) {
         let field_name1 = field[0].ident.as_ref().expect("Field was expected to have a name");
         let field_name2 = field[1].ident.as_ref().expect("Field was expected to have a name");
-        optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
+        optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
 
     }
     if field_infos.len() > 0 {
         if field_infos.len() == 1 {
-            optsafe_outputs.push(quote_spanned!( span => (#spanof!( #name #ty_generics, ..).start == 0 )));
-            optsafe_outputs.push(quote_spanned!( span => (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
+            optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).start == 0 )));
+            optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
 
         } else {
             let first = field_infos.first().unwrap().ident.as_ref().unwrap();
             let last = field_infos.last().unwrap().ident.as_ref().unwrap();
-            optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics, #first).start == 0 )));
-            optsafe_outputs.push(quote_spanned!( span => (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
+            optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #first).start == 0 )));
+            optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
         }
 
     }
@@ -1121,11 +1340,17 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
+            if enum1.variants.len() > 256 {
+                if opt_in_fast {
+                    panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
+                }
+                return implement_reprc_hardcoded_false(name, input.generics);
+            }
             let enum_size = get_enum_size(&input.attrs);
             if let Some(enum_size) = enum_size {
                 if enum_size != 1 {
                     if opt_in_fast {
-                        panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 255 variants. Sorry.");
+                        panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
                     }
                     return implement_reprc_hardcoded_false(name, input.generics);
                 }
@@ -1164,8 +1389,10 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 let field_infos: Vec<FieldInfo> = namedfields
                     .named
                     .iter()
-                    .map(|field| FieldInfo {
+                    .enumerate()
+                    .map(|(field_index,field)| FieldInfo {
                         ident: Some(field.ident.clone().unwrap()),
+                        index: field_index as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
                     })
@@ -1184,6 +1411,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                             &("x".to_string() + &idx.to_string()),
                             Span::call_site(),
                         )),
+                        index: idx as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
                     })
@@ -1343,9 +1571,10 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                 let return_value_name = quote!(#return_value_name_str);
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
-                        for f in fields_named.named.iter() {
+                        for (idx, f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident: Some(f.ident.clone().unwrap()),
+                                index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
                             });
@@ -1373,9 +1602,10 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                             } ));
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        for f in fields_unnamed.unnamed.iter() {
+                        for (idx, f) in fields_unnamed.unnamed.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident: None,
+                                index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
                             });
@@ -1454,9 +1684,11 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = namedfields
                         .named
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(idx,field)| FieldInfo {
                             ident: Some(field.ident.clone().unwrap()),
                             ty: &field.ty,
+                            index: idx as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
@@ -1467,9 +1699,11 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
                         .unnamed
                         .iter()
-                        .map(|f| FieldInfo {
+                        .enumerate()
+                        .map(|(idx,f)| FieldInfo {
                             ident: None,
                             ty: &f.ty,
+                            index: idx as u32,
                             attrs: &f.attrs,
                         })
                         .collect();
@@ -1624,18 +1858,20 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
-                        for f in fields_named.named.iter() {
+                        for (idx,f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident: Some(f.ident.clone().unwrap()),
                                 ty: &f.ty,
+                                index: idx as u32,
                                 attrs: &f.attrs,
                             });
                         }
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        for f in fields_unnamed.unnamed.iter() {
+                        for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident: None,
+                                index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
                             });
@@ -1694,9 +1930,11 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = namedfields
                         .named
                         .iter()
-                        .map(|field| FieldInfo {
+                        .enumerate()
+                        .map(|(idx,field)| FieldInfo {
                             ident: Some(field.ident.clone().unwrap()),
                             ty: &field.ty,
+                            index: idx as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
@@ -1707,8 +1945,10 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
                         .unnamed
                         .iter()
-                        .map(|f| FieldInfo {
+                        .enumerate()
+                        .map(|(idx,f)| FieldInfo {
                             ident: None,
+                            index: idx as u32,
                             ty: &f.ty,
                             attrs: &f.attrs,
                         })

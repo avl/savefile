@@ -355,9 +355,25 @@ pub fn test_u16_vec() {
 }
 
 #[derive(Debug, PartialEq, Savefile)]
-struct SmallStruct {
+pub struct SmallStruct {
     x1: u32,
     x2: i32,
+}
+
+#[derive(Debug, PartialEq, Savefile)]
+pub struct NotSoSmallStruct {
+    x1: u32,
+    x2: bool,
+    x3: u32,
+    x4: i32,
+}
+
+pub fn serialize_small_struct(input: NotSoSmallStruct, output: &mut Serializer<Vec<u8>>) {
+    let _ = input.serialize(output);
+}
+pub fn serialize_small_struct_manual(input: NotSoSmallStruct, output: &mut Vec<u8>) {
+    let slice: [u8;std::mem::size_of::<NotSoSmallStruct>()] = unsafe {std::mem::transmute(input)};
+    output.extend(slice);
 }
 
 #[test]
@@ -1346,3 +1362,20 @@ pub fn test_zero_size_vec_items() {
     assert_roundtrip(test);
 }
 
+
+#[derive(Savefile,PartialEq,Debug)]
+struct TestIgnoreExample {
+    a: f64,
+    b: f64,
+    #[savefile_ignore]
+    cached_product: f64
+}
+
+#[test]
+pub fn test_struct_with_ignored_member() {
+    assert_roundtrip(TestIgnoreExample{
+        a:42.0,
+        b:43.0,
+        cached_product: 0.0,
+    });
+}
