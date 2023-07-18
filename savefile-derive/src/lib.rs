@@ -416,6 +416,9 @@ fn implement_fields_serialize<'a>(
                 <_ as _savefile::prelude::Serialize>::serialize(&#item, #local_serializer)?;
                 ));
             }
+            if deferred.len() == 1 {
+                return output.push(quote!( #(#fallbacks)* ) );
+            }
             let mut iter = deferred.into_iter();
             let deferred_from = iter.next().unwrap();
             let deferred_to = iter.last().unwrap_or(deferred_from.clone());
