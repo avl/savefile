@@ -1854,7 +1854,7 @@ pub fn save<T: WithSchema + Serialize>(writer: &mut impl Write, version: u32, da
     Serializer::save::<T>(writer, version, data, false)
 }
 
-/// Write the given `data` to the `writer`. Compresses data using 'snappy' compression format.
+/// Write the given `data` to the `writer`. Compresses data using 'bzip2' compression format.
 /// The current version of data must be `version`.
 /// The resultant data can be loaded using the regular load-function (it autodetects if compressions was
 /// active or not).
@@ -2001,7 +2001,7 @@ impl<'a> IntrospectItem<'a> for String {
 
 /// As a sort of guard against infinite loops, the default 'len'-implementation only
 /// ever iterates this many times. This is so that broken 'introspect_child'-implementations
-/// won't case introspect_len to iterate forever.
+/// won't cause introspect_len to iterate forever.
 pub const MAX_CHILDREN: usize = 10000;
 
 /// Gives the ability to look into an object, inspecting any children (fields).

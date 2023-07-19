@@ -15,7 +15,8 @@ savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption
 savefile-derive = { path = "../savefile-derive" }
 bit-vec = "0.6"
 arrayvec="0.7"
-smallvec="1.0"
+smallvec="*"
+indexmap="*"
 byteorder="*"
 rand="0.8"
 parking_lot="0.12"

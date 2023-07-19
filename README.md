@@ -64,7 +64,7 @@ fn main() {
 # Changelog
 
 ## 0.16
-Upcoming, unreleased. Major performance improvements, slight API adjustments.
+Major performance improvements, slight API adjustments.
 
 The Serializer and Deserializer types now are parameterized on the type of Write-implementation
 they take. Previously, a ```&mut dyn Write``` type was used, but it turns out this performs
@@ -74,6 +74,25 @@ This only affects manual implementations of the Serialize and Deserialize traits
 of the derive-macro is not affected. To fix any manual implementation of Serialize
 and Deserialize, all you have to do is to change ```Serializer``` into ```Serializer<impl Write>``` 
 and ```Deserializer``` into ```Deserializer<impl Write>```.
+
+Also, dependencies have been updated:
+```
+smallvec 1.0 -> 1.11
+indexmap 1.6 -> 1.9
+byteorder 1.2 -> 1.4
+```
+
+If you are serializing smallvec and/or indexmap, you need to step to version 1.11 and 1.9
+respectively. No change in functionality is expected.
+
+This version also includes big changes to the derive macro. It now tries to detect when it's
+safe to write multiple fields, or entire structs, at once. By inspecting the layout of
+the type, it can detect when several fields are placed adjacent to each other in memory,
+and then just write their bytes all at once.
+
+This release is the largest change made to savefile in a long while. The test suite has
+been run, but still, there may be bugs.
+
 
 ## 0.15
 

@@ -18,12 +18,14 @@ extern crate bit_set;
 extern crate smallvec;
 extern crate byteorder;
 extern crate rand;
-
+extern crate indexmap;
 extern crate rustc_hash;
 
 use std::fmt::Debug;
 use std::io::Write;
 use savefile::prelude::*;
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 extern crate arrayvec;
 extern crate parking_lot;
 
@@ -1379,3 +1381,29 @@ pub fn test_struct_with_ignored_member() {
         cached_product: 0.0,
     });
 }
+
+#[test]
+pub fn test_indexmap() {
+    let mut imap = IndexMap::new();
+    assert_roundtrip(imap.clone());
+    imap.insert(43,"hej".to_string());
+    assert_roundtrip(imap.clone());
+
+    imap.insert(44,"hej".to_string());
+    imap.insert(45,"hej".to_string());
+    assert_roundtrip(imap.clone());
+}
+
+
+#[test]
+pub fn test_indexset() {
+    let mut iset = IndexSet::new();
+    assert_roundtrip(iset.clone());
+    iset.insert((43,44));
+    assert_roundtrip(iset.clone());
+
+    iset.insert((43,43));
+    iset.insert((44,44));
+    assert_roundtrip(iset.clone());
+}
+
