@@ -37,6 +37,7 @@ mod test_arrayvec;
 mod test_generic;
 
 #[cfg(feature = "external_benchmarks")]
+#[cfg(not(miri))]
 mod ext_benchmark;
 
 #[derive(Debug, Savefile, PartialEq)]
@@ -1407,3 +1408,24 @@ pub fn test_indexset() {
     assert_roundtrip(iset.clone());
 }
 
+#[cfg(test)]
+struct RawStruct {
+    a: u64,
+    b: u32,
+    c: u32,
+}
+#[test]
+pub fn test_raw_write_region() {
+    let mut data = vec![];
+    let mut ser = Serializer {
+        writer: &mut data,
+        version: 0,
+    };
+    let r = RawStruct {
+        a: 0, b:0, c: 42
+    };
+    let _ = r.c;
+    unsafe{
+        ser.raw_write_region(&r,&r.a, &r.b, 0).unwrap();
+    }
+}

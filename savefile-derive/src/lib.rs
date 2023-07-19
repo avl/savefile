@@ -427,7 +427,7 @@ fn implement_fields_serialize<'a>(
                 quote!(
                     unsafe {
                         if #(#conditions)* {
-                         #local_serializer.raw_write_region(&#deferred_from,&#deferred_to, local_serializer.version)?;
+                         #local_serializer.raw_write_region(self,&#deferred_from,&#deferred_to, local_serializer.version)?;
                         } else {
                             #(#fallbacks)*
                         }
@@ -523,7 +523,7 @@ fn implement_fields_serialize<'a>(
     if field_infos.is_empty() == false {
         let first_field = get_obj_id(field_infos.first().unwrap());
         let last_field = get_obj_id(field_infos.last().unwrap());
-        total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(&#first_field, &#last_field, local_serializer.version)?; } );
+        total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(self,&#first_field, &#last_field, local_serializer.version)?; } );
     } else {
         total_reprc_opt = quote!( );
     }

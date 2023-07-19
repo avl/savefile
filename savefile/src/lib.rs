@@ -1518,23 +1518,26 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     /// #SAFETY:
     /// All the memory between the start of t1 and up to the end of t2 must
     /// be contiguous, without padding and safe to transmute to a u8-slice([u8]).
+    /// The memory must all be within the object pointed to by full.
+    /// The 'full' object is only needed to satisfy miri, otherwise
+    /// we violate the rules when we create one continuous thing from parts.
     #[inline(always)]
     #[doc(hidden)]
-    pub unsafe fn raw_write_region<T1:ReprC,T2:ReprC>(&mut self, t1: &T1, t2: &T2, version: u32) -> Result<(), SavefileError> {
+    pub unsafe fn raw_write_region<T, T1:ReprC,T2:ReprC>(&mut self, full: &T, t1: &T1, t2: &T2, version: u32) -> Result<(), SavefileError> {
         assert!(T1::repr_c_optimization_safe(version).is_yes());
         assert!(T2::repr_c_optimization_safe(version).is_yes());
         unsafe {
-            let p1 = t1 as *const T1;
-            let p2 = t2 as *const T2;
-            let pb1 = p1 as *const u8;
-            let pb2 = p2 as *const u8;
-            let len = (pb2 as usize - pb1 as usize) + std::mem::size_of::<T2>();
-            let slice = std::slice::from_raw_parts(pb1, len);
-            Ok(self.writer.write_all(slice)?)
+
+            let base = full as *const T as *const u8;
+            let totlen = std::mem::size_of::<T>();
+            let p1 = (t1 as *const T1 as *const u8) as usize;
+            let p2 = (t2 as *const T2 as *const u8) as usize;
+            let start = p1 - (base as usize);
+            let end = (p2 - (base as usize)) + std::mem::size_of::<T2>();
+            let full_slice = std::slice::from_raw_parts(base, totlen);
+            Ok(self.writer.write_all(&full_slice[start..end])?)
         }
     }
-
-
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save] function instead.
     pub fn save<T: WithSchema + Serialize>(
@@ -4148,7 +4151,12 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             } else {
                 Err(SavefileError::MemoryAllocationLayoutError)
             }?;
-            let ptr = unsafe { std::alloc::alloc(layout.clone()) };
+            let ptr =
+                if elem_size == 0 {
+                    NonNull::dangling().as_ptr()
+                } else {
+                    unsafe { std::alloc::alloc(layout.clone()) }
+                };
 
             {
                 let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
@@ -4741,6 +4749,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
+use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
 use arrayvec::ArrayString;
