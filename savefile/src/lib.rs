@@ -3010,22 +3010,42 @@ impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a, T> {
     }
 }
 
+impl<'a,T:Introspect> Introspect for std::cell::Ref<'a,T> {
+    fn introspect_value(&self) -> String {
+        "Ref".to_string()
+    }
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        (**self).introspect_child(index)
+    }
+}
+
+impl<'a,T:Introspect> IntrospectItem<'a> for std::cell::Ref<'a,T> {
+    fn key(&self) -> &str {
+        "ref"
+    }
+    /// The introspectable value of the child.
+    fn val(&self) -> &dyn Introspect {
+        &*self
+    }
+}
+
 impl<T: Introspect> Introspect for RefCell<T> {
     fn introspect_value(&self) -> String {
-        format!(
-            "RefCell({} (deep introspect not supported))",
-            self.borrow().introspect_value()
-        )
+        "RefCell".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         // Introspect not supported
-        None
+        if index != 0 {
+            return None;
+        }
+        let rf = self.borrow();
+        Some(Box::new(rf))
     }
 
     fn introspect_len(&self) -> usize {
         // Introspect not supported
-        0
+        1
     }
 }
 
