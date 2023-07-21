@@ -162,9 +162,11 @@ pub fn do_test_refcell() {
     let test = RefCell::new(32);
 
     let x = (&test).introspect_value();
-    assert_eq!(x, "RefCell(32 (deep introspect not supported))");
+    assert_eq!(x, "RefCell(Ref(32))");
 
-    assert_eq!(test.introspect_len(), 0);
+    assert_eq!(test.introspect_len(), 1);
+
+    assert_eq!(test.introspect_child(0).unwrap().val().introspect_value(), "Ref(32)");
 }
 #[test]
 pub fn do_test_rc() {

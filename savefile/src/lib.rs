@@ -3012,10 +3012,14 @@ impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a, T> {
 
 impl<'a,T:Introspect> Introspect for std::cell::Ref<'a,T> {
     fn introspect_value(&self) -> String {
-        "Ref".to_string()
+        let sub_value = (**self).introspect_value();
+        format!("Ref({})", sub_value)
     }
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         (**self).introspect_child(index)
+    }
+    fn introspect_len(&self) -> usize {
+        (**self).introspect_len()
     }
 }
 
@@ -3031,7 +3035,8 @@ impl<'a,T:Introspect> IntrospectItem<'a> for std::cell::Ref<'a,T> {
 
 impl<T: Introspect> Introspect for RefCell<T> {
     fn introspect_value(&self) -> String {
-        "RefCell".to_string()
+        let sub_value = self.borrow().introspect_value();
+        format!("RefCell({})", sub_value)
     }
 
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
