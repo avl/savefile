@@ -63,6 +63,12 @@ fn main() {
 
 # Changelog
 
+## 0.16.1
+
+Fix a minor issue where the ```#[savefile_introspect_ignore]``` was not accepted
+in combination with ```#[derive(SavefileIntrospectOnly)]```.
+
+
 ## 0.16
 Major performance improvements, slight API adjustments.
 
