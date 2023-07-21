@@ -899,6 +899,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         savefile_unsafe_and_fast,
         savefile_versions,
         savefile_versions_as,
+        savefile_introspect_ignore,
         savefile_ignore,
         savefile_default_val,
         savefile_default_fn
