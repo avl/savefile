@@ -52,10 +52,10 @@ bit-set = {version = "0.5", optional = true}
 rustc-hash = {version = "1.1", optional = true}
 memoffset = "0.9"
 byteorder = "1.4"
-savefile-derive = {path="../savefile-derive",version = "=0.16.2", optional = true }
+savefile-derive = {path="../savefile-derive", version = "=0.16.2", optional = true }
 
 [dev-dependencies]
-savefile-derive = { path="../savefile-derive" }
+savefile-derive = { path="../savefile-derive", version = "=0.16.2" }
 
 [build-dependencies]
 rustc_version="0.2"
