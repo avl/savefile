@@ -63,6 +63,27 @@ fn main() {
 
 # Changelog
 
+## 0.16.2
+
+Fixes multiple problems. The most impactful being that 0.16.1 could only be built
+using a nightly rust compiler.
+
+It also provides an optional feature to integrate 'savefile-derive' into 'savefile'.
+
+Just activate the feature 'derive', and you can then use savefile without an explicit
+dependency on 'savefile-derive'. Just do
+
+```rust
+use savefile::prelude::*;
+
+#[derive(Savefile)]
+struct MyStruct { 
+    //...    
+}
+```
+And you're good to go!
+
+
 ## 0.16.1
 
 Fix a minor issue where the ```#[savefile_introspect_ignore]``` was not accepted

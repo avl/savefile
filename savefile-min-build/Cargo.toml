@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-savefile = { path = "../savefile", features = [], default-features = false }
-savefile-derive = { path = "../savefile-derive" }
+savefile = { path = "../savefile", features = ["derive"], default-features = false }
 
 

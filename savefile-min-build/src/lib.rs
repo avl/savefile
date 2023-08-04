@@ -1,6 +1,8 @@
+use savefile::prelude::*;
 use std::fmt::Debug;
 use std::io::{BufWriter, Cursor, Write};
 use savefile::{Deserialize, Deserializer, Serialize, Serializer};
+
 
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0)
@@ -24,8 +26,14 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     assert_eq!(f.position() as usize,f_internal_size);
 }
 
+#[derive(Savefile,PartialEq,Eq,Debug)]
+struct SimpleStruct {
+    x: u32
+}
+
 #[test]
 fn it_works() {
     assert_roundtrip("Test-string".to_string());
     assert_roundtrip(42i32);
+    assert_roundtrip(SimpleStruct{x:42});
 }

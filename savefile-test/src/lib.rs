@@ -427,6 +427,32 @@ pub fn test_array_string() {
 }
 
 #[test]
+pub fn test_array_vec() {
+    use arrayvec::ArrayVec;
+    let mut data:ArrayVec<u32, 30> = ArrayVec::new();
+    assert_roundtrip(data.clone());
+    data.push(47);
+    assert_roundtrip(data.clone());
+    data.push(1);
+    data.push(32);
+    data.push(49);
+    assert_roundtrip(data.clone());
+}
+
+#[test]
+pub fn test_array_vec_with_string() {
+    use arrayvec::ArrayVec;
+    let mut data:ArrayVec<String, 30> = ArrayVec::new();
+    assert_roundtrip(data.clone());
+    data.push("hello".to_string());
+    assert_roundtrip(data.clone());
+    data.push("wonderful".to_string());
+    data.push("world".to_string());
+    data.push("how ya doing?".to_string());
+    assert_roundtrip(data.clone());
+}
+
+#[test]
 pub fn test_smallvec0() {
     let mut v = smallvec::SmallVec::<[u8;2]>::new();
     v.push(1);
@@ -1142,13 +1168,13 @@ struct MySimpleFuzz1 {
 #[test]
 pub fn fuzz_regression1() {
     let mut data:&[u8] = &[0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 8, 3, 0, 3, 0, 64, 0, 0, 0];
-    let _ = load_noschema::<MySimpleFuzz1>(&mut data,0);
+    let _t:Result<MySimpleFuzz1,_> = load_noschema(&mut data,0);
 }
 
 #[test]
 pub fn fuzz_regression2() {
     let mut data:&[u8] = &[0, 0, 0, 0, 3, 11, 0, 254, 2, 1, 252, 255, 254];
-    let _ = load_noschema::<MySimpleFuzz1>(&mut data,0);
+    let _t:Result<MySimpleFuzz1,_> = load_noschema(&mut data,0);
 }
 
 

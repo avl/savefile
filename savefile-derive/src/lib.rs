@@ -1314,7 +1314,7 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
 )]
 pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
-    panic!("The #[derive(ReprC)] style of unsafe performance opt-in has been changed. Add a #[savefile_unsafe_and_fast] attribute on a new line, after the #[derive(Savefile)] attribute instead.")
+    panic!("The #[derive(ReprC)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 

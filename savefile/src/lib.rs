@@ -785,6 +785,8 @@ extern crate core;
 
 extern crate memoffset;
 
+#[cfg(feature="derive")]
+extern crate savefile_derive;
 
 /// This object represents an error in deserializing or serializing
 /// an item.
@@ -1526,17 +1528,17 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     pub unsafe fn raw_write_region<T, T1:ReprC,T2:ReprC>(&mut self, full: &T, t1: &T1, t2: &T2, version: u32) -> Result<(), SavefileError> {
         assert!(T1::repr_c_optimization_safe(version).is_yes());
         assert!(T2::repr_c_optimization_safe(version).is_yes());
-        unsafe {
 
-            let base = full as *const T as *const u8;
-            let totlen = std::mem::size_of::<T>();
-            let p1 = (t1 as *const T1 as *const u8) as usize;
-            let p2 = (t2 as *const T2 as *const u8) as usize;
-            let start = p1 - (base as usize);
-            let end = (p2 - (base as usize)) + std::mem::size_of::<T2>();
-            let full_slice = std::slice::from_raw_parts(base, totlen);
-            Ok(self.writer.write_all(&full_slice[start..end])?)
-        }
+
+        let base = full as *const T as *const u8;
+        let totlen = std::mem::size_of::<T>();
+        let p1 = (t1 as *const T1 as *const u8) as usize;
+        let p2 = (t2 as *const T2 as *const u8) as usize;
+        let start = p1 - (base as usize);
+        let end = (p2 - (base as usize)) + std::mem::size_of::<T2>();
+        let full_slice = std::slice::from_raw_parts(base, totlen);
+        Ok(self.writer.write_all(&full_slice[start..end])?)
+
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save] function instead.
@@ -3774,7 +3776,7 @@ impl Serialize for bit_vec::BitVec<u32> {
         serializer.write_usize(l)?;
         let storage = self.storage();
         let rawbytes_ptr = storage.as_ptr() as *const u8;
-        let rawbytes :&[u8] = unsafe{slice::from_raw_parts(rawbytes_ptr,4*storage.len())};
+        let rawbytes :&[u8] = unsafe{std::slice::from_raw_parts(rawbytes_ptr,4*storage.len())};
         serializer.write_usize(rawbytes.len()|(1<<63))?;
         serializer.write_bytes(&rawbytes)?;
         Ok(())
@@ -3799,7 +3801,7 @@ impl Deserialize for bit_vec::BitVec<u32> {
                 let storage = ret.storage_mut();
                 storage.resize(num_words, 0);
                 let storage_ptr = storage.as_ptr() as *mut u8;
-                let storage_bytes:&mut [u8] = slice::from_raw_parts_mut(storage_ptr,4*num_words);
+                let storage_bytes:&mut [u8] = std::slice::from_raw_parts_mut(storage_ptr,4*num_words);
                 deserializer.read_bytes_to_buf(storage_bytes)?;
                 ret.set_len(numbits);
             }
@@ -4160,7 +4162,7 @@ fn regular_deserialize_vec<T: Deserialize>(deserializer: &mut Deserializer<impl 
 impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe{T::repr_c_optimization_safe(deserializer.file_version)}.is_false() {
-            Ok(regular_deserialize_vec::<T>(deserializer)?)
+            Ok(regular_deserialize_vec(deserializer)?)
         } else {
             use std::mem;
 
@@ -4228,13 +4230,13 @@ impl<T: WithSchema> WithSchema for VecDeque<T> {
 impl<T> ReprC for VecDeque<T> {}
 impl<T: Serialize> Serialize for VecDeque<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        regular_serialize_vecdeque::<T>(self, serializer)
+        regular_serialize_vecdeque(self, serializer)
     }
 }
 
 impl<T: Deserialize> Deserialize for VecDeque<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        Ok(regular_deserialize_vecdeque::<T>(deserializer)?)
+        Ok(regular_deserialize_vecdeque(deserializer)?)
     }
 }
 
@@ -4628,26 +4630,16 @@ impl<V: Introspect + 'static, const C: usize> Introspect for arrayvec::ArrayVec<
     }
 }
 
-#[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V, const C: usize> ReprC for arrayvec::ArrayVec<V,C> {}
-
-
-#[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
-    default fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
+#[cfg(feature="arrayvec")]
+impl<V:ReprC, const C: usize> ReprC for arrayvec::ArrayVec<V,C> {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+        V::repr_c_optimization_safe(version)
     }
 }
 
-#[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
-impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
-    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        regular_serialize_vec(self, serializer)
-    }
-}
 
-#[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Serialize + ReprC + Copy, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
+#[cfg(feature="arrayvec")]
+impl<V: Serialize + ReprC, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if V::repr_c_optimization_safe(serializer.version).is_false() {
@@ -4663,31 +4655,8 @@ impl<V: Serialize + ReprC + Copy, const C:usize> Serialize for arrayvec::ArrayVe
         }
     }
 }
-#[cfg(all(feature = "nightly", feature="arrayvec"))]
-impl<V: Deserialize, const C:usize> Deserialize for arrayvec::ArrayVec<V,C> {
-    default fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
-        let mut ret = arrayvec::ArrayVec::new();
-        let l = deserializer.read_usize()?;
-        for _ in 0..l {
-            ret.push(V::deserialize(deserializer)?);
-        }
-        Ok(ret)
-    }
-}
 
-#[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
-impl<V: Deserialize, const C: usize> Deserialize for arrayvec::ArrayVec<V,C> {
-    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
-        let mut ret = arrayvec::ArrayVec::new();
-        let l = deserializer.read_usize()?;
-        for _ in 0..l {
-            ret.push(V::deserialize(deserializer)?);
-        }
-        Ok(ret)
-    }
-}
-
-#[cfg(all(feature = "nightly", feature="arrayvec"))]
+#[cfg(feature="arrayvec")]
 impl<V: Deserialize + ReprC, const C: usize > Deserialize for arrayvec::ArrayVec<V,C> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V,C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
@@ -4775,7 +4744,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
 use std::ptr::NonNull;
-use std::slice;
 use std::sync::Arc;
 
 

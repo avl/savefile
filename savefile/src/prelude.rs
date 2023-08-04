@@ -9,3 +9,12 @@ pub use memoffset::span_of;
 
 #[cfg(feature="ring")]
 pub use super::{CryptoReader, CryptoWriter, save_encrypted_file, load_encrypted_file};
+
+#[cfg(feature="derive")]
+pub use savefile_derive::Savefile;
+#[cfg(feature="derive")]
+pub use savefile_derive::SavefileNoIntrospect;
+#[cfg(feature="derive")]
+pub use savefile_derive::SavefileIntrospectOnly;
+#[cfg(feature="derive")]
+pub use savefile_derive::ReprC;
