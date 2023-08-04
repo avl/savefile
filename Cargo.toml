@@ -1,12 +1,8 @@
 [workspace]
-
 members = [
     "savefile",
     "savefile-derive",
     "savefile-test",
     "savefile-min-build",
-    "minitest"
 ]
-
-
-
+resolver = "2"

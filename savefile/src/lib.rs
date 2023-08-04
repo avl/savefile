@@ -4585,7 +4585,7 @@ impl<const C:usize>  Deserialize for arrayvec::ArrayString<C> {
         deserializer.read_bytes_to_buf(&mut tempbuf[0..l])?;
 
         match std::str::from_utf8(&tempbuf[0..l]) {
-            Ok(s) => Ok(ArrayString::try_from(s)?),
+            Ok(s) => Ok(arrayvec::ArrayString::try_from(s)?),
             Err(_err) => Err(SavefileError::InvalidUtf8 {msg:format!("ArrayString<{}> contained invalid UTF8", C)})
         }
     }
@@ -4641,7 +4641,7 @@ impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
 
 #[cfg(all(not(feature = "nightly"), feature="arrayvec"))]
 impl<V: Serialize, const C: usize> Serialize for arrayvec::ArrayVec<V,C> {
-    fn serialize(&self, serializer: &mut Serializer) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vec(self, serializer)
     }
 }
@@ -4777,7 +4777,6 @@ use std::path::{PathBuf, Path};
 use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
-use arrayvec::ArrayString;
 
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
