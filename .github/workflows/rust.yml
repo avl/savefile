@@ -19,14 +19,14 @@ jobs:
     - name: Install nightly
       run: rustup toolchain install nightly
     - name: Build (nightly)
-      run: cargo +nightly build --workspace --verbose
+      run: cargo +nightly build --workspace 
     - name: Run tests (nightly)
-      run: cargo +nightly test --workspace --verbose
+      run: cargo +nightly test --workspace 
     - name: Build min-deps (nightly)
-      run: cargo +nightly build -p savefile-min-build --verbose
+      run: cargo +nightly build -p savefile-min-build 
     - name: Build (stable)
-      run: cargo +stable build --workspace --verbose
+      run: cargo +stable build --workspace 
     - name: Run tests (stable)
-      run: cargo +stable test --workspace --verbose
+      run: cargo +stable test --workspace 
     - name: Build min-deps (stable)
-      run: cargo +stable build -p savefile-min-build --verbose
+      run: cargo +stable build -p savefile-min-build 
