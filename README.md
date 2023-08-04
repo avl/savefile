@@ -63,6 +63,10 @@ fn main() {
 
 # Changelog
 
+## 0.16.3
+
+Just some fixes to the test suite, needed to make github actions CI work. 
+
 ## 0.16.2
 
 Fixes multiple problems. The most impactful being that 0.16.1 could only be built
