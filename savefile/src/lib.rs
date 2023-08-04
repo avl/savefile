@@ -794,9 +794,6 @@ extern crate memoffset;
 #[cfg(feature="derive")]
 extern crate savefile_derive;
 
-#[allow(unused)]
-use arrayvec::ArrayString;
-
 /// This object represents an error in deserializing or serializing
 /// an item.
 #[derive(Debug)]
