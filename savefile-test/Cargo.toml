@@ -2,7 +2,7 @@
 name = "savefile-test"
 version = "0.0.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
-
+resolver = "2"
 [features]
 default = ["external_benchmarks"]
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
