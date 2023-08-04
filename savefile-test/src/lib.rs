@@ -1,4 +1,3 @@
-#![cfg_attr(feature="nightly", feature(integer_atomics))]
 #![allow(unused_imports)]
 #![cfg_attr(feature="nightly", feature(test))]
 #![deny(warnings)]
