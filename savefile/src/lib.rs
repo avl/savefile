@@ -99,7 +99,7 @@ Mark the struct like so:
 ```
 extern crate savefile;
 use savefile::prelude::*;
-
+use std::path::Path;
 #[macro_use]
 extern crate savefile_derive;
 
@@ -126,6 +126,8 @@ fn load_player(file:&'static str) -> Player {
 }
 
 fn main() {
+    if Path::new("save.bin").exists() == false { /* error handling */ return;}
+
     let mut player = load_player("save.bin"); //Load from previous save
     assert_eq!("Steve",&player.name); //The name from the previous version saved will remain
     assert_eq!(0,player.skills.len()); //Skills didn't exist when this was saved
@@ -470,6 +472,7 @@ Rules for using the #\[savefile_versions] attribute:
  ```
  extern crate savefile;
  use savefile::prelude::*;
+ use std::path::Path;
 
  #[macro_use]
  extern crate savefile_derive;
@@ -503,6 +506,9 @@ Rules for using the #\[savefile_versions] attribute:
  }
 
  fn main() {
+
+     if Path::new("newsave.bin").exists() == false { /* error handling */ return;}
+
      let mut player = load_player("newsave.bin"); //Load from previous save
      player.history.push(Position{x:1,y:1});
      player.history.push(Position{x:2,y:1});
