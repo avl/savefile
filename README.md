@@ -1,4 +1,4 @@
-![build](https://github.com/github/docs/actions/workflows/rust.yml/badge.svg)
+![build](https://github.com/github/avl/savefile/actions/workflows/rust.yml/badge.svg)
 
 # Introduction to Savefile 
 
