@@ -1,0 +1,30 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build (nightly)
+      run: cargo +nightly build --workspace --verbose
+    - name: Run tests (nightly)
+      run: cargo +nightly test --workspace --verbose
+    - name: Build min-deps (nightly)
+      run: cargo +nightly build -p savefile-min-build --verbose
+    - name: Build (stable)
+      run: cargo +stable build --workspace --verbose
+    - name: Run tests (stable)
+      run: cargo +stable test --workspace --verbose
+    - name: Build min-deps (stable)
+      run: cargo +stable build -p savefile-min-build --verbose
