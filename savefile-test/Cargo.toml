@@ -2,7 +2,7 @@
 name = "savefile-test"
 version = "0.0.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
-
+resolver = "2"
 [features]
 default = ["external_benchmarks"]
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
@@ -12,11 +12,11 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash"]}
-savefile-derive = { path = "../savefile-derive" }
+savefile-derive = { path = "../savefile-derive", version = "=0.16.3" }
 bit-vec = "0.6"
 arrayvec="0.7"
 smallvec="*"
-indexmap="*"
+indexmap = { version = "1.9"}
 byteorder="*"
 rand="0.8"
 parking_lot="0.12"

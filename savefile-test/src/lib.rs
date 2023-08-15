@@ -1,4 +1,3 @@
-#![cfg_attr(feature="nightly", feature(integer_atomics))]
 #![allow(unused_imports)]
 #![cfg_attr(feature="nightly", feature(test))]
 #![deny(warnings)]
@@ -1413,7 +1412,7 @@ pub fn test_struct_with_ignored_member() {
 pub fn test_indexmap() {
     let mut imap = IndexMap::new();
     assert_roundtrip(imap.clone());
-    imap.insert(43,"hej".to_string());
+    imap.insert(43u32,"hej".to_string());
     assert_roundtrip(imap.clone());
 
     imap.insert(44,"hej".to_string());
@@ -1426,7 +1425,7 @@ pub fn test_indexmap() {
 pub fn test_indexset() {
     let mut iset = IndexSet::new();
     assert_roundtrip(iset.clone());
-    iset.insert((43,44));
+    iset.insert((43u32,44u32));
     assert_roundtrip(iset.clone());
 
     iset.insert((43,43));

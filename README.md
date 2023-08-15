@@ -1,3 +1,5 @@
+![build](https://github.com/avl/savefile/actions/workflows/rust.yml/badge.svg)
+
 # Introduction to Savefile 
 
 Savefile is a library to effortlessly serialize rust structs and enums. It uses
@@ -62,6 +64,10 @@ fn main() {
 
 
 # Changelog
+
+## 0.16.3
+
+Just some fixes to the test suite, needed to make github actions CI work. 
 
 ## 0.16.2
 
