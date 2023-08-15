@@ -4169,10 +4169,12 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
             let align = mem::align_of::<T>();
             let elem_size = mem::size_of::<T>();
             let num_elems = deserializer.read_usize()?;
+
             if num_elems == 0 {
                 return Ok(Vec::new());
             }
             let num_bytes = elem_size * num_elems;
+
             let layout = if let Ok(layout) = std::alloc::Layout::from_size_align(num_bytes, align) {
                 Ok(layout)
             } else {
@@ -4182,10 +4184,16 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                 if elem_size == 0 {
                     NonNull::dangling().as_ptr()
                 } else {
-                    unsafe { std::alloc::alloc(layout.clone()) }
+                    let ptr = unsafe { std::alloc::alloc(layout.clone()) };
+                    if ptr.is_null() {
+                        panic!("Failed to allocate {} bytes of memory", num_bytes);
+                    }
+
+                    ptr
                 };
 
             {
+
                 let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
                     Ok(()) => Ok(()),
