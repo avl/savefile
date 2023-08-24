@@ -313,3 +313,76 @@ fn test_change_type_of_field2() {
         1
         );
 }
+
+
+
+
+
+#[derive(Debug, PartialEq, Savefile)]
+struct FastVersionA0 {
+    a: u32,
+    b: u32,
+    c: u32
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct FastVersionA1 {
+    a: u32,
+    #[savefile_versions = "0..0"]
+    b: Removed<u32>,
+    c: u32
+}
+
+
+
+#[test]
+fn simple_vertest_a() {
+    use ::assert_roundtrip_to_new_version;
+    let _ver1:FastVersionA1 = assert_roundtrip_to_new_version(
+        FastVersionA0 {
+            a: 2,
+            b: 3,
+            c: 4
+        },
+        0,
+        FastVersionA1 {
+            a: 2,
+            b: Removed::new(),
+            c: 4,
+        },
+        1
+    );
+}
+
+
+#[derive(Debug, PartialEq, Savefile)]
+struct FastVersionB0 {
+    a: u32,
+    b: u32,
+}
+#[derive(Debug, PartialEq, Savefile)]
+struct FastVersionB1 {
+    a: u32,
+    b: u32,
+    #[savefile_versions = "1.."]
+    c: u32,
+}
+
+
+
+#[test]
+fn simple_vertest_b() {
+    use ::assert_roundtrip_to_new_version;
+    let _ver1:FastVersionB1 = assert_roundtrip_to_new_version(
+        FastVersionB0 {
+            a: 2,
+            b: 3,
+        },
+        0,
+        FastVersionB1 {
+            a: 2,
+            b: 3,
+            c: 0,
+        },
+        1
+    );
+}
