@@ -1178,10 +1178,18 @@ pub fn fuzz_regression2() {
 
 
 #[test]
-pub fn test_roundtrip_arc_array() {
+pub fn test_roundtrip_arc_slice() {
     let a1: Arc<[u32]> = vec![1,2,3,4].into();
     assert_roundtrip(a1);
     let a2: Arc<[String]> = vec!["Hello".to_string()].into();
+    assert_roundtrip(a2);
+}
+
+#[test]
+pub fn test_roundtrip_boxed_slice() {
+    let a1: Box<[u32]> = vec![1,2,3,4].into_boxed_slice();
+    assert_roundtrip(a1);
+    let a2: Box<[String]> = vec!["Hello".to_string()].into_boxed_slice();
     assert_roundtrip(a2);
 }
 

@@ -4021,11 +4021,32 @@ fn regular_serialize_vec<T: Serialize>(items: &[T], serializer: &mut Serializer<
     }
 }
 
+impl<T: WithSchema> WithSchema for Box<[T]> {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)))
+    }
+}
 impl<T: WithSchema> WithSchema for Arc<[T]> {
     fn schema(version: u32) -> Schema {
         Schema::Vector(Box::new(T::schema(version)))
     }
 }
+impl<T: Introspect> Introspect for Box<[T]> {
+    fn introspect_value(&self) -> String {
+        return "Box[]".to_string();
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some(introspect_item(index.to_string(), &self[index]));
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<T: Introspect> Introspect for Arc<[T]> {
     fn introspect_value(&self) -> String {
         return "Arc[]".to_string();
@@ -4082,6 +4103,25 @@ impl Deserialize for Arc<str> {
     }
 }
 
+impl<T: Serialize + ReprC> Serialize for Box<[T]> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        unsafe {
+            if T::repr_c_optimization_safe(serializer.version).is_false() {
+                regular_serialize_vec(&*self, serializer)
+            } else {
+                let l = self.len();
+                serializer.write_usize(l)?;
+                serializer.write_buf(std::slice::from_raw_parts(
+                    (*self).as_ptr() as *const u8,
+                    std::mem::size_of::<T>() * l,
+                ))
+            }
+        }
+    }
+}
+impl<T: ReprC> ReprC for Box<[T]> { }
+
+
 impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
@@ -4103,6 +4143,11 @@ impl<T: ReprC> ReprC for Arc<[T]> { }
 impl<T: Deserialize+ReprC> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
+    }
+}
+impl<T: Deserialize+ReprC> Deserialize for Box<[T]> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
 }
 

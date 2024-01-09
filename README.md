@@ -65,6 +65,10 @@ fn main() {
 
 # Changelog
 
+## 0.16.4
+
+Support for boxed slices. I.e, Savefile can now serialize data of type ```Box<[T]>```.
+
 ## 0.16.3
 
 Just some fixes to the test suite, needed to make github actions CI work. 
