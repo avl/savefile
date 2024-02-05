@@ -598,8 +598,8 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let saveerr = quote_spanned! {defspan=>
         Result<(),_savefile::prelude::SavefileError>
     };
-    let magic = format!("_IMPL_SAVEFILE_SERIALIZE_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -978,8 +978,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
         _savefile::prelude::SavefileError
     };
 
-    let magic = format!("_IMPL_SAVEFILE_DESERIALIZE_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -1117,8 +1116,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
 
-    let magic = format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::WithSchema});
     let uses = quote_spanned! { defspan =>
@@ -1170,8 +1168,8 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let uses = quote_spanned! { defspan =>
         extern crate savefile as _savefile;
     };
-    let magic = format!("_IMPL_SAVEFILE_REPRC_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     for field in field_infos.windows(2) {
         let field_name1 = field[0].ident.as_ref().expect("Field was expected to have a name");
@@ -1553,8 +1551,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
     //let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     //let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
 
-    let magic = format!("_IMPL_SAVEFILE_INTROSPECT_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
@@ -1837,8 +1834,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
 
-    let magic = format!("_IMPL_SAVEFILE_WITHSCHEMA_FOR_{}", &name).to_string();
-    let dummy_const = syn::Ident::new(&magic, proc_macro2::Span::call_site());
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
