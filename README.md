@@ -65,6 +65,11 @@ fn main() {
 
 # Changelog
 
+## 0.16.5
+
+Minor change to savefile-derive to avoid triggering warnings when Rust RFC 3373 lands. See
+bug #36 https://github.com/avl/savefile/issues/36 for more information.
+
 ## 0.16.4
 
 Support for boxed slices. I.e, Savefile can now serialize data of type ```Box<[T]>```.
