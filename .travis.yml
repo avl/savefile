@@ -1,6 +1,0 @@
-before_script: cd savefile-test
-language: rust
-rust:
-  - nightly
-  - stable
-

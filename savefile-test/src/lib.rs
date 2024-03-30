@@ -38,6 +38,7 @@ mod test_generic;
 #[cfg(feature = "external_benchmarks")]
 #[cfg(not(miri))]
 mod ext_benchmark;
+mod test_abi;
 
 #[derive(Debug, Savefile, PartialEq)]
 struct NonCopy {

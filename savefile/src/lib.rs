@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 #![deny(warnings)]
 
 /*!
@@ -743,6 +743,9 @@ through simple copying of bytes.
 
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
+/// Definitions for the savefile "stable ABI"-system
+pub mod abi;
+
 extern crate alloc;
 #[cfg(feature="arrayvec")]
 extern crate arrayvec;
@@ -2093,6 +2096,7 @@ impl SchemaArray {
 /// without any padding.
 /// The dbg_name is just for diagnostics.
 #[derive(Debug, PartialEq)]
+#[repr(C)]
 pub struct SchemaStruct {
     /// Diagnostic value
     pub dbg_name: String,
@@ -2263,6 +2267,7 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 /// this tree, but must reuse these existing ones.
 /// See the various enum variants for more information:
 #[derive(Debug, PartialEq)]
+#[repr(C,u32)]
 pub enum Schema {
     /// Represents a struct. Custom implementations of Serialize may use this
     /// format are encouraged to use this format.

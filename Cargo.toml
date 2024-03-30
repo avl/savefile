@@ -3,6 +3,6 @@ members = [
     "savefile",
     "savefile-derive",
     "savefile-test",
-    "savefile-min-build",
+    "savefile-min-build", "savefile-abi-min",
 ]
 resolver = "2"
