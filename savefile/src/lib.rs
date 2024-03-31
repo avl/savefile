@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
 #![deny(warnings)]
 
 /*!
@@ -743,8 +743,6 @@ through simple copying of bytes.
 
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
-/// Definitions for the savefile "stable ABI"-system
-pub mod abi;
 
 extern crate alloc;
 #[cfg(feature="arrayvec")]
@@ -756,12 +754,12 @@ extern crate parking_lot;
 extern crate smallvec;
 
 #[cfg(feature="parking_lot")]
-use parking_lot::{Mutex, MutexGuard,RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 
 use std::fs::File;
-use std::io::{Read, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Read};
 use std::borrow::Cow;
-use std::io::{Write};
+use std::io::Write;
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
     AtomicUsize, Ordering,
@@ -778,7 +776,7 @@ use std::mem::MaybeUninit;
 #[cfg(feature="indexmap")]
 extern crate indexmap;
 #[cfg(feature="indexmap")]
-use indexmap::{IndexMap,IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 #[cfg(feature="bit-vec")]
 extern crate bit_vec;
@@ -796,6 +794,9 @@ extern crate memoffset;
 
 #[cfg(feature="derive")]
 extern crate savefile_derive;
+
+pub const CURRENT_SAVEFILE_LIB_VERSION:u16 = 0;
+
 
 /// This object represents an error in deserializing or serializing
 /// an item.
@@ -853,7 +854,17 @@ pub enum SavefileError {
     /// File was compressed, or user asked for compression, but bzip2-library feature was not enabled.
     CompressionSupportNotCompiledIn,
     /// Invalid char, i.e, a serialized value expected to be a char was encountered, but it had an invalid value.
-    InvalidChar
+    InvalidChar,
+    /// This occurs for example when using the stable ABI-functionality to call into a library,
+    /// and then it turns out that library uses a future, incompatible, Savefile-library version.
+    IncompatibleSavefileLibraryVersion,
+    /// This occurs if a foreign ABI entry point is missing a method
+    MissingMethod {
+        /// The name of the missing method
+        method_name: String
+    },
+    /// Savefile ABI only supports at most 64 arguments per function
+    TooManyArguments
 }
 
 impl Display for SavefileError {
@@ -1124,7 +1135,7 @@ mod crypto {
     use std::io::{Error, ErrorKind, Read, Write};
     use std::path::Path;
     use ring::aead;
-    use ring::aead::{BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM};
+    use ring::aead::{AES_256_GCM, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey};
     use ring::error::Unspecified;
 
     extern crate rand;
@@ -1425,7 +1436,7 @@ mod crypto {
     }
 }
 #[cfg(feature="ring")]
-pub use crypto::{CryptoReader,CryptoWriter, save_encrypted_file, load_encrypted_file};
+pub use crypto::{CryptoReader, CryptoWriter, load_encrypted_file, save_encrypted_file};
 
 impl<'a, W:Write+'a> Serializer<'a, W> {
     /// Writes a binary bool to the output
@@ -1757,11 +1768,11 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
         reader.read_exact(&mut head)?;
 
         if &head[..] != &("savefile\0".to_string().into_bytes())[..] {
-            return Err(SavefileError::GeneralError {msg: "File is not in new savefile-format. If you have a file in old format, contact crate author and we'll work something out! It is not the intention that binary compatibility will be broken any more in the future.".into()});
+            return Err(SavefileError::GeneralError {msg: "File is not in new savefile-format.".into()});
         }
 
         let savefile_lib_version = reader.read_u16::<LittleEndian>()?;
-        if savefile_lib_version != 0 {
+        if savefile_lib_version != CURRENT_SAVEFILE_LIB_VERSION { //Note, in future we might interpret this as 'schema version', thus allowing newer code to read files with older versions of the schema-definition
             return Err(SavefileError::GeneralError {msg: "This file has been created by an earlier, incompatible version of the savefile crate (0.5.0 or before).".into()});
         }
         let file_ver = reader.read_u32::<LittleEndian>()?;
@@ -1781,7 +1792,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 {
                     let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
                     if fetch_schema {
-                        let mut schema_deserializer = Deserializer::<bzip2::read::BzDecoder<TR>>::new_raw(&mut compressed_reader);
+                        let mut schema_deserializer = Deserializer::<bzip2::read::BzDecoder<TR>>::new_schema_deserializer(&mut compressed_reader, CURRENT_SAVEFILE_LIB_VERSION);
                         let memory_schema = T::schema(file_ver);
                         let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1808,7 +1819,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 }
         } else {
             if fetch_schema {
-                let mut schema_deserializer = Deserializer::<TR>::new_raw(reader);
+                let mut schema_deserializer = Deserializer::<TR>::new_schema_deserializer(reader, CURRENT_SAVEFILE_LIB_VERSION);
                 let memory_schema = T::schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1835,11 +1846,11 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     /// Create a Deserializer.
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
-    pub fn new_raw(reader: &mut impl Read) -> Deserializer<impl Read> {
+    pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<impl Read> {
         Deserializer {
             reader,
-            file_version: 0,
-            memory_version: 0,
+            file_version: file_schema_version as u32,
+            memory_version: CURRENT_SAVEFILE_LIB_VERSION as u32,
             ephemeral_state: HashMap::new(),
         }
     }
@@ -2292,6 +2303,35 @@ pub enum Schema {
 }
 
 impl Schema {
+    pub fn layout_compatible(&self, other: &Schema) -> bool {
+        match (self, other) {
+            (Schema::Struct(a),Schema::Struct(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::Enum(a), Schema::Enum(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::Primitive(a), Schema::Primitive(b)) => {
+                a == b
+            }
+            (Schema::Vector(a), Schema::Vector(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::Array(a), Schema::Array(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::SchemaOption(a), Schema::SchemaOption(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::ZeroSize, Schema::ZeroSize) => {
+                true
+            }
+            (Schema::Custom(a), Schema::Custom(b)) => {
+                a == b
+            }
+            _ => false
+        }
+    }
     /// Create a 1-element tuple
     pub fn new_tuple1<T1: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
@@ -2480,7 +2520,7 @@ fn diff_fields(
 /// between the two schemas. The schema 'a' is assumed to be the current
 /// schema (used in memory).
 /// Returns None if both schemas are equivalent
-fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
+pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
     let (atype, btype) = match *a {
         Schema::Struct(ref xa) => match *b {
             Schema::Struct(ref xb) => return diff_struct(xa, xb, path),
@@ -4806,7 +4846,7 @@ use std::cell::RefCell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::Arc;
 

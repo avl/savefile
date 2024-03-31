@@ -17,8 +17,8 @@ the intention is that the quality should be enough for production.
 
 Cargo.toml:
 ````
-savefile = "0.16"
-savefile-derive = "0.16"
+savefile = "0.17"
+savefile-derive = "0.17"
 ````
 
 # Sample 
@@ -64,6 +64,15 @@ fn main() {
 
 
 # Changelog
+
+## 0.17.0
+
+This is a big change! With 0.17.0 Savefile gains yet another major function: Support for
+making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
+up into different shared libraries (.so on linux, .dll on windows), and allow calls
+across the library boundaries.
+
+
 
 ## 0.16.5
 
