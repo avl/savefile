@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::mem::MaybeUninit;
-use savefile_abi::{RawAbiCallResult, AbiExportable, AbiMethod, AbiMethodInfo, AbiSignallingAction, AbiTraitDefinition, TraitObject, AbiExportableImplementation, abi_entry, AbiErrorMsg, AbiConnection, AbiConnectionMethod};
-use savefile::{Deserialize, Deserializer, SavefileError, Schema, SchemaPrimitive};
+use savefile_abi::{RawAbiCallResult, AbiSignallingAction, TraitObject, AbiExportableImplementation, abi_entry, AbiErrorMsg, AbiConnection, AbiConnectionMethod};
+use savefile::{Deserialize, Deserializer, SavefileError};
 use savefile_derive::savefile_abi_exportable;
 
 
