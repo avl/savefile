@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use std::mem::MaybeUninit;
-use savefile_abi::{RawAbiCallResult, AbiSignallingAction, TraitObject, AbiExportableImplementation, abi_entry, AbiErrorMsg, AbiConnection, AbiConnectionMethod};
+use savefile_abi::{RawAbiCallResult, AbiSignallingAction, TraitObject, AbiExportableImplementation, abi_entry, AbiErrorMsg, AbiConnection, AbiConnectionMethod, AbiExportable};
 use savefile::{Deserialize, Deserializer, SavefileError};
 use savefile_derive::savefile_abi_exportable;
 
@@ -24,42 +24,7 @@ unsafe impl AbiExportableImplementation for AdderImplementation {
     fn call(trait_object : TraitObject, method_number: u16, compatibility_mask:u64, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
         let trait_object: &Self::AbiInterface = unsafe { std::mem::transmute(trait_object) };
 
-        match method_number {
-            0 => {
-                let a;
-                let b;
-                if compatibility_mask & 1 != 0 {
-                    // Fast path
-                    a = u32::from_le_bytes(data[0..4].try_into().map_err(|_|SavefileError::ShortRead)?);
-                } else {
-                    // Serialized
-                    todo!()
-                }
-                if compatibility_mask & 2 != 0 {
-                    // Fast path
-                    b = u32::from_le_bytes(data[4..8].try_into().map_err(|_|SavefileError::ShortRead)?);
-                } else {
-                    // Serialized
-                    todo!()
-                }
-                let ret = trait_object.add(a,b);
-                if compatibility_mask & (1<<63) != 0 {
-                    // Fast path
-                    let ret_data = &ret as *const u32 as *const u8;
-                    let outcome = RawAbiCallResult::Success {data: ret_data, len: 4, serialized: false};
-                    receiver(&outcome as *const _, abi_result)
-                } else {
-                    // Serialized
-                    todo!()
-                }
-            }
-            _ => {
-                return Err(SavefileError::general("Unknown method number"));
-            }
-        }
-
-
-        Ok(())
+        <dyn AdderInterface as AbiExportable>::call(trait_object, method_number, compatibility_mask, data, abi_result, receiver)
     }
 
 }
@@ -87,7 +52,7 @@ fn parse_outcome<T:Deserialize>(outcome: &RawAbiCallResult) -> Result<T, Savefil
             if *serialized {
                 let data = unsafe { std::slice::from_raw_parts(*data, *len) };
                 let mut reader = Cursor::new(data);
-                Deserializer::bare_deserialize::<T>(&mut reader, 0)
+                Deserializer::bare_deserialize::<T>(&mut reader, 0, 0)
             } else {
                 let mut result : MaybeUninit<T> = MaybeUninit::uninit();
                 let result_ptr = result.as_mut_ptr() as *mut u8;
@@ -127,13 +92,13 @@ impl AdderInterface for AbiConnection<dyn AdderInterface> {
         }
         let mut result_buffer: Result<u32,SavefileError> = Ok(0);
         if info.compatibility_mask & 3 == 3 {
-            let data = [x,y];
+            let data = [0/*version*/, x,y];
             (self.entry)(AbiSignallingAction::RegularCall {
                 trait_object: self.trait_object,
                 method_number: info.callee_method_number,
                 compatibility_mask: info.compatibility_mask,
                 data: data.as_ptr() as *const u8,
-                data_length: 8,
+                data_length: 12,
                 abi_result: &mut result_buffer as *mut Result<u32,SavefileError> as *mut (),
                 receiver: result_receiver::<u32>,
             });

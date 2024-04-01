@@ -765,7 +765,7 @@ use std::sync::atomic::{
     AtomicUsize, Ordering,
 };
 
-use self::byteorder::LittleEndian;
+pub use ::byteorder::LittleEndian;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -964,14 +964,15 @@ pub struct Serializer<'a, W:Write> {
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
 pub struct Deserializer<'a, R: Read> {
-    reader: &'a mut R,
+    /// The wrapped reader
+    pub reader: &'a mut R,
     /// The version of the input file
     pub file_version: u32,
     /// The version of the data structures in memory
     pub memory_version: u32,
     /// This contains ephemeral state that can be used to implement de-duplication of
     /// strings or possibly other situations where it is desired to deserialize DAGs.
-    ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
+    pub ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl<'a, TR: Read> Deserializer<'a, TR> {
@@ -1611,10 +1612,8 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
 
 
     /// Serialize without any header. Using this means that bare_deserialize must be used to
-    /// deserialize. The only metadata sent is the data version number, not even the savefile
-    /// version number.
+    /// deserialize. No metadata is sent, not even version.
     pub fn bare_serialize<T: Serialize>(writer: &mut W, version: u32, data: &T) -> Result<(), SavefileError> {
-        writer.write_u32::<LittleEndian>(version)?;
         let mut serializer = Serializer { writer, version };
         data.serialize(&mut serializer)?;
         writer.flush()?;
@@ -1803,12 +1802,12 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     }
 
     /// Deserialize data which was serialized using 'bare_serialize'
-    pub fn bare_deserialize<T: Deserialize>(reader: &mut TR, own_version: u32) -> Result<T, SavefileError> {
-        let file_ver = reader.read_u32::<LittleEndian>()?;
+    pub fn bare_deserialize<T: Deserialize>(reader: &mut TR, file_version: u32, memory_version: u32) -> Result<T, SavefileError> {
+
         let mut deserializer = Deserializer {
             reader,
-            file_version: file_ver,
-            memory_version: own_version,
+            file_version,
+            memory_version,
             ephemeral_state: HashMap::new(),
         };
         Ok(T::deserialize(&mut deserializer)?)

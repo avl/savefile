@@ -30,6 +30,7 @@ pub struct AbiTraitDefinition {
 pub unsafe trait AbiExportable {
     fn get_definition(version: u32) -> AbiTraitDefinition;
     fn get_latest_version() -> u32;
+    fn call(&self, method_number: u16, compatibility_mask:u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
 }
 
 pub unsafe trait AbiExportableImplementation {
