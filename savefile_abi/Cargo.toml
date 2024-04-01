@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 savefile = { path="../savefile", version = "=0.17.0"}
+byteorder = "1.4"
 

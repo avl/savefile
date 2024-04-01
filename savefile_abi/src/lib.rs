@@ -1,12 +1,14 @@
 extern crate savefile;
 use std::io::Cursor;
 use std::marker::PhantomData;
+use std::mem::MaybeUninit;
 use std::panic::catch_unwind;
 use std::ptr::{null};
-use std::slice;
-use savefile::{CURRENT_SAVEFILE_LIB_VERSION, diff_schema, load_noschema, SavefileError, Schema, Serializer};
+use std::{ptr, slice};
+use savefile::{CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_noschema, SavefileError, Schema, Serializer};
 use savefile::prelude::Savefile;
 use savefile::SavefileError::MissingMethod;
+use byteorder::ReadBytesExt;
 
 #[derive(Savefile, Debug)]
 pub struct AbiMethodInfo {
@@ -30,16 +32,59 @@ pub struct AbiTraitDefinition {
 pub unsafe trait AbiExportable {
     fn get_definition(version: u32) -> AbiTraitDefinition;
     fn get_latest_version() -> u32;
-    fn call(&self, method_number: u16, compatibility_mask:u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
+    fn call(&self, method_number: u16, effective_version:u32, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
 }
 
 pub unsafe trait AbiExportableImplementation {
     type AbiInterface : ?Sized + AbiExportable;
-    fn new() -> TraitObject;
-    fn destroy(obj: TraitObject);
+    fn new() -> Box<Self::AbiInterface>;
+    unsafe fn destroy(trait_object: TraitObject) {
+        let mut raw_ptr : MaybeUninit<*mut Self::AbiInterface> = MaybeUninit::uninit();
+        ptr::copy(&trait_object as *const TraitObject as *const MaybeUninit<*mut Self::AbiInterface>, &mut raw_ptr as *mut MaybeUninit<*mut Self::AbiInterface>, 1);
 
-    fn call(trait_object : crate::TraitObject, method_number: u16, compatibility_mask:u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const crate::RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
+        let _ = Box::from_raw(raw_ptr.assume_init());
+    }
+    
+    unsafe fn call(trait_object : TraitObject, method_number: u16, effective_version:u32, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+        let mut raw_ptr : MaybeUninit<*mut Self::AbiInterface> = MaybeUninit::uninit();
+        ptr::copy(&trait_object as *const TraitObject as *const MaybeUninit<*mut Self::AbiInterface>, &mut raw_ptr as *mut MaybeUninit<*mut Self::AbiInterface>, 1);
+        let trait_object: &Self::AbiInterface = unsafe { &*raw_ptr.assume_init() };
+
+        <Self::AbiInterface as AbiExportable>::call(trait_object, method_number, effective_version, data, abi_result, receiver)
+    }
+
 }
+/*unsafe impl<T:Default + AbiExportable> AbiExportableImplementation for T {
+    type AbiInterface = T;
+    unsafe fn new() -> TraitObject where T:Default {
+        let obj : Box<T> = Box::new(T::default());
+        let raw = Box::into_raw(obj);
+        assert_eq!(std::mem::size_of::<*mut T>(), 16);
+        assert_eq!(std::mem::size_of::<TraitObject>(), 16);
+
+        let mut trait_object = TraitObject::zero();
+
+        ptr::copy(&raw, &mut trait_object as *mut TraitObject as *mut *mut T, 1);
+
+        trait_object
+    }
+
+    unsafe fn destroy(mut trait_object: TraitObject) {
+        let mut raw_ptr : *mut T = std::ptr::null_mut();
+        ptr::copy(&trait_object as *const TraitObject as *const *mut T, &mut raw_ptr as *mut *mut T, 1);
+
+        let _ = Box::from_raw(raw_ptr);
+    }
+    unsafe fn call(mut trait_object : TraitObject, method_number: u16, effective_version:u32, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+        let mut raw_ptr : *mut T = std::ptr::null_mut();
+        ptr::copy(&trait_object as *const TraitObject as *const *mut T, &mut raw_ptr as *mut *mut T, 1);
+
+        let trait_object: &mut T = unsafe { &mut *raw_ptr };
+
+        <T as AbiExportable>::call(trait_object, method_number, effective_version, data, abi_result, receiver)
+    }
+
+}*/
 
 pub struct AbiConnectionMethod {
     pub method_name: String,
@@ -84,6 +129,14 @@ pub struct AbiConnection<T:?Sized> {
     pub phantom: PhantomData<*const T>
 }
 
+impl<T:?Sized> Drop for AbiConnection<T> {
+    fn drop(&mut self) {
+        (self.entry)(AbiSignallingAction::DropInstance {
+            trait_object: self.trait_object,
+        });
+    }
+}
+
 #[repr(C)]
 pub struct AbiErrorMsg {
     pub error_msg_utf8: *const u8,
@@ -116,12 +169,8 @@ pub enum AbiSignallingAction {
         /// The method to call. This is the method number using the
         /// numbering of the callee.
         method_number: u16,
-        /// Mask determining which parameters are serialized
-        /// A bit value of '1' means memory-layout is compatible,
-        /// a value of '0' means argument must be serialized.
-        ///
-        /// NOTE! The most significant bit corresponds to the return value.
-        compatibility_mask: u64,
+        /// The negotiated protocol version
+        effective_version: u32,
         /// Data for parameters, possibly serialized
         data: *const u8,
         /// Length of parameters-data
@@ -159,8 +208,34 @@ pub enum AbiSignallingAction {
     },
 }
 
-pub struct AbiEntryPoint {
-
+pub fn parse_return_value<T:Deserialize>(outcome: &RawAbiCallResult, memory_version: u32) -> Result<T, SavefileError> {
+    match outcome {
+        RawAbiCallResult::Success { data, len, serialized } => {
+            if *serialized {
+                let data = unsafe { std::slice::from_raw_parts(*data, *len) };
+                let mut reader = Cursor::new(data);
+                let file_version = reader.read_u32::<LittleEndian>()?;
+                Deserializer::bare_deserialize::<T>(&mut reader, file_version, memory_version)
+            } else {
+                let mut result : MaybeUninit<T> = MaybeUninit::uninit();
+                let result_ptr = result.as_mut_ptr() as *mut u8;
+                unsafe  { std::ptr::copy(*data, result_ptr, *len) };
+                Ok(unsafe { result.assume_init() })
+            }
+        }
+        RawAbiCallResult::Panic(AbiErrorMsg{ error_msg_utf8, len }) => {
+            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
+            Err(SavefileError::CalleePanic {
+                msg:String::from_utf8_lossy(errdata).into()
+            })
+        }
+        RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8, len }) => {
+            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
+            Err(SavefileError::GeneralError {
+                msg:String::from_utf8_lossy(errdata).into()
+            })
+        }
+    }
 }
 
 impl<T:AbiExportable+?Sized> AbiConnection<T> {
@@ -343,11 +418,11 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
 pub fn abi_entry<T:AbiExportableImplementation>(flag: AbiSignallingAction) {
     match flag {
-        AbiSignallingAction::RegularCall { trait_object, method_number, compatibility_mask, data, data_length, abi_result, receiver } => {
+        AbiSignallingAction::RegularCall { trait_object, method_number, effective_version, data, data_length, abi_result, receiver } => {
             match catch_unwind(||{
                 let data = unsafe { slice::from_raw_parts(data, data_length) };
 
-                match T::call(trait_object, method_number, compatibility_mask, data, abi_result, receiver) {
+                match unsafe { T::call(trait_object, method_number, effective_version, data, abi_result, receiver) } {
                     Ok(_) => {
 
                     }
@@ -387,8 +462,17 @@ pub fn abi_entry<T:AbiExportableImplementation>(flag: AbiSignallingAction) {
         }
         AbiSignallingAction::CreateInstance { trait_object_receiver, error_receiver, error_callback } => {
             match catch_unwind(||{
-                let obj = T::new();
-                unsafe { *trait_object_receiver = obj; }
+
+                let obj : Box<T::AbiInterface> = T::new();
+                let raw = Box::into_raw(obj);
+                assert_eq!(std::mem::size_of::<*mut T::AbiInterface>(), 16);
+                assert_eq!(std::mem::size_of::<TraitObject>(), 16);
+
+                let mut trait_object = TraitObject::zero();
+
+                unsafe { ptr::copy(&raw as *const *mut T::AbiInterface, &mut trait_object as *mut TraitObject as *mut *mut T::AbiInterface, 1) };
+
+                unsafe { *trait_object_receiver = trait_object; }
             }) {
                 Ok(_) => {}
                 Err(err) => {
@@ -400,7 +484,7 @@ pub fn abi_entry<T:AbiExportableImplementation>(flag: AbiSignallingAction) {
         }
         AbiSignallingAction::DropInstance { trait_object } => {
 
-            T::destroy(trait_object);
+            unsafe { T::destroy(trait_object); }
         }
     }
 }

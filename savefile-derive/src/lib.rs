@@ -880,16 +880,18 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
 
 
 
-    let trait_name = parsed.ident.to_string();
+    let trait_name_str = parsed.ident.to_string();
+    let trait_name = parsed.ident;
     let defspan = proc_macro2::Span::mixed_site();
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema};
-        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo};
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize};
+        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo, AbiErrorMsg};
         use savefile::LittleEndian;
         use std::collections::HashMap;
         use byteorder::ReadBytesExt;
+        use std::mem::MaybeUninit;
     };
 
     //let method_count = parsed.items.len();
@@ -897,6 +899,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     let mut output_method_defs:Vec<TokenStream> = vec![];
 
     let mut output_method_calls:Vec<TokenStream> = vec![];
+    let mut abi_connection_method_defs = vec![];
 
     for (method_number,item) in parsed.items.iter().enumerate() {
 
@@ -906,7 +909,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
         let method_number = method_number as u16;
         let mut method_args:Vec<TokenStream> = vec![];
         let mut arg_variable_decls = vec![];
-        let mut arg_variable_inits = vec![];
+        let mut arg_variable_deserializers = vec![];
         match item {
             TraitItem::Const(c) => {
                 panic!("savefile_abi_exportable does not support associated consts: {}",c.ident);
@@ -967,19 +970,12 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                         }
                     }
 
-                    let num_mask = 1u64 << (method_number as u64);
-                    arg_variable_inits.push(quote!{
-                           if compatibility_mask & #num_mask != 0 {
-                                // Fast path
-                                x = u32::from_le_bytes(data[0..4].try_into().map_err(|_|SavefileError::ShortRead)?);
-                            } else {
-                                // Serialized
-                                todo!()
-                            }
-
-                    });
+                    //let num_mask = 1u64 << (method_number as u64);
                     method_args.push(arg_name.to_token_stream());
                     arg_variable_decls.push(quote!{let #arg_name;});
+                    arg_variable_deserializers.push(quote!{
+                       #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                    });
                     output_arguments.push(quote!{
                         <#arg_type as WithSchema>::schema(version)
                     })
@@ -988,6 +984,34 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 if !had_ok_receiver {
                     panic!("Method {} did not have a 'self' parameter. This is not supported, &self must be present", method_name);
                 }
+
+                abi_connection_method_defs.push(quote!{
+                    fn #method_name(&self, x: u32, y: u32) -> u32 {
+                        let info: &AbiConnectionMethod = &self.methods[#method_number as usize];
+
+                        extern "C" fn result_receiver<T:Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
+                            let outcome = unsafe { &*outcome };
+                            let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
+                            result_receiver.write(parse_return_value::<T>(outcome, #version));
+                        }
+                        let mut result_buffer: MaybeUninit<Result<u32,SavefileError>> = MaybeUninit::<Result<u32,SavefileError>>::uninit();
+                        if info.compatibility_mask & 3 == 3 {
+                            let data = [0/*version*/, x,y];
+                            (self.entry)(AbiSignallingAction::RegularCall {
+                                trait_object: self.trait_object,
+                                method_number: info.callee_method_number,
+                                effective_version: self.effective_version,
+                                data: data.as_ptr() as *const u8,
+                                data_length: 12,
+                                abi_result: &mut result_buffer as *mut MaybeUninit<Result<u32,SavefileError>> as *mut (),
+                                receiver: result_receiver::<u32>,
+                            });
+                        } else {
+                            todo!("Serialized case not yet implemented")
+                        }
+                        unsafe { result_buffer.assume_init().expect("Unexpected panic in invocation target") }
+                    }
+                });
 
                 output_method_defs.push(quote!{
                     AbiMethod {
@@ -1000,33 +1024,35 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 });
 
                 output_method_calls.push(quote!{
-                        #method_number => {
-                            #(#arg_variable_decls)*
-                            if compatibility_mask & 1 != 0 {
-                                // Fast path
-                                x = <u32 as Deserialize>::deserialize(&mut deserializer)?;
-                            } else {
-                                // Serialized
-                                todo!()
-                            }
-                            if compatibility_mask & 2 != 0 {
-                                // Fast path
-                                y = <u32 as Deserialize>::deserialize(&mut deserializer)?;
-                            } else {
-                                // Serialized
-                                todo!()
-                            }
-                            let ret = self.#method_name( #(#method_args,)* );
-                            if compatibility_mask & (1<<63) != 0 {
-                                // Fast path
-                                let ret_data = &ret as *const u32 as *const u8;
-                                let outcome = RawAbiCallResult::Success {data: ret_data, len: 4, serialized: false};
+                    #method_number => {
+                        #(#arg_variable_decls)*
+
+                        #(#arg_variable_deserializers)*
+
+                        let ret = self.#method_name( #(#method_args,)* );
+
+                        let mut slow_temp = vec![];
+                        let mut serializer = Serializer {
+                            writer: &mut slow_temp,
+                            version: #version,
+                        };
+                        serializer.write_u32(effective_version)?;
+                        match ret.serialize(&mut serializer)
+                        {
+                            Ok(()) => {
+                                println!("Serialize return value, size: {}", slow_temp.len());
+                                let outcome = RawAbiCallResult::Success {data: slow_temp.as_ptr(), len: slow_temp.len(), serialized: true};
                                 receiver(&outcome as *const _, abi_result)
-                            } else {
-                                // Serialized
-                                todo!()
+                            }
+                            Err(err) => {
+                                println!("Serialize failed");
+                                let err_str = format!("{:?}", err);
+                                let outcome = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: err_str.as_ptr(), len: err_str.len()});
+                                receiver(&outcome as *const _, abi_result)
                             }
                         }
+
+                    }
 
                 });
 
@@ -1061,10 +1087,10 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
         const _:() = {
             #uses
 
-            unsafe impl AbiExportable for dyn AdderInterface {
+            unsafe impl AbiExportable for dyn #trait_name {
                 fn get_definition( version: u32) -> AbiTraitDefinition {
                     AbiTraitDefinition {
-                        name: #trait_name.to_string(),
+                        name: #trait_name_str.to_string(),
                         methods: vec! [ #(#output_method_defs,)* ]
                     }
                 }
@@ -1073,8 +1099,9 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                     #version
                 }
 
-                fn call(&self, method_number: u16, compatibility_mask:u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+                fn call(&self, method_number: u16, effective_version:u32, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
 
+                    println!("Receiving call. Parameter bytes: {}", data.len());
                     let mut cursor = Cursor::new(data);
 
                     let mut deserializer = Deserializer {
@@ -1092,6 +1119,10 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                     }
                     Ok(())
                 }
+            }
+
+            impl #trait_name for AbiConnection<dyn #trait_name> {
+                #(#abi_connection_method_defs)*
             }
         };
 
@@ -2014,7 +2045,6 @@ fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<To
     };
 
     let structname = quote_spanned!{defspan => #structname};
-
 
     let mut fields = Vec::new();
     for (idx, ref field) in field_infos.iter().enumerate() {
