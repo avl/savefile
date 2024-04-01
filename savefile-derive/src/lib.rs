@@ -1251,9 +1251,10 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     }
 }
 
-fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
+fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<(u32, bool/* have seen 'C' as in repr(u8,C) */)> {
 
     let mut size_u32: Option<u32> = None;
+    let mut repr_c_seen = false;
     for attr in attrs.iter() {
         if let Ok(ref meta) = attr.parse_meta() {
             match meta {
@@ -1281,15 +1282,16 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
                                     }
                                 },
                             };
-                            size_u32 = match size_str.as_ref() {
-                                "u8" => Some(1),
-                                "i8" => Some(1),
-                                "u16" => Some(2),
-                                "i16" => Some(2),
-                                "u32" => Some(4),
-                                "i32" => Some(4),
-                                "u64" => Some(8),
-                                "i64" => Some(8),
+                            match size_str.as_ref() {
+                                "C" => repr_c_seen = true,
+                                "u8" =>  size_u32 = Some(1),
+                                "i8" =>  size_u32 = Some(1),
+                                "u16" => size_u32 = Some(2),
+                                "i16" => size_u32 = Some(2),
+                                "u32" => size_u32 = Some(4),
+                                "i32" => size_u32 = Some(4),
+                                "u64" => size_u32 = Some(8),
+                                "i64" => size_u32 = Some(8),
                                 _ => panic!("Unsupported repr(X) attribute on enum: {}", size_str),
                             }
                         }
@@ -1298,7 +1300,7 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
             }
         }
     }
-    size_u32
+    size_u32.map(|x|(x,repr_c_seen))
 }
 #[proc_macro_derive(
     ReprC,
@@ -1350,18 +1352,23 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 return implement_reprc_hardcoded_false(name, input.generics);
             }
             let enum_size = get_enum_size(&input.attrs);
-            if let Some(enum_size) = enum_size {
+            if let Some((enum_size,_c)) = enum_size {
                 if enum_size != 1 {
                     if opt_in_fast {
                         panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
                     }
                     return implement_reprc_hardcoded_false(name, input.generics);
                 }
+            } else {
+                if opt_in_fast {
+                    panic!("The #[savefile_unsafe_and_fast] requires an explicit #[repr(C,u8)] attribute.");
+                }
+                return implement_reprc_hardcoded_false(name, input.generics);
             }
 
-            let field_infos = Vec::<FieldInfo>::new();
             for ref variant in enum1.variants.iter() {
                 match &variant.fields {
+                    //TODO: #[repr(u8,C)] enums could implement ReprC
                     &syn::Fields::Named(ref _fields_named) => {
                         if opt_in_fast {
                             panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
@@ -1376,16 +1383,10 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
                     }
                     &syn::Fields::Unit => {
-                        if enum_size.is_none() {
-                            if opt_in_fast {
-                                panic!("Enums which use the #[savefile_unsafe_and_fast] attribute must specify the enum size using the repr-attribute, like #[repr(u8)].");
-                            }
-                            return implement_reprc_hardcoded_false(name, input.generics);
-                        }
                     }
                 }
             }
-            implement_reprc(field_infos, input.generics, name,opt_in_fast)
+            implement_reprc(vec![], input.generics, name, opt_in_fast)
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
@@ -1420,14 +1421,9 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                if field_infos.len() == 1 {
-                    implement_reprc(field_infos, input.generics, name,opt_in_fast)
-                } else {
-                    if opt_in_fast {
-                        panic!("Enums with unnamed fields don't support #[savefile_unsafe_and_fast] attribute.");
-                    }
-                    return implement_reprc_hardcoded_false(name, input.generics);
-                }
+
+                implement_reprc(field_infos, input.generics, name,opt_in_fast)
+
             }
             &syn::Fields::Unit =>
                 implement_reprc(Vec::new(), input.generics, name,opt_in_fast),
@@ -1758,13 +1754,19 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 }
 
 #[allow(non_snake_case)]
-fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
+fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
     let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema };
     let fields1 = quote_spanned! { defspan => fields1 };
+    let offset_of = quote_spanned! {defspan =>
+        _savefile::prelude::offset_of
+    };
+
+    let structname = quote_spanned!{defspan => #structname};
+
 
     let mut fields = Vec::new();
     for (idx, ref field) in field_infos.iter().enumerate() {
@@ -1785,7 +1787,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             if removed {
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
             }
-            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
+            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset:None })));
         } else {
             let mut version_mappings = Vec::new();
             for dt in verinfo.deserialize_types.iter() {
@@ -1794,7 +1796,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))});
+                        #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version)), offset: Some(#offset_of!(#structname, #name))});
                     }
                 });
             }
@@ -1803,7 +1805,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
+                    #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: Some(#offset_of!(#structname, #name))});
                 }
                 ));
         }
@@ -1883,12 +1885,12 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     }
                 }
 
-                let fields = implement_withschema(field_infos);
+                let fields = implement_withschema(&name.to_string(), field_infos);
 
                 variants.push(quote! {
                 (#field_from_version,
                  #field_to_version,
-                 #Variant { name: #variant_name_spanned, discriminator: #var_idx, fields:
+                 #Variant { name: #variant_name_spanned, discriminant: #var_idx, fields:
                     {
                         let mut fields1 = Vec::<#Field>::new();
                         #(#fields;)*
@@ -1940,7 +1942,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         })
                         .collect();
 
-                    fields = implement_withschema(field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos);
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -1954,7 +1956,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             attrs: &f.attrs,
                         })
                         .collect();
-                    fields = implement_withschema(field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos);
                 }
                 &syn::Fields::Unit => {
                     fields = Vec::new();

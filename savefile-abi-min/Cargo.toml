@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 savefile = { path = "../savefile", features = ["derive"], default-features = false }
 savefile_abi = { path = "../savefile_abi" }
+byteorder = "1.4"
 

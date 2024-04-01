@@ -4,5 +4,5 @@ version = "0.17.0"
 edition = "2021"
 
 [dependencies]
-savefile = { path="../savefile", version = "=0.17.0", optional = true }
+savefile = { path="../savefile", version = "=0.17.0"}
 

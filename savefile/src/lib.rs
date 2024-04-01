@@ -795,7 +795,12 @@ extern crate memoffset;
 #[cfg(feature="derive")]
 extern crate savefile_derive;
 
-pub const CURRENT_SAVEFILE_LIB_VERSION:u16 = 0;
+/// The current savefile version.
+/// This versions number is used for serialized schemas.
+/// There is an ambition that savefiles created by earlier versions
+/// will be possible to open using later versions. The other way
+/// around is not supported.
+pub const CURRENT_SAVEFILE_LIB_VERSION:u16 = 1;
 
 
 /// This object represents an error in deserializing or serializing
@@ -863,8 +868,13 @@ pub enum SavefileError {
         /// The name of the missing method
         method_name: String
     },
-    /// Savefile ABI only supports at most 64 arguments per function
-    TooManyArguments
+    /// Savefile ABI only supports at most 63 arguments per function
+    TooManyArguments,
+    /// An ABI callee panicked
+    CalleePanic {
+        /// Descriptive message
+        msg: String,
+    },
 }
 
 impl Display for SavefileError {
@@ -908,6 +918,18 @@ impl Display for SavefileError {
             }
             SavefileError::InvalidChar => {
                 write!(f, "Invalid char value encountered.")
+            }
+            SavefileError::IncompatibleSavefileLibraryVersion => {
+                write!(f, "Incompatible savefile library version. Perhaps a plugin was loaded that is a future unsupported version?")
+            }
+            SavefileError::MissingMethod { method_name } => {
+                write!(f, "Plugin is missing method {}", method_name)
+            }
+            SavefileError::TooManyArguments => {
+                write!(f, "Function has too many arguments")
+            }
+            SavefileError::CalleePanic { msg } => {
+                write!(f, "Invocation target panicked: {}", msg)
             }
         }
     }
@@ -1015,7 +1037,7 @@ pub trait ReprC {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
     /// This may return true if and only if the given protocol version
-    /// has a serialized format identical to the given protocol version.
+    /// has a serialized format identical to the memory layout of the given protocol version.
     ///
     /// This can return true for types which have an in-memory layout that is packed
     /// and therefore identical to the layout that savefile will use on disk.
@@ -1033,12 +1055,13 @@ pub trait ReprC {
     /// documentation of 'IsReprC'. The idea is that the ReprC-trait itself
     /// can still be safe to implement, it just won't be possible to get hold of an
     /// instance of IsReprC(true). To make it impossible to just
-    /// 'steal' such a value from some other thing implementign 'ReprC',
-    /// this method is marked unsafe.
+    /// 'steal' such a value from some other thing implementing 'ReprC',
+    /// this method is marked unsafe (however, it can be left unimplemented,
+    /// making it still possible to safely implement ReprC).
     ///
-    /// # SAFETY
+    /// # SAFETY-requirements
     /// The returned value must not be used, except by the Savefile-framework.
-    /// It must *not* be be forwarded anywhere else.
+    /// It must *not* be forwarded anywhere else.
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC { IsReprC::no()}
 }
 
@@ -1819,7 +1842,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 }
         } else {
             if fetch_schema {
-                let mut schema_deserializer = Deserializer::<TR>::new_schema_deserializer(reader, CURRENT_SAVEFILE_LIB_VERSION);
+                let mut schema_deserializer = new_schema_deserializer(reader, CURRENT_SAVEFILE_LIB_VERSION);
                 let memory_schema = T::schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1843,16 +1866,18 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
 
     }
 
-    /// Create a Deserializer.
-    /// Don't use this method directly, use the [crate::load] function
-    /// instead.
-    pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<impl Read> {
-        Deserializer {
-            reader,
-            file_version: file_schema_version as u32,
-            memory_version: CURRENT_SAVEFILE_LIB_VERSION as u32,
-            ephemeral_state: HashMap::new(),
-        }
+
+}
+
+/// Create a Deserializer.
+/// Don't use this method directly, use the [crate::load] function
+/// instead.
+pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<impl Read> {
+    Deserializer {
+        reader,
+        file_version: file_schema_version as u32,
+        memory_version: CURRENT_SAVEFILE_LIB_VERSION as u32,
+        ephemeral_state: HashMap::new(),
     }
 }
 
@@ -2084,6 +2109,24 @@ pub struct Field {
     pub name: String,
     /// Field type
     pub value: Box<Schema>,
+    /// The field offset within the struct, if known.
+    /// This is used to determine layout compatibility between different shared libraries,
+    /// when using the savefile_abi crate. A value of None means offset is not known.
+    /// For fields in enums, the offset is the offset from the start of memory of the enum.
+    /// For a repr(C,?)-enum, this will be the offset from the start of the discriminant.
+    /// For repr(rust)-enums, the discriminant may not be at the start of the memory layout.
+    pub offset: Option<usize>,
+}
+
+impl Field {
+    /// Determine if the two fields are laid out identically in memory, in their parent objects.
+    pub fn layout_compatible(&self, other: &Field) -> bool {
+        let (Some(offset_a), Some(offset_b)) = (self.offset, other.offset) else {return false;};
+        if offset_a != offset_b {
+            return false;
+        }
+        self.value.layout_compatible(&other.value)
+    }
 }
 
 /// An array is serialized by serializing its items one by one,
@@ -2098,6 +2141,12 @@ pub struct SchemaArray {
 }
 
 impl SchemaArray {
+    fn layout_compatible(&self, other: &SchemaArray) -> bool {
+        if self.count != other.count {
+            return false
+        }
+        self.item_type.layout_compatible(&other.item_type)
+    }
     fn serialized_size(&self) -> Option<usize> {
         self.item_type.serialized_size().map(|x| x * self.count)
     }
@@ -2123,6 +2172,17 @@ fn maybe_add(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaStruct {
+    fn layout_compatible(&self, other: &SchemaStruct) -> bool {
+        if self.fields.len() != other.fields.len() {
+            return false;
+        }
+        for (a, b) in self.fields.iter().zip(other.fields.iter()) {
+            if !a.value.layout_compatible(&b.value) {
+                return false;
+            }
+        }
+        true
+    }
     fn serialized_size(&self) -> Option<usize> {
         self.fields
             .iter()
@@ -2136,8 +2196,8 @@ impl SchemaStruct {
 pub struct Variant {
     /// Name of variant
     pub name: String,
-    /// Discriminator in binary file-format
-    pub discriminator: u8,
+    /// Discriminant in binary file-format
+    pub discriminant: u8,
     /// Fields of variant
     pub fields: Vec<Field>,
 }
@@ -2149,10 +2209,10 @@ impl Variant {
     }
 }
 
-/// An enum is serialized as its u8 variant discriminator
+/// An enum is serialized as its u8 variant discriminant
 /// followed by all the field for that variant.
 /// The name of each variant, as well as its order in
-/// the enum (the discriminator), is significant.
+/// the enum (the discriminant), is significant.
 #[derive(Debug, PartialEq)]
 pub struct SchemaEnum {
     /// Diagnostic name
@@ -2170,8 +2230,11 @@ fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaEnum {
+    fn layout_compatible(&self, _other: &SchemaEnum) -> bool {
+        false //TODO: Optimize enums too, allow layout compatibility for repr(u8,C)-enums
+    }
     fn serialized_size(&self) -> Option<usize> {
-        let discr_size = 1usize; //Discriminator is always 1 byte
+        let discr_size = 1usize; //Discriminant is always 1 byte
         self.variants
             .iter()
             .fold(Some(discr_size), |prev, x| maybe_max(prev, x.serialized_size()))
@@ -2301,8 +2364,19 @@ pub enum Schema {
     /// only matches if the string is identical
     Custom(String)
 }
+/// Introspect is not implemented for Schema, though it could be
+impl Introspect for Schema {
+    fn introspect_value(&self) -> String {
+        "Schema".to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
 
 impl Schema {
+    /// Determine if the two fields are laid out identically in memory, in their parent objects.
     pub fn layout_compatible(&self, other: &Schema) -> bool {
         match (self, other) {
             (Schema::Struct(a),Schema::Struct(b)) => {
@@ -2336,9 +2410,10 @@ impl Schema {
     pub fn new_tuple1<T1: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "1-Tuple".to_string(),
-            fields: vec![Field {
+            fields: vec![ Field {
                 name: "0".to_string(),
                 value: Box::new(T1::schema(version)),
+                offset: Some(offset_of_tuple!((T1,),0))
             }],
         })
     }
@@ -2351,10 +2426,12 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2),0))
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2),1))
                 },
             ],
         })
@@ -2367,14 +2444,17 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),0)),
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),1)),
                 },
                 Field {
                     name: "2".to_string(),
                     value: Box::new(T3::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),2)),
                 },
             ],
         })
@@ -2387,18 +2467,22 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),0)),
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),1)),
                 },
                 Field {
                     name: "2".to_string(),
                     value: Box::new(T3::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),2)),
                 },
                 Field {
                     name: "3".to_string(),
                     value: Box::new(T4::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),3)),
                 },
             ],
         })
@@ -2455,10 +2539,10 @@ fn diff_enum(a: &SchemaEnum, b: &SchemaEnum, path: String) -> Option<String> {
                 &path, i, a.variants[i].name, b.variants[i].name
             ));
         }
-        if a.variants[i].discriminator != b.variants[i].discriminator {
+        if a.variants[i].discriminant != b.variants[i].discriminant {
             return Some(format!(
-                "At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
-                &path, i, a.variants[i].discriminator, b.variants[i].discriminator
+                "At location [{}]: Enum variant #{} in memory has discriminant {}, but in disk format it has {}",
+                &path, i, a.variants[i].discriminant, b.variants[i].discriminant
             ));
         }
         let r = diff_fields(
@@ -2657,6 +2741,7 @@ impl Deserialize for Field {
         Ok(Field {
             name: deserializer.read_string()?,
             value: Box::new(Schema::deserialize(deserializer)?),
+            offset: if deserializer.file_version > 0 { Option::deserialize(deserializer)? } else {None},
         })
     }
 }
@@ -2668,7 +2753,7 @@ impl WithSchema for Variant {
 impl Serialize for Variant {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
-        serializer.write_u8(self.discriminator)?;
+        serializer.write_u8(self.discriminant)?;
         serializer.write_usize(self.fields.len())?;
         for field in &self.fields {
             field.serialize(serializer)?;
@@ -2682,7 +2767,7 @@ impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Variant {
             name: deserializer.read_string()?,
-            discriminator: deserializer.read_u8()?,
+            discriminant: deserializer.read_u8()?,
             fields: {
                 let l = deserializer.read_usize()?;
                 let mut ret = Vec::new();
@@ -2690,6 +2775,7 @@ impl Deserialize for Variant {
                     ret.push(Field {
                         name: deserializer.read_string()?,
                         value: Box::new(Schema::deserialize(deserializer)?),
+                        offset: if deserializer.file_version > 0 { Option::deserialize(deserializer)? } else {None},
                     });
                 }
                 ret
@@ -3318,10 +3404,12 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
         })))
@@ -3402,10 +3490,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
         })))
@@ -3443,10 +3533,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
         })))
@@ -3593,6 +3685,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
             fields: vec![Field {
                 name: "key".to_string(),
                 value: Box::new(K::schema(version)),
+                offset: None,
             }],
         })))
     }
@@ -3787,14 +3880,17 @@ impl WithSchema for bit_vec::BitVec {
                 Field {
                     name: "num_bits".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
                     value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    offset: None,
                 },
             ],
         })
@@ -3877,14 +3973,17 @@ impl WithSchema for bit_set::BitSet {
                 Field {
                     name: "num_bits".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
                     value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    offset: None,
                 },
             ],
         })
