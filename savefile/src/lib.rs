@@ -939,6 +939,12 @@ impl std::error::Error for SavefileError {
 
 }
 
+impl SavefileError {
+    /// Construct a SavefileError::GeneralError using the given string
+    pub fn general(something: impl Display) -> SavefileError {
+        SavefileError::GeneralError {msg: format!("{}", something)}
+    }
+}
 
 
 /// Object to which serialized data is to be written.
@@ -1602,6 +1608,19 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     ) -> Result<(), SavefileError> {
         Ok(Self::save_impl(writer, version, data, false, false)?)
     }
+
+
+    /// Serialize without any header. Using this means that bare_deserialize must be used to
+    /// deserialize. The only metadata sent is the data version number, not even the savefile
+    /// version number.
+    pub fn bare_serialize<T: Serialize>(writer: &mut W, version: u32, data: &T) -> Result<(), SavefileError> {
+        writer.write_u32::<LittleEndian>(version)?;
+        let mut serializer = Serializer { writer, version };
+        data.serialize(&mut serializer)?;
+        writer.flush()?;
+        Ok(())
+    }
+
     fn save_impl<T: WithSchema + Serialize>(
         writer: &mut W,
         version: u32,
@@ -1613,7 +1632,7 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(0 /*savefile format version*/)?;
+        writer.write_u16::<LittleEndian>(CURRENT_SAVEFILE_LIB_VERSION /*savefile format version*/)?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
 
@@ -1782,6 +1801,19 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
         Deserializer::<TR>::load_impl::<T>(reader, version, false)
     }
+
+    /// Deserialize data which was serialized using 'bare_serialize'
+    pub fn bare_deserialize<T: Deserialize>(reader: &mut TR, own_version: u32) -> Result<T, SavefileError> {
+        let file_ver = reader.read_u32::<LittleEndian>()?;
+        let mut deserializer = Deserializer {
+            reader,
+            file_version: file_ver,
+            memory_version: own_version,
+            ephemeral_state: HashMap::new(),
+        };
+        Ok(T::deserialize(&mut deserializer)?)
+    }
+
     fn load_impl<T: WithSchema + Deserialize>(
         reader: &mut TR,
         version: u32,

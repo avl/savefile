@@ -11,7 +11,8 @@ extern crate syn;
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
-use syn::{DeriveInput, Expr, GenericParam, Generics, Ident, Lit, Type, WhereClause};
+use quote::ToTokens;
+use syn::{DeriveInput, Expr, FnArg, GenericParam, Generics, Ident, ItemTrait, Lit, parse_quote, Pat, ReturnType, TraitItem, Type, WhereClause};
 use syn::__private::bool;
 
 #[derive(Debug)]
@@ -35,7 +36,7 @@ struct AttrsResult {
 }
 
 fn check_is_remove(field_type: &syn::Type) -> bool {
-    use quote::ToTokens;
+
     let mut is_remove = false;
     let mut tokens = TokenStream::new();
     field_type.to_tokens(&mut tokens);
@@ -853,6 +854,165 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     output
 }
 
+#[proc_macro_attribute]
+pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let parsed: ItemTrait = syn::parse(input.clone()).unwrap();
+
+    let mut version = None;
+    for item in attr.to_string().split(",") {
+        let keyvals : Vec<_> = item.split("=").collect();
+        if keyvals.len() != 2 {
+            panic!("savefile_abi_exportable arguments should be of form #[savefile_abi_exportable(key=value)], not '{}'", attr.to_string());
+        }
+        let key = keyvals[0];
+        let val = keyvals[1];
+        match key {
+            "version" => {
+                if version.is_some() {
+                    panic!("version specified more than once");
+                }
+                version = Some(val.parse().expect("Version must be numeric"));
+            }
+            _ => panic!("Unknown savefile_abi_exportable key: {}", key)
+        }
+    }
+    let version:u32 = version.unwrap_or(0);
+
+
+
+    let trait_name = parsed.ident.to_string();
+    let defspan = proc_macro2::Span::mixed_site();
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile;
+        extern crate savefile_abi;
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema};
+        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo};
+    };
+
+    //let method_count = parsed.items.len();
+
+    let mut output_method_defs:Vec<TokenStream> = vec![];
+    for item in parsed.items {
+
+        match item {
+            TraitItem::Const(c) => {
+                panic!("savefile_abi_exportable does not support associated consts: {}",c.ident);
+            }
+            TraitItem::Method(method) => {
+                let name = method.sig.ident.to_string();
+                let mut output_arguments = vec![];
+                let mut had_ok_receiver = false;
+                let ret_type;
+                match &method.sig.output {
+                    ReturnType::Default => {
+                        ret_type = parse_quote!("()");
+                    }
+                    ReturnType::Type(_, ty) => {
+                        ret_type = ty.to_token_stream();
+                    }
+                }
+                for (arg_index,arg) in method.sig.inputs.iter().enumerate() {
+
+
+                    let arg_type;
+                    match arg {
+                        FnArg::Receiver(recv) => {
+                            if let Some(reference) = &recv.reference {
+                                if reference.1.is_some() {
+                                    panic!("Method {} has a lifetime for 'self' argument. This is not supported", name);
+                                }
+                                if arg_index != 0 {
+                                    panic!("'self' parameter must be the first parameter");
+                                }
+                                had_ok_receiver = true;
+                                continue;
+                            } else {
+                                panic!("Method {} takes 'self' by value. This is not supported. Use &self", name);
+                            }
+                        }
+                        FnArg::Typed(typ) => {
+                            match &*typ.pat {
+                                Pat::Ident(_name) => {
+                                    match &*typ.ty {
+                                        Type::Path(path) => {
+                                            arg_type = &path.path;
+                                        }
+                                        _ => {
+                                            panic!("Method {}, argument #{}, unsupported type: {:?}", name, arg_index, typ.ty);
+                                        }
+                                    }
+                                }
+                                _ => panic!("Method {} had a parameter (#{}, self is #0) which contained a complex pattern. This is not supported.", name, arg_index)
+                            }
+                        }
+                    }
+
+                    output_arguments.push(quote!{
+                        <#arg_type as WithSchema>::schema(version)
+                    })
+                }
+
+                if !had_ok_receiver {
+                    panic!("Method {} did not have a 'self' parameter. This is not supported, &self must be present", name);
+                }
+
+                output_method_defs.push(quote!{
+                    AbiMethod {
+                        name: #name.to_string(),
+                        info: AbiMethodInfo {
+                            return_value: <#ret_type as WithSchema>::schema(version),
+                            arguments: vec![ #(#output_arguments,)* ],
+                        }
+                    }
+                });
+            }
+            TraitItem::Type(t) => {
+                panic!("savefile_abi_exportable does not support associated types: {}",t.ident);
+            }
+            TraitItem::Macro(m) => {
+                panic!("savefile_abi_exportable does not support macro items: {:?}", m);
+            }
+            x => panic!("Unsupported item in trait definition: {:?}", x)
+        }
+
+            /*AbiMethod {
+                name: "add".to_string(),
+                info: AbiMethodInfo{
+                    return_value: Schema::Primitive(SchemaPrimitive::schema_u32),
+                    arguments: vec![
+                        Schema::Primitive(SchemaPrimitive::schema_u32),
+                        Schema::Primitive(SchemaPrimitive::schema_u32)
+                    ]
+                }
+            }*/
+
+    }
+    //let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+    let input = TokenStream::from(input);
+    let expanded = quote! {
+        #input
+
+        const _:() = {
+            #uses
+
+            unsafe impl AbiExportable for dyn AdderInterface {
+                fn get_definition( version: u32) -> AbiTraitDefinition {
+                    AbiTraitDefinition {
+                        name: #trait_name.to_string(),
+                        methods: vec! [ #(#output_method_defs,)* ]
+                    }
+                }
+
+                fn get_latest_version() -> u32 {
+                    #version
+                }
+            }
+        };
+    };
+
+    expanded.into()
+}
+
 #[proc_macro_derive(
     Savefile,
     attributes(
@@ -1451,7 +1611,7 @@ fn implement_introspect(
     //let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
     //let fields1=quote_spanned! { defspan => fields1 };
     let index1 = quote_spanned! { defspan => index };
-    let introspect_item = quote_spanned! {defspan=>
+    let introspect_item = quote_spanned! { defspan=>
         _savefile::prelude::introspect_item
     };
 
