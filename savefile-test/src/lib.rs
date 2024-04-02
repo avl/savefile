@@ -49,20 +49,29 @@ use std::io::Cursor;
 use std::io::BufWriter;
 
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
-    assert_roundtrip_version(sample, 0)
+    assert_roundtrip_version(sample, 0, true)
 }
-pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32) {
+pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32, schema: bool) {
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
         {
-            Serializer::save(&mut bufw, version, &sample, false).unwrap();
+            if schema {
+                Serializer::save(&mut bufw, version, &sample, false).unwrap();
+            } else {
+                Serializer::save_noschema(&mut bufw, version, &sample).unwrap();
+            }
         }
         bufw.flush().unwrap();
     }
     f.set_position(0);
     {
-        let roundtrip_result = Deserializer::load::<E>(&mut f, version).unwrap();
+        let roundtrip_result =
+        if schema {
+            Deserializer::load::<E>(&mut f, version).unwrap()
+        } else {
+            Deserializer::load_noschema::<E>(&mut f, version).unwrap()
+        };
         assert_eq!(sample, roundtrip_result);
     }
 
@@ -703,7 +712,7 @@ struct OnlyRemoved {
 
 #[test]
 pub fn test_struct_only_removed_fields() {
-    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1);
+    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1, true);
 }
 
 
@@ -822,6 +831,24 @@ pub fn test_atomic() {
     }
 }
 
+#[test]
+pub fn test_schema1()  {
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_u32, true)), true),
+        1, false
+    );
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string, true)), true),
+        1, false
+    );
+}
+#[test]
+pub fn test_schema2()  {
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string, true)), true),
+        1, false
+    );
+}
 
 #[derive(Savefile,Debug,PartialEq)]
 struct CanaryTest {

@@ -1120,7 +1120,7 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
 
 impl WithSchema for PathBuf {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string, false)
     }
 }
 impl Serialize for PathBuf {
@@ -1667,7 +1667,7 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
                         let mut compressed_writer = bzip2::write::BzEncoder::new(writer, Compression::best());
                         if with_schema {
                             let schema = T::schema(version);
-                            let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(&mut compressed_writer);
+                            let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(&mut compressed_writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
                             schema.serialize(&mut schema_serializer)?;
                         }
 
@@ -1686,7 +1686,7 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
                 writer.write_u8(0)?;
                 if with_schema {
                     let schema = T::schema(version);
-                    let mut schema_serializer = Serializer::<W>::new_raw(writer);
+                    let mut schema_serializer = Serializer::<W>::new_raw(writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
                     schema.serialize(&mut schema_serializer)?;
                 }
 
@@ -1702,8 +1702,8 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     /// Create a Serializer.
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
-    pub fn new_raw(writer: &mut impl Write) -> Serializer<impl Write> {
-        Serializer { writer, version: 0 }
+    pub fn new_raw(writer: &mut impl Write, version: u32) -> Serializer<impl Write> {
+        Serializer { writer, version }
     }
 }
 
@@ -1785,7 +1785,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
         {
             if l > 1_000_000 {
                 return Err(SavefileError::GeneralError {
-                    msg: format!("String too large"),
+                    msg: format!("String too large: {}", l),
                 });
             }
         }
@@ -1848,8 +1848,8 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
         }
 
         let savefile_lib_version = reader.read_u16::<LittleEndian>()?;
-        if savefile_lib_version != CURRENT_SAVEFILE_LIB_VERSION { //Note, in future we might interpret this as 'schema version', thus allowing newer code to read files with older versions of the schema-definition
-            return Err(SavefileError::GeneralError {msg: "This file has been created by an earlier, incompatible version of the savefile crate (0.5.0 or before).".into()});
+        if savefile_lib_version > CURRENT_SAVEFILE_LIB_VERSION {
+            return Err(SavefileError::GeneralError {msg: "This file has been created by a future, incompatible version of the savefile crate.".into()});
         }
         let file_ver = reader.read_u32::<LittleEndian>()?;
 
@@ -1868,7 +1868,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 {
                     let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
                     if fetch_schema {
-                        let mut schema_deserializer = new_schema_deserializer(&mut compressed_reader, CURRENT_SAVEFILE_LIB_VERSION);
+                        let mut schema_deserializer = new_schema_deserializer(&mut compressed_reader, savefile_lib_version);
                         let memory_schema = T::schema(file_ver);
                         let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1895,7 +1895,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 }
         } else {
             if fetch_schema {
-                let mut schema_deserializer = new_schema_deserializer(reader, CURRENT_SAVEFILE_LIB_VERSION);
+                let mut schema_deserializer = new_schema_deserializer(reader, savefile_lib_version);
                 let memory_schema = T::schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -2283,9 +2283,9 @@ fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaEnum {
-    fn layout_compatible(&self, _other: &SchemaEnum) -> bool {
+    /* not supported fn layout_compatible(&self, _other: &SchemaEnum) -> bool {
         false //TODO: Optimize enums too, allow layout compatibility for repr(u8,C)-enums
-    }
+    }*/
     fn serialized_size(&self) -> Option<usize> {
         let discr_size = 1usize; //Discriminant is always 1 byte
         self.variants
@@ -2396,15 +2396,14 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 #[derive(Debug, PartialEq)]
 #[repr(C,u32)]
 pub enum Schema {
-    /// Represents a struct. Custom implementations of Serialize may use this
-    /// format are encouraged to use this format.
+    /// Represents a struct. Custom implementations of Serialize are encouraged to use this format.
     Struct(SchemaStruct),
-    /// Represents an enum
+    /// Represents an enum.
     Enum(SchemaEnum),
     /// Represents a primitive: Any of the various integer types (u8, i8, u16, i16 etc...), or String
-    Primitive(SchemaPrimitive),
+    Primitive(SchemaPrimitive, bool /*standard savefile memory layout*/),
     /// A Vector of arbitrary nodes, all of the given type
-    Vector(Box<Schema>),
+    Vector(Box<Schema>, bool /*standard savefile memory layout*/),
     /// An array of N arbitrary nodes, all of the given type
     Array(SchemaArray),
     /// An Option variable instance of the given type.
@@ -2435,26 +2434,26 @@ impl Schema {
             (Schema::Struct(a),Schema::Struct(b)) => {
                 a.layout_compatible(b)
             }
-            (Schema::Enum(a), Schema::Enum(b)) => {
-                a.layout_compatible(b)
+            (Schema::Enum(_), Schema::Enum(_)) => {
+                false
             }
-            (Schema::Primitive(a), Schema::Primitive(b)) => {
-                a == b
+            (Schema::Primitive(a, a_standard_layout), Schema::Primitive(b, b_standard_layout)) => {
+                a == b && *a_standard_layout && *b_standard_layout
             }
-            (Schema::Vector(a), Schema::Vector(b)) => {
-                a.layout_compatible(b)
+            (Schema::Vector(a, a_standard_layout), Schema::Vector(b, b_standard_layout)) => {
+                a.layout_compatible(b) && *a_standard_layout && *b_standard_layout
             }
             (Schema::Array(a), Schema::Array(b)) => {
                 a.layout_compatible(b)
             }
-            (Schema::SchemaOption(a), Schema::SchemaOption(b)) => {
-                a.layout_compatible(b)
+            (Schema::SchemaOption(_), Schema::SchemaOption(_)) => {
+                false // Layout of enums in memory is undefined, and also hard to determine at runtime
             }
             (Schema::ZeroSize, Schema::ZeroSize) => {
                 true
             }
-            (Schema::Custom(a), Schema::Custom(b)) => {
-                a == b
+            (Schema::Custom(_), Schema::Custom(_)) => {
+                false // Be conservative here
             }
             _ => false
         }
@@ -2545,8 +2544,8 @@ impl Schema {
         match *self {
             Schema::Struct(ref schema_struct) => schema_struct.serialized_size(),
             Schema::Enum(ref schema_enum) => schema_enum.serialized_size(),
-            Schema::Primitive(ref schema_primitive) => schema_primitive.serialized_size(),
-            Schema::Vector(ref _vector) => None,
+            Schema::Primitive(ref schema_primitive,_) => schema_primitive.serialized_size(),
+            Schema::Vector(ref _vector,_) => None,
             Schema::Array(ref array) => array.serialized_size(),
             Schema::SchemaOption(ref _content) => None,
             Schema::Undefined => None,
@@ -2662,8 +2661,8 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
         Schema::Struct(ref xa) => match *b {
             Schema::Struct(ref xb) => return diff_struct(xa, xb, path),
             Schema::Enum(_) => ("struct", "enum"),
-            Schema::Primitive(_) => ("struct", "primitive"),
-            Schema::Vector(_) => ("struct", "vector"),
+            Schema::Primitive(_,_) => ("struct", "primitive"),
+            Schema::Vector(_,_) => ("struct", "vector"),
             Schema::SchemaOption(_) => ("struct", "option"),
             Schema::Undefined => ("struct", "undefined"),
             Schema::ZeroSize => ("struct", "zerosize"),
@@ -2673,21 +2672,21 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
         Schema::Enum(ref xa) => match *b {
             Schema::Enum(ref xb) => return diff_enum(xa, xb, path),
             Schema::Struct(_) => ("enum", "struct"),
-            Schema::Primitive(_) => ("enum", "primitive"),
-            Schema::Vector(_) => ("enum", "vector"),
+            Schema::Primitive(_,_) => ("enum", "primitive"),
+            Schema::Vector(_,_) => ("enum", "vector"),
             Schema::SchemaOption(_) => ("enum", "option"),
             Schema::Undefined => ("enum", "undefined"),
             Schema::ZeroSize => ("enum", "zerosize"),
             Schema::Array(_) => ("enum", "array"),
             Schema::Custom(_) => ("enum", "custom"),
         },
-        Schema::Primitive(ref xa) => match *b {
-            Schema::Primitive(ref xb) => {
+        Schema::Primitive(ref xa,_) => match *b {
+            Schema::Primitive(ref xb,_) => {
                 return diff_primitive(*xa, *xb, &path);
             }
             Schema::Struct(_) => ("primitive", "struct"),
             Schema::Enum(_) => ("primitive", "enum"),
-            Schema::Vector(_) => ("primitive", "vector"),
+            Schema::Vector(_,_) => ("primitive", "vector"),
             Schema::SchemaOption(_) => ("primitive", "option"),
             Schema::Undefined => ("primitive", "undefined"),
             Schema::ZeroSize => ("primitive", "zerosize"),
@@ -2700,20 +2699,20 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             }
             Schema::Struct(_) => ("option", "struct"),
             Schema::Enum(_) => ("option", "enum"),
-            Schema::Primitive(_) => ("option", "primitive"),
-            Schema::Vector(_) => ("option", "vector"),
+            Schema::Primitive(_,_) => ("option", "primitive"),
+            Schema::Vector(_,_) => ("option", "vector"),
             Schema::Undefined => ("option", "undefined"),
             Schema::ZeroSize => ("option", "zerosize"),
             Schema::Array(_) => ("option", "array"),
             Schema::Custom(_) => ("option", "custom"),
         },
-        Schema::Vector(ref xa) => match *b {
-            Schema::Vector(ref xb) => {
+        Schema::Vector(ref xa,_) => match *b {
+            Schema::Vector(ref xb,_) => {
                 return diff_vector(xa, xb, path);
             }
             Schema::Struct(_) => ("vector", "struct"),
             Schema::Enum(_) => ("vector", "enum"),
-            Schema::Primitive(_) => ("vector", "primitive"),
+            Schema::Primitive(_,_) => ("vector", "primitive"),
             Schema::SchemaOption(_) => ("vector", "option"),
             Schema::Undefined => ("vector", "undefined"),
             Schema::ZeroSize => ("vector", "zerosize"),
@@ -2727,21 +2726,21 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::ZeroSize => {
                 return None;
             }
-            Schema::Vector(_) => ("zerosize", "vector"),
+            Schema::Vector(_,_) => ("zerosize", "vector"),
             Schema::Struct(_) => ("zerosize", "struct"),
             Schema::Enum(_) => ("zerosize", "enum"),
             Schema::SchemaOption(_) => ("zerosize", "option"),
-            Schema::Primitive(_) => ("zerosize", "primitive"),
+            Schema::Primitive(_,_) => ("zerosize", "primitive"),
             Schema::Undefined => ("zerosize", "undefined"),
             Schema::Array(_) => ("zerosize", "array"),
             Schema::Custom(_) => ("zerosize", "custom"),
 
         },
         Schema::Array(ref xa) => match *b {
-            Schema::Vector(_) => ("array", "vector"),
+            Schema::Vector(_,_) => ("array", "vector"),
             Schema::Struct(_) => ("array", "struct"),
             Schema::Enum(_) => ("array", "enum"),
-            Schema::Primitive(_) => ("array", "primitive"),
+            Schema::Primitive(_,_) => ("array", "primitive"),
             Schema::SchemaOption(_) => ("array", "option"),
             Schema::Undefined => ("array", "undefined"),
             Schema::ZeroSize => ("array", "zerosize"),
@@ -2749,10 +2748,10 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             Schema::Custom(_) => ("array", "custom"),
         },
         Schema::Custom(ref custom_a) => match b {
-            Schema::Vector(_) => ("custom", "vector"),
+            Schema::Vector(_,_) => ("custom", "vector"),
             Schema::Struct(_) => ("custom", "struct"),
             Schema::Enum(_) => ("custom", "enum"),
-            Schema::Primitive(_) => ("custom", "primitive"),
+            Schema::Primitive(_,_) => ("custom", "primitive"),
             Schema::SchemaOption(_) => ("custom", "option"),
             Schema::Undefined => ("custom", "undefined"),
             Schema::ZeroSize => ("custom", "zerosize"),
@@ -2998,13 +2997,21 @@ impl Serialize for Schema {
                 serializer.write_u8(2)?;
                 schema_enum.serialize(serializer)
             }
-            Schema::Primitive(ref schema_prim) => {
+            Schema::Primitive(ref schema_prim,is_standard_layout) => {
                 serializer.write_u8(3)?;
-                schema_prim.serialize(serializer)
+                schema_prim.serialize(serializer)?;
+                if serializer.version > 0 {
+                    serializer.write_bool(is_standard_layout)?;
+                }
+                Ok(())
             }
-            Schema::Vector(ref schema_vector) => {
+            Schema::Vector(ref schema_vector, is_standard_layout) => {
                 serializer.write_u8(4)?;
-                schema_vector.serialize(serializer)
+                schema_vector.serialize(serializer)?;
+                if serializer.version > 0 {
+                    serializer.write_bool(is_standard_layout)?;
+                }
+                Ok(())
             }
             Schema::Undefined => serializer.write_u8(5),
             Schema::ZeroSize => serializer.write_u8(6),
@@ -3030,8 +3037,8 @@ impl Deserialize for Schema {
         let schema = match deserializer.read_u8()? {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
-            3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
-            4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?)),
+            3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?, if deserializer.file_version > 0 {bool::deserialize(deserializer)?} else {false}),
+            4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?), if deserializer.file_version > 0 {bool::deserialize(deserializer)?} else {false}),
             5 => Schema::Undefined,
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
@@ -3050,7 +3057,7 @@ impl Deserialize for Schema {
 
 impl WithSchema for String {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string, check_if_string_standard_layout())
     }
 }
 
@@ -3467,7 +3474,7 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
                     offset: None,
                 },
             ],
-        })))
+        })), false)
     }
 }
 impl<K, V> ReprC for BTreeMap<K, V> {}
@@ -3514,7 +3521,7 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
 impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K,S> {}
 impl<K:WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K,S> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(K::schema(version)))
+        Schema::Vector(Box::new(K::schema(version)), false)
     }
 }
 impl<K:Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K,S> {
@@ -3553,7 +3560,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                     offset: None,
                 },
             ],
-        })))
+        })), false)
     }
 }
 impl<K:Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
@@ -3596,7 +3603,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                     offset: None,
                 },
             ],
-        })))
+        })), false)
     }
 }
 
@@ -3742,7 +3749,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
                 value: Box::new(K::schema(version)),
                 offset: None,
             }],
-        })))
+        })), false)
     }
 }
 
@@ -3944,7 +3951,7 @@ impl WithSchema for bit_vec::BitVec {
                 },
                 Field {
                     name: "buffer".to_string(),
-                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)), false)),
                     offset: None,
                 },
             ],
@@ -4037,7 +4044,7 @@ impl WithSchema for bit_set::BitSet {
                 },
                 Field {
                     name: "buffer".to_string(),
-                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)), false)),
                     offset: None,
                 },
             ],
@@ -4106,7 +4113,7 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 impl<T> ReprC for BinaryHeap<T> {}
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), false)
     }
 }
 impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
@@ -4158,7 +4165,7 @@ where
     T::Item: WithSchema,
 {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::Item::schema(version)))
+        Schema::Vector(Box::new(T::Item::schema(version)), false)
     }
 }
 #[cfg(feature="smallvec")]
@@ -4222,12 +4229,12 @@ fn regular_serialize_vec<T: Serialize>(items: &[T], serializer: &mut Serializer<
 
 impl<T: WithSchema> WithSchema for Box<[T]> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), false)
     }
 }
 impl<T: WithSchema> WithSchema for Arc<[T]> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), false)
     }
 }
 impl<T: Introspect> Introspect for Box<[T]> {
@@ -4264,7 +4271,7 @@ impl<T: Introspect> Introspect for Arc<[T]> {
 
 impl WithSchema for Arc<str> {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string, false)
     }
 }
 impl Introspect for Arc<str> {
@@ -4352,9 +4359,73 @@ impl<T: Deserialize+ReprC> Deserialize for Box<[T]> {
 
 impl<T> ReprC for Vec<T> {}
 
+/// 0 = Uninitialized
+/// 1 = Yes
+/// 2 = No
+static VEC_IS_STANDARD_LAYOUT: AtomicU8 = AtomicU8::new(0);
+/// 0 = Uninitialized
+/// 1 = Yes
+/// 2 = No
+static STRING_IS_STANDARD_LAYOUT: AtomicU8 = AtomicU8::new(0);
+#[derive(Debug)]
+struct RawVecInspector {
+    p1: *const u8,
+    p2: usize,
+    p3: usize
+}
+fn check_if_vec_standard_layout() -> bool {
+    let mut is_std = VEC_IS_STANDARD_LAYOUT.load(Ordering::Relaxed);
+    if is_std != 0 {
+        return is_std == 1;
+    }
+    if std::mem::size_of::<Vec<u8>>() != 24 || std::mem::size_of::<RawVecInspector>() != 24{
+        is_std = 2;
+    } else {
+        let mut test_vec = Vec::with_capacity(2);
+        test_vec.push(0u8);
+        let insp:RawVecInspector = unsafe {std::mem::transmute_copy(&test_vec)};
+        let ptr = test_vec.as_ptr();
+
+        if ptr != insp.p1 || insp.p2 != 2 || insp.p3 != 1 {
+            is_std = 2;
+        } else {
+            is_std = 1;
+        }
+
+        drop(test_vec);
+    }
+
+    VEC_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
+    is_std == 1
+}
+fn check_if_string_standard_layout() -> bool {
+    let mut is_std = STRING_IS_STANDARD_LAYOUT.load(Ordering::Relaxed);
+    if is_std != 0 {
+        return is_std == 1;
+    }
+    if std::mem::size_of::<String>() != 24 || std::mem::size_of::<RawVecInspector>() != 24{
+        is_std = 2;
+    } else {
+        let mut test_string = String::with_capacity(2);
+        test_string.push('x');
+        let insp:RawVecInspector = unsafe {std::mem::transmute_copy(&test_string)};
+        let ptr = test_string.as_ptr();
+
+        if ptr != insp.p1 || insp.p2 != 2 || insp.p3 != 1 {
+            is_std = 2;
+        } else {
+            is_std = 1;
+        }
+
+        drop(test_string);
+    }
+
+    VEC_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
+    is_std == 1
+}
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), check_if_vec_standard_layout())
     }
 }
 
@@ -4481,7 +4552,7 @@ impl<T: Introspect> Introspect for VecDeque<T> {
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), false)
     }
 }
 
@@ -4825,7 +4896,7 @@ impl<const C:usize> ReprC for arrayvec::ArrayString<C> {}
 #[cfg(feature="arrayvec")]
 impl<const C:usize> WithSchema for arrayvec::ArrayString<C> {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string, false)
     }
 }
 #[cfg(feature="arrayvec")]
@@ -4864,7 +4935,7 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
 #[cfg(feature="arrayvec")]
 impl<V: WithSchema, const C: usize> WithSchema for arrayvec::ArrayVec<V,C> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(V::schema(version)))
+        Schema::Vector(Box::new(V::schema(version)), false)
     }
 }
 
@@ -5231,54 +5302,54 @@ impl Introspect for AtomicIsize {
 
 impl WithSchema for AtomicBool {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_bool)
+        Schema::Primitive(SchemaPrimitive::schema_bool, true)
     }
 }
 impl WithSchema for AtomicU8 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u8)
+        Schema::Primitive(SchemaPrimitive::schema_u8, true)
     }
 }
 impl WithSchema for AtomicI8 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i8)
+        Schema::Primitive(SchemaPrimitive::schema_i8, true)
     }
 }
 impl WithSchema for AtomicU16 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u16)
+        Schema::Primitive(SchemaPrimitive::schema_u16, true)
     }
 }
 impl WithSchema for AtomicI16 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i16)
+        Schema::Primitive(SchemaPrimitive::schema_i16, true)
     }
 }
 impl WithSchema for AtomicU32 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u32)
+        Schema::Primitive(SchemaPrimitive::schema_u32, true)
     }
 }
 impl WithSchema for AtomicI32 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i32)
+        Schema::Primitive(SchemaPrimitive::schema_i32, true)
     }
 }
 impl WithSchema for AtomicU64 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u64)
+        Schema::Primitive(SchemaPrimitive::schema_u64, true)
     }
 }
 impl WithSchema for AtomicI64 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i64)
+        Schema::Primitive(SchemaPrimitive::schema_i64, true)
     }
 }
 impl WithSchema for AtomicUsize {
     fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<usize>() {
-            4 => Schema::Primitive(SchemaPrimitive::schema_u32),
-            8 => Schema::Primitive(SchemaPrimitive::schema_u64),
+            4 => Schema::Primitive(SchemaPrimitive::schema_u32, true),
+            8 => Schema::Primitive(SchemaPrimitive::schema_u64, true),
             _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
     }
@@ -5286,8 +5357,8 @@ impl WithSchema for AtomicUsize {
 impl WithSchema for AtomicIsize {
     fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<isize>() {
-            4 => Schema::Primitive(SchemaPrimitive::schema_i32),
-            8 => Schema::Primitive(SchemaPrimitive::schema_i64),
+            4 => Schema::Primitive(SchemaPrimitive::schema_i32, true),
+            8 => Schema::Primitive(SchemaPrimitive::schema_i64, true),
             _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
     }
@@ -5295,69 +5366,69 @@ impl WithSchema for AtomicIsize {
 
 impl WithSchema for bool {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_bool)
+        Schema::Primitive(SchemaPrimitive::schema_bool, true)
     }
 }
 impl WithSchema for u8 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u8)
+        Schema::Primitive(SchemaPrimitive::schema_u8, true)
     }
 }
 impl WithSchema for i8 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i8)
+        Schema::Primitive(SchemaPrimitive::schema_i8, true)
     }
 }
 impl WithSchema for u16 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u16)
+        Schema::Primitive(SchemaPrimitive::schema_u16, true)
     }
 }
 impl WithSchema for i16 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i16)
+        Schema::Primitive(SchemaPrimitive::schema_i16, true)
     }
 }
 impl WithSchema for u32 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u32)
+        Schema::Primitive(SchemaPrimitive::schema_u32, true)
     }
 }
 impl WithSchema for i32 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i32)
+        Schema::Primitive(SchemaPrimitive::schema_i32, true)
     }
 }
 impl WithSchema for u64 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u64)
+        Schema::Primitive(SchemaPrimitive::schema_u64, true)
     }
 }
 impl WithSchema for u128 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_u128)
+        Schema::Primitive(SchemaPrimitive::schema_u128, true)
     }
 }
 impl WithSchema for i128 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i128)
+        Schema::Primitive(SchemaPrimitive::schema_i128, true)
     }
 }
 impl WithSchema for i64 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_i64)
+        Schema::Primitive(SchemaPrimitive::schema_i64, true)
     }
 }
 impl WithSchema for char {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_char)
+        Schema::Primitive(SchemaPrimitive::schema_char, true)
     }
 }
 impl WithSchema for usize {
     fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<usize>() {
-            4 => Schema::Primitive(SchemaPrimitive::schema_u32),
-            8 => Schema::Primitive(SchemaPrimitive::schema_u64),
+            4 => Schema::Primitive(SchemaPrimitive::schema_u32, true),
+            8 => Schema::Primitive(SchemaPrimitive::schema_u64, true),
             _ => panic!("Size of usize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
     }
@@ -5365,20 +5436,20 @@ impl WithSchema for usize {
 impl WithSchema for isize {
     fn schema(_version: u32) -> Schema {
         match std::mem::size_of::<isize>() {
-            4 => Schema::Primitive(SchemaPrimitive::schema_i32),
-            8 => Schema::Primitive(SchemaPrimitive::schema_i64),
+            4 => Schema::Primitive(SchemaPrimitive::schema_i32, true),
+            8 => Schema::Primitive(SchemaPrimitive::schema_i64, true),
             _ => panic!("Size of isize was neither 32 bit nor 64 bit. This is not supported by the savefile crate."),
         }
     }
 }
 impl WithSchema for f32 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_f32)
+        Schema::Primitive(SchemaPrimitive::schema_f32, true)
     }
 }
 impl WithSchema for f64 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_f64)
+        Schema::Primitive(SchemaPrimitive::schema_f64, true)
     }
 }
 
@@ -5854,7 +5925,7 @@ impl Serialize for Canary1 {
 impl ReprC for Canary1 {}
 impl WithSchema for Canary1 {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_canary1)
+        Schema::Primitive(SchemaPrimitive::schema_canary1, false)
     }
 }
 

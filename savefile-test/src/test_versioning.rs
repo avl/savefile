@@ -218,7 +218,7 @@ fn test_default_trait1() {
 	assert_roundtrip_version::<DefTraitTest>(
 		DefTraitTest {
 			removed_enum : DefTraitEnum::VariantA
-		},1);
+		}, 1, true);
 }
 
 

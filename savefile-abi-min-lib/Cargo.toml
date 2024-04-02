@@ -1,0 +1,11 @@
+[package]
+name = "savefile-abi-min-lib"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+savefile = { path = "../savefile", features = ["derive"], default-features = false }
+savefile_abi = { path = "../savefile_abi" }
+savefile-derive = {path = "../savefile-derive"}
+byteorder = "1.4"

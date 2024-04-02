@@ -348,9 +348,12 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
                     mask |= 1<<index;
                 }
             }
-            if caller_native_method.info.return_value.layout_compatible(&callee_native_method.info.return_value) {
-                mask |= 1<<63;
-            }
+            /*
+                Don't try to support by-ref passing of return values. IT seems tricky, considering lifetimes.
+                if caller_native_method.info.return_value.layout_compatible(&callee_native_method.info.return_value) {
+                       mask |= 1<<63;
+                }
+            */
 
             methods.push(AbiConnectionMethod{
                 method_name: caller_native_method.name,
@@ -369,16 +372,18 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         })
     }
 
-    fn get_symbol_for(filename: &str, trait_name: &str) -> Result<extern "C" fn (flag: AbiSignallingAction), SavefileError> {
+    /// Gets the function pointer for the entry point of the given interface, in the given
+    /// shared library.
+    fn get_symbol_for(shared_library_path: &str, trait_name: &str) -> Result<extern "C" fn (flag: AbiSignallingAction), SavefileError> {
         let mut entry_guard = Guard::lock(&ENTRY_CACHE);
         let mut lib_guard = Guard::lock(&LIBRARY_CACHE);
 
-        if let Some(item) = entry_guard.get(&(filename.to_string(), trait_name.to_string()))
+        if let Some(item) = entry_guard.get(&(shared_library_path.to_string(), trait_name.to_string()))
         {
             return Ok(*item);
         }
 
-        let filename = filename.to_string();
+        let filename = shared_library_path.to_string();
         let trait_name = trait_name.to_string();
         let library;
         match lib_guard.entry(filename.clone()) {
@@ -415,6 +420,8 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         }
     }
 
+    /// Determines the name, without namespace, of the implemented
+    /// trait.
     fn trait_name() -> &'static str {
         let n = std::any::type_name::<T>();
         let n = n.split("::").last().unwrap();
