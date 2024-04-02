@@ -875,6 +875,22 @@ pub enum SavefileError {
         /// Descriptive message
         msg: String,
     },
+    /// Loading an extern library failed (only relevant for savefile_abi)
+    LoadLibraryFailed {
+        /// The library being loaded
+        libname: String,
+        /// Possible descriptive message
+        msg: String,
+    },
+    /// Loading an extern library failed (only relevant for savefile_abi)
+    LoadSymbolFailed {
+        /// The library being loaded
+        libname: String,
+        /// The symbol being loaded
+        symbol: String,
+        /// Possible descriptive message
+        msg: String,
+    }
 }
 
 impl Display for SavefileError {
@@ -930,6 +946,12 @@ impl Display for SavefileError {
             }
             SavefileError::CalleePanic { msg } => {
                 write!(f, "Invocation target panicked: {}", msg)
+            }
+            SavefileError::LoadLibraryFailed { libname, msg } => {
+                write!(f, "Failed while loading library {}: {}", libname, msg)
+            }
+            SavefileError::LoadSymbolFailed { libname, symbol, msg } => {
+                write!(f, "Failed while loading symbol {} from library {}: {}", symbol, libname, msg)
             }
         }
     }
@@ -1846,7 +1868,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 {
                     let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
                     if fetch_schema {
-                        let mut schema_deserializer = Deserializer::<bzip2::read::BzDecoder<TR>>::new_schema_deserializer(&mut compressed_reader, CURRENT_SAVEFILE_LIB_VERSION);
+                        let mut schema_deserializer = new_schema_deserializer(&mut compressed_reader, CURRENT_SAVEFILE_LIB_VERSION);
                         let memory_schema = T::schema(file_ver);
                         let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -2763,7 +2785,9 @@ impl WithSchema for Field {
 impl Serialize for Field {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
-        self.value.serialize(serializer)
+        self.value.serialize(serializer)?;
+        self.offset.serialize(serializer)?;
+        Ok(())
     }
 }
 impl ReprC for Field {}

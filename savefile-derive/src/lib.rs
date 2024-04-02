@@ -12,7 +12,7 @@ use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
 use quote::ToTokens;
-use syn::{DeriveInput, Expr, FnArg, GenericParam, Generics, Ident, ItemTrait, Lit, parse_quote, Pat, ReturnType, TraitItem, Type, WhereClause};
+use syn::{DeriveInput, Expr, FnArg, GenericParam, Generics, Ident, Index, ItemTrait, Lit, parse_quote, Pat, ReturnType, TraitItem, Type, TypeGenerics, WhereClause};
 use syn::__private::bool;
 
 #[derive(Debug)]
@@ -63,7 +63,7 @@ fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
 }
 
 fn path_to_string(path: &syn::Path) -> String {
-    path.segments.last().unwrap().ident.to_string()
+    path.segments.last().expect("Expected at least one segment").ident.to_string()
 }
 
 fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) -> AttrsResult {
@@ -98,7 +98,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
                         if path == "savefile_default_val" {
                             match &x.lit {
                                 &syn::Lit::Str(ref litstr) => {
-                                    default_val = Some(quote! { str::parse(#litstr).unwrap() })
+                                    default_val = Some(quote! { str::parse(#litstr).expect("Expected valid literal string") })
                                 },
                                 _ => {
                                     let lv = &x.lit;
@@ -214,7 +214,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
                                     } else {
                                         panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
                                     }
-                                    if field_to_version.unwrap() < field_from_version.unwrap() {
+                                    if field_to_version.expect("Expected field_to_version") < field_from_version.expect("expected field_from_version") {
                                         panic!("savefile_versions ranges must specify lower number first.");
                                     }
                                 }
@@ -262,6 +262,20 @@ struct FieldInfo<'a> {
     index: u32,
     ty: &'a syn::Type,
     attrs: &'a Vec<syn::Attribute>,
+}
+impl<'a> FieldInfo<'a> {
+    /// field name for named fields, .1 or .2 for tuple fields.
+    pub fn get_accessor(&self) -> TokenStream {
+        match &self.ident {
+            None => {
+                let index = syn::Index::from(self.index as usize);
+                index.to_token_stream()
+            }
+            Some(id) => {
+                id.to_token_stream()
+            }
+        }
+    }
 }
 fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*alignment*/)> {
     match typ {
@@ -421,7 +435,7 @@ fn implement_fields_serialize<'a>(
                 return output.push(quote!( #(#fallbacks)* ) );
             }
             let mut iter = deferred.into_iter();
-            let deferred_from = iter.next().unwrap();
+            let deferred_from = iter.next().expect("expected deferred_from");
             let deferred_to = iter.last().unwrap_or(deferred_from.clone());
 
             output.push(
@@ -446,7 +460,7 @@ fn implement_fields_serialize<'a>(
             };
             quote! { self.#id}
         } else {
-            let id = field.ident.clone().unwrap();
+            let id = field.ident.clone().expect("Expected identifier[3]");
             if implicit_self {
                 quote! { self.#id}
             } else {
@@ -482,7 +496,7 @@ fn implement_fields_serialize<'a>(
                 }
 
                 if compile_time_reprc {
-                    let (_cursize, curalign) = type_size_align.unwrap();
+                    let (_cursize, curalign) = type_size_align.expect("type_size_align");
                     if let Some((deferred_align, deferred_items)) = &mut deferred_reprc {
                         if *deferred_align == curalign {
                             deferred_items.push(obj_id);
@@ -522,8 +536,8 @@ fn implement_fields_serialize<'a>(
 
     let total_reprc_opt: TokenStream;
     if field_infos.is_empty() == false {
-        let first_field = get_obj_id(field_infos.first().unwrap());
-        let last_field = get_obj_id(field_infos.last().unwrap());
+        let first_field = get_obj_id(field_infos.first().expect("field_infos.first"));
+        let last_field = get_obj_id(field_infos.last().expect("field_infos.last"));
         total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(self,&#first_field, &#last_field, local_serializer.version)?; } );
     } else {
         total_reprc_opt = quote!( );
@@ -622,7 +636,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().unwrap()),
+                                ident: Some(field.ident.clone().expect("Expected identifier[4]")),
                                 index: field_index as u32,
                                 ty: &field.ty,
                                 attrs: &field.attrs,
@@ -641,7 +655,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(idx, field)| FieldInfo {
-                                ident: Some(syn::Ident::new(
+                                ident: Some(syn::Ident::new( // We bind the tuple field to a real name, like x0, x1 etc.
                                     &("x".to_string() + &idx.to_string()),
                                     Span::call_site(),
                                 )),
@@ -651,7 +665,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             })
                             .collect();
 
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false);
+                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
 
                         output.push(
                             quote!( #variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
@@ -690,7 +704,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Identifier[5]")),
                             ty: &field.ty,
                             index: field_index as u32,
                             attrs: &field.attrs,
@@ -780,7 +794,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
         let effective_default_val = if is_removed {
             quote! { #removeddef::new() }
         } else if let Some(defval) = default_val {
-            quote! { #defval } //str::parse(#defval).unwrap() }
+            quote! { #defval }
         } else if let Some(default_fn) = default_fn {
             quote_spanned! { span => #default_fn() }
         } else if !exists_version_which_needs_default_value {
@@ -854,9 +868,45 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     output
 }
 
+#[proc_macro]
+pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = item.to_string();
+    let symbols: Vec<_> = input.split(',').map(|x|x.trim()).collect();
+    if symbols.len() != 2 {
+        panic!("savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
+    }
+    let defspan = Span::call_site();
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile_abi;
+        use savefile_abi::{AbiSignallingAction, AbiExportableImplementation, abi_entry};
+    };
+
+    let implementing_type = Ident::new(symbols[0], Span::call_site());
+    let trait_type = Ident::new(symbols[1], Span::call_site());
+    let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
+
+    let expanded = quote! {
+        const _:() = {
+            #uses
+            unsafe impl AbiExportableImplementation for #implementing_type {
+                type AbiInterface = dyn #trait_type;
+                fn new() -> Box<Self::AbiInterface> {
+                    Box::new(#implementing_type::default())
+                }
+            }
+            #[no_mangle]
+            pub extern "C" fn #abi_entry(flag: AbiSignallingAction) where #implementing_type: Default + #trait_type {
+                abi_entry::<#implementing_type>(flag);
+            }
+        };
+    };
+
+    expanded.into()
+}
+
 #[proc_macro_attribute]
 pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let parsed: ItemTrait = syn::parse(input.clone()).unwrap();
+    let parsed: ItemTrait = syn::parse(input.clone()).expect("Expected valid rust-code");
 
     let mut version = None;
     for item in attr.to_string().split(",") {
@@ -886,12 +936,13 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize};
-        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo, AbiErrorMsg};
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError};
+        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiSignallingAction};
         use savefile::LittleEndian;
         use std::collections::HashMap;
         use byteorder::ReadBytesExt;
         use std::mem::MaybeUninit;
+        use std::io::Cursor;
     };
 
     //let method_count = parsed.items.len();
@@ -1146,7 +1197,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     )
 )]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [Savefile]");
 
     let s = savefile_derive_crate_serialize(input.clone());
 
@@ -1185,7 +1236,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     )
 )]
 pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileNoIntrospect]");
 
     let s = savefile_derive_crate_serialize(input.clone());
 
@@ -1220,7 +1271,7 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
     )
 )]
 pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileIntrospectOnly]");
 
     let i = savefile_derive_crate_introspect(input);
 
@@ -1279,7 +1330,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().unwrap()),
+                                ident: Some(field.ident.clone().expect("Expected identifier [6]")),
                                 ty: &field.ty,
                                 index: field_index as u32,
                                 attrs: &field.attrs,
@@ -1337,7 +1388,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[7]")),
                             index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
@@ -1451,8 +1502,9 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     for field in field_infos.windows(2) {
-        let field_name1 = field[0].ident.as_ref().expect("Field was expected to have a name");
-        let field_name2 = field[1].ident.as_ref().expect("Field was expected to have a name");
+        let field_name1 = field[0].get_accessor();
+        let field_name2 = field[1].get_accessor();
+
         optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
 
     }
@@ -1462,8 +1514,8 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
             optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
 
         } else {
-            let first = field_infos.first().unwrap().ident.as_ref().unwrap();
-            let last = field_infos.last().unwrap().ident.as_ref().unwrap();
+            let first = field_infos.first().expect("field_infos.first()[2]").get_accessor();
+            let last = field_infos.last().expect("field_infos.last()[2]").get_accessor();
             optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #first).start == 0 )));
             optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
         }
@@ -1674,7 +1726,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .iter()
                     .enumerate()
                     .map(|(field_index,field)| FieldInfo {
-                        ident: Some(field.ident.clone().unwrap()),
+                        ident: Some(field.ident.clone().expect("Expected identifier [8]")),
                         index: field_index as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
@@ -1690,10 +1742,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .iter()
                     .enumerate()
                     .map(|(idx, field)| FieldInfo {
-                        ident: Some(syn::Ident::new(
-                            &("x".to_string() + &idx.to_string()),
-                            Span::call_site(),
-                        )),
+                        ident: None,
                         index: idx as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
@@ -1701,7 +1750,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .collect();
 
 
-                implement_reprc(field_infos, input.generics, name,opt_in_fast)
+                implement_reprc(field_infos, input.generics, name, opt_in_fast)
 
             }
             &syn::Fields::Unit =>
@@ -1752,14 +1801,10 @@ fn implement_introspect(
             let fieldname;
             let fieldname_raw;
 
-            if let Some(id) = field.ident.clone() {
-                fieldname = quote! {&self.#id};
-                fieldname_raw = quote! {#id};
-            } else {
-                let idd = syn::Index::from(idx);
-                fieldname = quote! {&self.#idd};
-                fieldname_raw = quote! {#idd};
-            }
+            let id = field.get_accessor();
+            fieldname = quote! {&self.#id};
+            fieldname_raw = quote! {#id};
+
             fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
             if verinfo.introspect_key {
                 let fieldname_raw2 = fieldname_raw.clone();
@@ -1850,7 +1895,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     &syn::Fields::Named(ref fields_named) => {
                         for (idx, f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
-                                ident: Some(f.ident.clone().unwrap()),
+                                ident: Some(f.ident.clone().expect("Expected identifier[9]")),
                                 index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
@@ -1963,7 +2008,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(idx,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[10]")),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
@@ -2033,18 +2078,18 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 }
 
 #[allow(non_snake_case)]
-fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
+fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>, is_enum: bool, ty_generics: &TypeGenerics) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
     let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema };
     let fields1 = quote_spanned! { defspan => fields1 };
-    let offset_of = quote_spanned! {defspan =>
+
+    let structname = Ident::new(structname.into(), defspan);
+    let offset_of = quote_spanned! {defspan=>
         _savefile::prelude::offset_of
     };
-
-    let structname = quote_spanned!{defspan => #structname};
 
     let mut fields = Vec::new();
     for (idx, ref field) in field_infos.iter().enumerate() {
@@ -2054,7 +2099,18 @@ fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<To
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
-        let name = if let Some(name) = field.ident.clone() {
+        let offset;
+        if is_enum {
+            offset = quote! { None };
+        } else {
+            if let Some(name) = field.ident.clone() {
+                offset = quote! { Some(#offset_of!(#structname #ty_generics, #name)) };
+            } else {
+                let idx = Index::from(idx);
+                offset = quote! { Some(#offset_of!(#structname #ty_generics, #idx)) }
+            };
+        }
+        let name_str = if let Some(name) = field.ident.clone() {
             (&name).to_string()
         } else {
             idx.to_string()
@@ -2065,7 +2121,7 @@ fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<To
             if removed {
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
             }
-            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset:None })));
+            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset })));
         } else {
             let mut version_mappings = Vec::new();
             for dt in verinfo.deserialize_types.iter() {
@@ -2074,7 +2130,7 @@ fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<To
                 let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version)), offset: Some(#offset_of!(#structname, #name))});
+                        #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version)), offset: #offset });
                     }
                 });
             }
@@ -2083,7 +2139,7 @@ fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>) -> Vec<To
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: Some(#offset_of!(#structname, #name))});
+                    #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset });
                 }
                 ));
         }
@@ -2141,7 +2197,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     &syn::Fields::Named(ref fields_named) => {
                         for (idx,f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
-                                ident: Some(f.ident.clone().unwrap()),
+                                ident: Some(f.ident.clone().expect("Expected identifier[1]")),
                                 ty: &f.ty,
                                 index: idx as u32,
                                 attrs: &f.attrs,
@@ -2163,7 +2219,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     }
                 }
 
-                let fields = implement_withschema(&name.to_string(), field_infos);
+                let fields = implement_withschema(&name.to_string(), field_infos, true, &ty_generics);
 
                 variants.push(quote! {
                 (#field_from_version,
@@ -2213,14 +2269,14 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(idx,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[2]")),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
 
-                    fields = implement_withschema(&name.to_string(), field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos, false, &ty_generics);
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -2234,7 +2290,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             attrs: &f.attrs,
                         })
                         .collect();
-                    fields = implement_withschema(&name.to_string(), field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos, false, &ty_generics);
                 }
                 &syn::Fields::Unit => {
                     fields = Vec::new();

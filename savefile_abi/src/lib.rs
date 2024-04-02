@@ -5,10 +5,15 @@ use std::mem::MaybeUninit;
 use std::panic::catch_unwind;
 use std::ptr::{null};
 use std::{ptr, slice};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::sync::{Mutex, MutexGuard};
 use savefile::{CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_noschema, SavefileError, Schema, Serializer};
 use savefile::prelude::Savefile;
 use savefile::SavefileError::MissingMethod;
 use byteorder::ReadBytesExt;
+use libloading::{Library, Symbol};
 
 #[derive(Savefile, Debug)]
 pub struct AbiMethodInfo {
@@ -238,6 +243,39 @@ pub fn parse_return_value<T:Deserialize>(outcome: &RawAbiCallResult, memory_vers
     }
 }
 
+static LIBRARY_CACHE: Mutex<Option<HashMap<String/*filename*/, Library>>> = Mutex::new(None);
+static ENTRY_CACHE: Mutex<Option<HashMap<(String/*filename*/,String/*trait name*/), extern "C" fn (flag: AbiSignallingAction)>>> = Mutex::new(None);
+
+struct Guard<'a,K:Hash+Eq,V> {
+    guard: MutexGuard<'a, Option<HashMap<K, V>>>
+}
+
+impl<K:Hash+Eq,V> std::ops::Deref for Guard<'_, K, V> {
+    type Target = HashMap<K,V>;
+    fn deref(&self) -> &HashMap<K,V> {
+        &*self.guard.as_ref().unwrap()
+    }
+}
+
+impl<K:Hash+Eq,V> std::ops::DerefMut for Guard<'_, K, V> {
+    fn deref_mut(&mut self) -> &mut HashMap<K,V> {
+        &mut *self.guard.as_mut().unwrap()
+    }
+}
+
+// Avoid taking a dependency on OnceCell or lazy_static or something, just for this little thing
+impl<'a, K:Hash+Eq,V> Guard<'a,K,V> {
+    pub fn lock(map: &'a Mutex<Option<HashMap<K/*filename*/, V>>>) -> Guard<'a, K, V> {
+        let mut guard = map.lock().unwrap();
+        if guard.is_none() {
+            *guard = Some(HashMap::new());
+        }
+        Guard {
+            guard
+        }
+    }
+}
+
 impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
     fn analyze_and_create(
@@ -331,10 +369,82 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         })
     }
 
-    pub fn new_internal(
-        trait_name: &str,
-        remote_entry: extern "C" fn (flag: AbiSignallingAction)) -> Result<AbiConnection<T>, SavefileError>
+    fn get_symbol_for(filename: &str, trait_name: &str) -> Result<extern "C" fn (flag: AbiSignallingAction), SavefileError> {
+        let mut entry_guard = Guard::lock(&ENTRY_CACHE);
+        let mut lib_guard = Guard::lock(&LIBRARY_CACHE);
+
+        if let Some(item) = entry_guard.get(&(filename.to_string(), trait_name.to_string()))
+        {
+            return Ok(*item);
+        }
+
+        let filename = filename.to_string();
+        let trait_name = trait_name.to_string();
+        let library;
+        match lib_guard.entry(filename.clone()) {
+            Entry::Occupied(item) => {
+                library = item.into_mut();
+            }
+            Entry::Vacant(vacant) => {
+                unsafe {
+                    library = vacant.insert(Library::new(&filename).map_err(|x|SavefileError::LoadLibraryFailed {
+                        libname: filename.to_string(),
+                        msg: x.to_string()
+                    })?);
+                }
+            }
+        }
+
+        match entry_guard.entry((filename.clone(), trait_name.clone())) {
+            Entry::Occupied(item) => {
+                return Ok(*item.get());
+            }
+            Entry::Vacant(vacant) => {
+                let symbol_name = format!("abi_entry_{}\0", trait_name);
+                let symbol: Symbol<extern "C" fn (flag: AbiSignallingAction)> = unsafe { library.get(symbol_name.as_bytes()).map_err(|x|{
+                    SavefileError::LoadSymbolFailed {
+                        libname: filename.to_string(),
+                        symbol: symbol_name,
+                        msg: x.to_string()
+                    }
+                })? };
+                let func : extern "C" fn (flag: AbiSignallingAction) = unsafe { std::mem::transmute(symbol.into_raw().into_raw()) };
+                vacant.insert(func);
+                return Ok(func);
+            }
+        }
+    }
+
+    fn trait_name() -> &'static str {
+        let n = std::any::type_name::<T>();
+        let n = n.split("::").last().unwrap();
+        n
+    }
+    /// Load the shared library given by 'filename', and find a savefile_abi-implementation of
+    /// the trait 'T'. Returns an object that implements the
+    pub unsafe fn load_shared_library(filename: &str) -> Result<AbiConnection<T>, SavefileError>
     {
+        let remote_entry = Self::get_symbol_for(filename, Self::trait_name())?;
+        Self::new_internal(remote_entry)
+    }
+
+    /// This routine is mostly for tests.
+    /// It allows using a raw external API entry point directly.
+    /// This is mostly useful for internal testing of the savefile_abi-library.
+    /// 'miri' does not support loading dynamic libraries. Using this function
+    /// from within the same image as the implementation, can be a workaround for this.
+    pub unsafe fn from_raw(entry_point: extern "C" fn(AbiSignallingAction)) -> Result<AbiConnection<T>, SavefileError>
+    {
+        Self::new_internal(entry_point)
+    }
+
+    fn new_internal(
+        remote_entry: extern "C" fn(AbiSignallingAction)
+    ) -> Result<AbiConnection<T>, SavefileError>
+    {
+
+        let trait_name = Self::trait_name();
+
 
         let own_version = T::get_latest_version();
         let own_native_definition = T::get_definition(own_version);
