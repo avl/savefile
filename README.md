@@ -559,6 +559,13 @@ Features savefile does not have, and will not have:
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
 
+# Troubleshooting
+
+Common errors:
+
+## "the trait bound `MyStuff: WithSchema` is not satisfied"
+This probably means you've forgotten to derive the Savefile-traits. Add a `#[derive(Savefile)]`.
+
 
 # License
 

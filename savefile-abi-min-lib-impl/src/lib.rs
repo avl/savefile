@@ -1,8 +1,14 @@
-use savefile_abi_min_lib::AdderInterface;
+use savefile_abi_min_lib::{AdderInterface, MyStuff};
 use savefile_derive::savefile_abi_export;
 
 pub struct AdderImplementation {
     _name: String
+}
+
+impl Drop for AdderImplementation {
+    fn drop(&mut self) {
+        println!("Adder being dropped");
+    }
 }
 
 impl Default for AdderImplementation {
@@ -12,9 +18,18 @@ impl Default for AdderImplementation {
         }
     }
 }
+
+
+
 impl AdderInterface for AdderImplementation {
-    fn add(&self, x: u32, y: u32) -> u32 {
-        x + y
+    fn add(&self, x: u32, y: &u32, z: &MyStuff) -> u32 {
+        x + y + (z.x as u32)
+    }
+
+    fn sub(&self, x: u32, y: u32/*, cb: Box<dyn AdderCallback>*/) -> u32 {
+        let ret = x.saturating_sub(y);
+        //cb.set(ret);
+        ret
     }
 }
 savefile_abi_export!(AdderImplementation, AdderInterface);

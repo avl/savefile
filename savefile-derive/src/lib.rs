@@ -12,7 +12,7 @@ use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
 use quote::ToTokens;
-use syn::{DeriveInput, Expr, FnArg, GenericParam, Generics, Ident, Index, ItemTrait, Lit, parse_quote, Pat, ReturnType, TraitItem, Type, TypeGenerics, WhereClause};
+use syn::{DeriveInput, Expr, FnArg, GenericParam, Generics, Ident, Index, ItemTrait, Lit, parse_quote, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeTuple, WhereClause};
 use syn::__private::bool;
 
 #[derive(Debug)]
@@ -937,7 +937,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
         extern crate savefile;
         extern crate savefile_abi;
         use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError};
-        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiSignallingAction};
+        use savefile_abi::{AbiExportable, AbiTraitDefinition, AbiMethodArgument, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiSignallingAction};
         use savefile::LittleEndian;
         use std::collections::HashMap;
         use byteorder::ReadBytesExt;
@@ -960,7 +960,10 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
         let method_number = method_number as u16;
         let mut method_args:Vec<TokenStream> = vec![];
         let mut arg_variable_decls = vec![];
+        let mut temp_arg_variable_decls = vec![];
         let mut arg_variable_deserializers = vec![];
+        let mut arg_serializers = vec![];
+        let mut fn_arg_list = vec![];
         match item {
             TraitItem::Const(c) => {
                 panic!("savefile_abi_exportable does not support associated consts: {}",c.ident);
@@ -976,25 +979,39 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                         ret_type = parse_quote!("()");
                     }
                     ReturnType::Type(_, ty) => {
-                        ret_type = ty.to_token_stream();
+                        match &**ty {
+                            Type::Path(_type_path) => {
+                                ret_type = ty.to_token_stream();
+                            }
+                            Type::Reference(_) => {
+                                panic!("References in return-position are not supported.")
+                            }
+                            Type::Tuple(TypeTuple{elems, ..}) if elems.is_empty()=> {
+                                // Empty tuple!
+                                ret_type = ty.to_token_stream();
+                            }
+                            _ => panic!("Unsupported type in return-position: {:?}", ty)
+                        }
                     }
                 }
 
 
 
 
-                for (arg_index,arg) in method.sig.inputs.iter().enumerate() {
+                for (total_arg_index,arg) in method.sig.inputs.iter().enumerate() {
 
 
                     let arg_name;
                     let arg_type;
+                    let is_ref;
+                    let arg_index;
                     match arg {
                         FnArg::Receiver(recv) => {
                             if let Some(reference) = &recv.reference {
                                 if reference.1.is_some() {
                                     panic!("Method {} has a lifetime for 'self' argument. This is not supported", method_name);
                                 }
-                                if arg_index != 0 {
+                                if total_arg_index != 0 {
                                     panic!("'self' parameter must be the first parameter");
                                 }
                                 had_ok_receiver = true;
@@ -1006,29 +1023,85 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                         FnArg::Typed(typ) => {
                             match &*typ.pat {
                                 Pat::Ident(name) => {
+                                    arg_name = name;
+                                    if total_arg_index == 0 {
+                                        panic!("Method {} must have 'self'-parameter", method_name);
+                                    }
+                                    arg_index = total_arg_index - 1;
+
                                     match &*typ.ty {
+                                        Type::Reference(typref) => {
+                                            if typref.mutability.is_some() {
+                                                panic!("Method {}, argument #{}, mutable references not supported", method_name, arg_index);
+                                            }
+                                            match &*typref.elem {
+                                                Type::Path(path) => {
+                                                    arg_type = &path.path;
+                                                    is_ref = true;
+                                                }
+                                                _ => { panic!("Method {}, argument #{}, unsupported type: {:?}", method_name, arg_index, typ.ty); }
+                                            }
+                                        }
                                         Type::Path(path) => {
-                                            arg_name = name;
                                             arg_type = &path.path;
+                                            is_ref = false;
                                         }
                                         _ => {
                                             panic!("Method {}, argument #{}, unsupported type: {:?}", method_name, arg_index, typ.ty);
                                         }
                                     }
                                 }
-                                _ => panic!("Method {} had a parameter (#{}, self is #0) which contained a complex pattern. This is not supported.", method_name, arg_index)
+                                _ => panic!("Method {} had a parameter (#{}, self is #0) which contained a complex pattern. This is not supported.", method_name, total_arg_index)
                             }
                         }
                     }
 
                     //let num_mask = 1u64 << (method_number as u64);
-                    method_args.push(arg_name.to_token_stream());
+                    let temp_arg_name = Ident::new(&format!("temp_{}",arg_name.ident), Span::call_site());
+                    if is_ref {
+                        method_args.push(quote!{&#arg_name});
+                        temp_arg_variable_decls.push(quote!{let #temp_arg_name;});
+                    } else {
+                        method_args.push(quote!{#arg_name});
+                    }
                     arg_variable_decls.push(quote!{let #arg_name;});
-                    arg_variable_deserializers.push(quote!{
-                       #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
-                    });
+                    if is_ref {
+                        arg_variable_deserializers.push(quote!{
+                            if compatibility_mask&(1<<#arg_index) != 0 {
+                                #arg_name = unsafe { &*(deserializer.read_u64()? as *const #arg_type) };
+                            } else {
+                                #temp_arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                                #arg_name = &#temp_arg_name;
+                            }
+                        });
+                        arg_serializers.push(quote!{
+                            if compatibility_mask&(1<<#arg_index) != 0 {
+                                println!("Serializing ref as ptr {:?}", #arg_index);
+                                serializer.write_u64(#arg_name as *const #arg_type as usize as u64).unwrap();
+                            } else {
+                                println!("Serializing ref as serialization {:?} (mask: {}, check: {})", #arg_index, compatibility_mask, 1<<#arg_index);
+                                #arg_name.serialize(&mut serializer).unwrap();
+                            }
+                        });
+                    } else {
+                        arg_variable_deserializers.push(quote!{
+                            #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                        });
+                        arg_serializers.push(quote!{
+                        println!("Serializing owned as serialization {:?}", #arg_index);
+                            #arg_name.serialize(&mut serializer).unwrap();
+                        });
+                    }
+                    if is_ref {
+                        fn_arg_list.push(quote!{#arg_name : &#arg_type});
+                    } else {
+                        fn_arg_list.push(quote!{#arg_name : #arg_type})
+                    }
                     output_arguments.push(quote!{
-                        <#arg_type as WithSchema>::schema(version)
+                        AbiMethodArgument {
+                            schema: <#arg_type as WithSchema>::schema(version),
+                            is_ref: #is_ref
+                        }
                     })
                 }
 
@@ -1037,7 +1110,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 }
 
                 abi_connection_method_defs.push(quote!{
-                    fn #method_name(&self, x: u32, y: u32) -> u32 {
+                    fn #method_name(&self, #(#fn_arg_list,)*) -> #ret_type {
                         let info: &AbiConnectionMethod = &self.methods[#method_number as usize];
 
                         extern "C" fn result_receiver<T:Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
@@ -1046,20 +1119,30 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                             result_receiver.write(parse_return_value::<T>(outcome, #version));
                         }
                         let mut result_buffer: MaybeUninit<Result<u32,SavefileError>> = MaybeUninit::<Result<u32,SavefileError>>::uninit();
-                        if info.compatibility_mask & 3 == 3 {
-                            let data = [0/*version*/, x,y];
+                        let compatibility_mask = info.compatibility_mask;
+                        //if info.compatibility_mask & 3 == 3 {
+
+                            let mut data = vec![];
+                            let mut serializer = Serializer {
+                                writer: &mut data,
+                                version: self.effective_version,
+                            };
+                            serializer.write_u32(self.effective_version).unwrap(); //TODO: Error-handling
+                            #(#arg_serializers)*
+
                             (self.entry)(AbiSignallingAction::RegularCall {
                                 trait_object: self.trait_object,
+                                compatibility_mask: compatibility_mask,
                                 method_number: info.callee_method_number,
                                 effective_version: self.effective_version,
                                 data: data.as_ptr() as *const u8,
-                                data_length: 12,
+                                data_length: data.len(),
                                 abi_result: &mut result_buffer as *mut MaybeUninit<Result<u32,SavefileError>> as *mut (),
                                 receiver: result_receiver::<u32>,
                             });
-                        } else {
+                        /*} else {
                             todo!("Serialized case not yet implemented")
-                        }
+                        }*/
                         unsafe { result_buffer.assume_init().expect("Unexpected panic in invocation target") }
                     }
                 });
@@ -1077,6 +1160,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 output_method_calls.push(quote!{
                     #method_number => {
                         #(#arg_variable_decls)*
+                        #(#temp_arg_variable_decls)*
 
                         #(#arg_variable_deserializers)*
 
@@ -1150,7 +1234,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                     #version
                 }
 
-                fn call(&self, method_number: u16, effective_version:u32, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+                fn call(&self, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
 
                     println!("Receiving call. Parameter bytes: {}", data.len());
                     let mut cursor = Cursor::new(data);

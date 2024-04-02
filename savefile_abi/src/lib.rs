@@ -16,9 +16,16 @@ use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
 
 #[derive(Savefile, Debug)]
+pub struct AbiMethodArgument {
+    pub schema: Schema,
+    pub is_ref: bool,
+}
+
+
+#[derive(Savefile, Debug)]
 pub struct AbiMethodInfo {
     pub return_value: Schema,
-    pub arguments: Vec<Schema>,
+    pub arguments: Vec<AbiMethodArgument>,
 }
 
 #[derive(Savefile, Debug)]
@@ -37,7 +44,7 @@ pub struct AbiTraitDefinition {
 pub unsafe trait AbiExportable {
     fn get_definition(version: u32) -> AbiTraitDefinition;
     fn get_latest_version() -> u32;
-    fn call(&self, method_number: u16, effective_version:u32, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
+    fn call(&self, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
 }
 
 pub unsafe trait AbiExportableImplementation {
@@ -50,47 +57,18 @@ pub unsafe trait AbiExportableImplementation {
         let _ = Box::from_raw(raw_ptr.assume_init());
     }
     
-    unsafe fn call(trait_object : TraitObject, method_number: u16, effective_version:u32, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+    unsafe fn call(trait_object : TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
         let mut raw_ptr : MaybeUninit<*mut Self::AbiInterface> = MaybeUninit::uninit();
         ptr::copy(&trait_object as *const TraitObject as *const MaybeUninit<*mut Self::AbiInterface>, &mut raw_ptr as *mut MaybeUninit<*mut Self::AbiInterface>, 1);
         let trait_object: &Self::AbiInterface = unsafe { &*raw_ptr.assume_init() };
 
-        <Self::AbiInterface as AbiExportable>::call(trait_object, method_number, effective_version, data, abi_result, receiver)
+        <Self::AbiInterface as AbiExportable>::call(trait_object, method_number, effective_version, compatibility_mask, data, abi_result, receiver)
     }
 
 }
-/*unsafe impl<T:Default + AbiExportable> AbiExportableImplementation for T {
-    type AbiInterface = T;
-    unsafe fn new() -> TraitObject where T:Default {
-        let obj : Box<T> = Box::new(T::default());
-        let raw = Box::into_raw(obj);
-        assert_eq!(std::mem::size_of::<*mut T>(), 16);
-        assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
-        let mut trait_object = TraitObject::zero();
 
-        ptr::copy(&raw, &mut trait_object as *mut TraitObject as *mut *mut T, 1);
-
-        trait_object
-    }
-
-    unsafe fn destroy(mut trait_object: TraitObject) {
-        let mut raw_ptr : *mut T = std::ptr::null_mut();
-        ptr::copy(&trait_object as *const TraitObject as *const *mut T, &mut raw_ptr as *mut *mut T, 1);
-
-        let _ = Box::from_raw(raw_ptr);
-    }
-    unsafe fn call(mut trait_object : TraitObject, method_number: u16, effective_version:u32, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
-        let mut raw_ptr : *mut T = std::ptr::null_mut();
-        ptr::copy(&trait_object as *const TraitObject as *const *mut T, &mut raw_ptr as *mut *mut T, 1);
-
-        let trait_object: &mut T = unsafe { &mut *raw_ptr };
-
-        <T as AbiExportable>::call(trait_object, method_number, effective_version, data, abi_result, receiver)
-    }
-
-}*/
-
+#[derive(Debug)]
 pub struct AbiConnectionMethod {
     pub method_name: String,
     /// This is mostly for debugging, it's not actually used
@@ -98,13 +76,15 @@ pub struct AbiConnectionMethod {
     /// The ordinal number of this method at the callee
     pub callee_method_number: u16,
     /// For each of the up to 64 different arguments,
-    /// a bit value of 1 means layout is identical
+    /// a bit value of 1 means layout is identical, and in such a way that
+    /// references can be just binary copied (owned arguments must still be cloned, and
+    /// we can just as well do that using serialization, it will be approx as fast).
     pub compatibility_mask: u64,
 }
 
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct TraitObject {
     ptr: *const (),
     vtable: *const (),
@@ -126,6 +106,7 @@ impl TraitObject {
 /// and the actual callee is stateless (allowing multiple
 /// different incoming 'connections').
 #[repr(C)]
+#[derive(Debug)]
 pub struct AbiConnection<T:?Sized> {
     pub effective_version: u32,
     pub methods: Vec<AbiConnectionMethod>,
@@ -174,6 +155,9 @@ pub enum AbiSignallingAction {
         /// The method to call. This is the method number using the
         /// numbering of the callee.
         method_number: u16,
+        /// For every argument, a bit '1' if said argument is a reference that can just
+        /// be binary copied, as a pointer
+        compatibility_mask: u64,
         /// The negotiated protocol version
         effective_version: u32,
         /// Data for parameters, possibly serialized
@@ -304,7 +288,7 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             };
 
             if caller_native_method.info.arguments.len() != callee_native_method.info.arguments.len() {
-                return Err(SavefileError::GeneralError {msg: format!("Number of arguments for method {} has changed from {} to {}.", caller_native_method.name, caller_native_method.info.arguments.len(), callee_native_method.info.arguments.len())});
+                return Err(SavefileError::GeneralError {msg: format!("Number of arguments for method {} was expected by caller to be {} but was {} in implementation.", caller_native_method.name, caller_native_method.info.arguments.len(), callee_native_method.info.arguments.len())});
             }
 
             if caller_native_method.info.arguments.len() != caller_effective_method.info.arguments.len() {
@@ -334,8 +318,8 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             for index in 0..caller_native_method.info.arguments.len()
             {
                 let effective_schema_diff = diff_schema(
-                    &caller_effective_method.info.arguments[index],
-                    &callee_effective_method.info.arguments[index],"".to_string());
+                    &caller_effective_method.info.arguments[index].schema,
+                    &callee_effective_method.info.arguments[index].schema,"".to_string());
                 if let Some(diff) = effective_schema_diff {
                     return Err(SavefileError::IncompatibleSchema{
                         message: format!("Incompatible ABI detected. Trait: {}, method: {}, argument: #{}, error: {}",
@@ -344,7 +328,9 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
                     });
                 }
 
-                if caller_native_method.info.arguments[index].layout_compatible(&callee_native_method.info.arguments[index]) {
+                if caller_native_method.info.arguments[index].is_ref &&
+                    callee_native_method.info.arguments[index].is_ref &&
+                    caller_native_method.info.arguments[index].schema.layout_compatible(&callee_native_method.info.arguments[index].schema) {
                     mask |= 1<<index;
                 }
             }
@@ -535,11 +521,11 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
 pub fn abi_entry<T:AbiExportableImplementation>(flag: AbiSignallingAction) {
     match flag {
-        AbiSignallingAction::RegularCall { trait_object, method_number, effective_version, data, data_length, abi_result, receiver } => {
+        AbiSignallingAction::RegularCall { trait_object, method_number, effective_version, compatibility_mask, data, data_length, abi_result, receiver } => {
             match catch_unwind(||{
                 let data = unsafe { slice::from_raw_parts(data, data_length) };
 
-                match unsafe { T::call(trait_object, method_number, effective_version, data, abi_result, receiver) } {
+                match unsafe { T::call(trait_object, method_number, effective_version, compatibility_mask, data, abi_result, receiver) } {
                     Ok(_) => {
 
                     }
