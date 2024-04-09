@@ -1,4 +1,3 @@
-/*!
 # Welcome to Savefile-abi!
 
 Full docs: https://docs.rs/savefile/latest/savefile-abi/
