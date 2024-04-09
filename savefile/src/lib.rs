@@ -6458,22 +6458,6 @@ impl Display for IntrospectedElementKey {
         write!(f, "{}", self.key)
     }
 }
-
-struct OuterIntrospectItem<'a> {
-    key: String,
-    val: &'a dyn Introspect,
-}
-
-impl<'a> IntrospectItem<'a> for OuterIntrospectItem<'a> {
-    fn key(&self) -> &str {
-        &self.key
-    }
-
-    fn val(&self) -> &dyn Introspect {
-        self.val
-    }
-}
-
 impl Introspector {
     /// Returns a new Introspector with no limit to the number of fields introspected per level
     pub fn new() -> Introspector {
