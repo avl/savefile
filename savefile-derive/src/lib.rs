@@ -22,6 +22,7 @@ extern crate syn;
 
 use proc_macro2::{Literal, Span, TokenTree};
 use proc_macro2::TokenStream;
+#[allow(unused_imports)]
 use std::iter::IntoIterator;
 use quote::ToTokens;
 use syn::{DeriveInput, Expr, FnArg, GenericArgument, GenericParam, Generics, Ident, Index, ItemTrait, Lit, ParenthesizedGenericArguments, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WhereClause};
