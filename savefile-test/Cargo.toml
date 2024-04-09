@@ -12,7 +12,7 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.17.0-beta.5" }
+savefile-derive = { path = "../savefile-derive", version = "=0.17.0-beta.6" }
 savefile-abi = { path = "../savefile-abi" , features = [ "serde_derive" ] }
 bit-vec = "0.6"
 arrayvec="0.7"
