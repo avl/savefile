@@ -1,6 +1,9 @@
 use std::cell::{Cell, UnsafeCell};
 use std::io::Cursor;
+
+#[cfg(feature="nightly")]
 use test::Bencher;
+
 use savefile::{AbiRemoved, Deserializer, Removed, ValueConstructor, Serialize, Serializer};
 use savefile_abi::{abi_entry, AbiConnection, AbiExportable, AbiExportableImplementation};
 

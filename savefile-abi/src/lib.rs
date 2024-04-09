@@ -1,5 +1,6 @@
 #![allow(clippy::len_zero)]
 #![deny(warnings)]
+#![deny(missing_docs)]
 
 /*!
 This is the documentation for `savefile-abi`
@@ -317,25 +318,39 @@ use libloading::{Library, Symbol};
 use serde_derive::{Serialize, Deserialize};
 
 
+
+/// The definition of an argument to a method
 #[derive(Savefile, Debug)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct AbiMethodArgument {
+    /// The schema (type) of the argument. This contains
+    /// primarily the on-disk serialized format, but also
+    /// contains information that can allow savefile-abi to determine
+    /// if memory layouts are the same.
     pub schema: Schema,
+    /// False if this type cannot be sent as a reference
     pub can_be_sent_as_ref: bool,
 }
 
 
+/// Return value and argument types for a method
 #[derive(Savefile, Debug)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct AbiMethodInfo {
+    /// The return value type of the method
     pub return_value: Schema,
+    /// The arguments of the method.
     pub arguments: Vec<AbiMethodArgument>,
 }
 
+/// A method exposed through savefile-abi.
+/// Contains a name, and a signature.
 #[derive(Savefile, Debug)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct AbiMethod {
+    /// The name of the method
     pub name: String,
+    /// The function signature
     pub info: AbiMethodInfo
 }
 
@@ -343,7 +358,9 @@ pub struct AbiMethod {
 #[derive(Savefile, Default, Debug)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct AbiTraitDefinition {
+    /// The name of the trait
     pub name: String,
+    /// The set of methods available on the trait
     pub methods: Vec<AbiMethod>
 }
 
@@ -378,8 +395,6 @@ impl AbiTraitDefinition {
                 ));
             }
             for (arg_index, (new_arg, old_arg)) in new_method.info.arguments.iter().zip(old_method.info.arguments.iter()).enumerate() {
-                println!("Old arg: {:#?}", old_arg);
-                println!("New arg: {:#?}", new_arg);
                 if let Some(diff) = diff_schema(&new_arg.schema, &old_arg.schema, "".into()) {
                     return Err(format!("In trait {}, method {}, argument {}, the type has changed from version {}: {}. This is not a backward-compatible change.",
                                    self.name, old_method.name, arg_index , old_version, diff
@@ -394,6 +409,9 @@ impl AbiTraitDefinition {
         Ok(())
     }
 
+    /// Verify that 'self' represents a newer version of a trait, that is backward compatible
+    /// with 'old'. 'old_version' is the version number of the old version being inspected.
+    /// To guarantee compatibility, all versions must be checked
     pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), SavefileError> {
         self.verify_compatible_with_old_impl(old_version, old).map_err(|x|{
             SavefileError::IncompatibleSchema {message: x}
@@ -496,6 +514,7 @@ unsafe fn call_trait_obj<T:AbiExportable+?Sized>(trait_object : TraitObject, met
 /// Describes a method in a trait
 #[derive(Debug)]
 pub struct AbiConnectionMethod {
+    /// The name of the method
     pub method_name: String,
     /// This is mostly for debugging, it's not actually used
     pub caller_info: AbiMethodInfo,
@@ -737,7 +756,12 @@ impl AbiErrorMsg {
 #[repr(C,u8)]
 pub enum RawAbiCallResult {
     /// Successful operation
-    Success{data: *const u8, len: usize},
+    Success{
+        /// A pointer to the return value, serialized
+        data: *const u8,
+        /// The size of the serialized return value, in bytes
+        len: usize
+    },
     /// The method that was called, panicked. Since the way panic unwinding in Rust
     /// could change between rust-versions, we can't allow any panics to unwind
     /// across the boundary between two different libraries.
@@ -755,6 +779,7 @@ pub enum RawAbiCallResult {
 pub enum AbiProtocol {
     /// Call a method on a trait object.
     RegularCall {
+        /// Type-erased actual trait object. This is the 16 bytes o trait fat pointer.
         trait_object: TraitObject,
         /// For every argument, a bit '1' if said argument is a reference that can just
         /// be binary copied, as a pointer
@@ -893,8 +918,17 @@ pub enum Owning {
 }
 
 const FLEX_BUFFER_SIZE : usize = 64;
+/// Stack allocated buffer that overflows on heap if needed
 pub enum FlexBuffer {
-    Stack{position: usize, data: MaybeUninit<[u8;FLEX_BUFFER_SIZE]>},
+    /// Allocated on stack>
+    Stack{
+        /// The current write position. This is the same as
+        /// the logical size of the buffer, since we can only write at the end.
+        position: usize,
+        /// The data backing this buffer, on the stack
+        data: MaybeUninit<[u8;FLEX_BUFFER_SIZE]>
+    },
+    /// Allocated on heap
     Spill(Vec<u8>)
 }
 impl Write for FlexBuffer {
@@ -927,6 +961,7 @@ impl Write for FlexBuffer {
 }
 
 
+/// Entry point for raw FFI-calls from other shared libraries
 #[doc(hidden)]
 pub extern "C" fn abi_result_receiver<T:Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
     let outcome = unsafe { &*outcome };
@@ -936,18 +971,21 @@ pub extern "C" fn abi_result_receiver<T:Deserialize>(outcome: *const RawAbiCallR
 
 
 impl FlexBuffer {
+    /// Create a new buffer instance, allocated from the stack
     pub fn new() -> FlexBuffer {
         FlexBuffer::Stack {
             position: 0,
             data: MaybeUninit::uninit(),
         }
     }
+    /// Get a pointer to the buffer contents
     pub fn as_ptr(&self) -> *const u8 {
         match self {
             FlexBuffer::Stack {data, .. } => {data as *const MaybeUninit<_> as *const u8}
             FlexBuffer::Spill(v) => {v.as_ptr()}
         }
     }
+    /// Get the number of bytes in the buffer
     pub fn len(&self) -> usize {
         match self {
             FlexBuffer::Stack { position, .. } => {*position}
@@ -1398,6 +1436,15 @@ pub unsafe fn abi_entry<T:AbiExportableImplementation>(flag: AbiProtocol) {
     }
 }
 
+/// If files representing the given AbiExportable definition is not already present,
+/// create one file per supported version, with the definition of the ABI.
+/// If files are present, verify that the definition is the same as that in the files.
+///
+/// This allows us to detect if the data structure as we've declared it is modified
+/// in a non-backward compatible way.
+///
+/// 'path' is a path where files defining the Abi schema are stored. These files
+/// should be checked in to version control.
 pub fn verify_compatiblity<T:AbiExportable+?Sized>(path: &str) -> Result<(),SavefileError> {
     std::fs::create_dir_all(path)?;
     for version in 0..=T::get_latest_version() {
