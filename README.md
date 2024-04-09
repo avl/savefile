@@ -21,8 +21,8 @@ the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.17.0-beta.1"
-savefile-derive = "0.17.0-beta.1"
+savefile = "0.17.0-beta.2"
+savefile-derive = "0.17.0-beta.2"
 ````
 
 # Sample 
@@ -69,7 +69,7 @@ fn main() {
 
 # Changelog
 
-## 0.17.0-beta.1
+## 0.17.0-beta.2
 
 This is a big change! With 0.17 Savefile gains yet another major function: Support for
 making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
@@ -81,7 +81,7 @@ can continue as usual.
 
 The dataformat for schemas has changed, but in a backward compatible way.
 
-Version 0.17.0-beta.1 is, as can be seen from the name, a beta. There will be bugs.
+Version 0.17.0-beta.2 is, as can be seen from the name, a beta. There will be bugs.
 
 The latest stable version is 0.16.5.
 

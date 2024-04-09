@@ -1507,11 +1507,9 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec};
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian};
         use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, AbiTraitDefinition, PackagedTraitObject, Owning, AbiMethodArgument, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
-        use savefile::LittleEndian;
         use std::collections::HashMap;
-        use byteorder::ReadBytesExt;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
     };
