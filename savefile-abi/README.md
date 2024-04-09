@@ -19,7 +19,6 @@ Let's say we have a crate that defines this trait for adding u32s:
 
 *interface_crate*
 ```rust
-use savefile_derive::Savefile;
 use savefile_derive::savefile_abi_exportable;
 
 #[savefile_abi_exportable(version=0)]
@@ -64,20 +63,23 @@ to *ImplementationCrate*.
 
 We then load the implementation dynamically at runtime:
 
-*ApplicationCrate*
+*app*
 
 ```rust
 use savefile_abi::{AbiConnection};
-use InterfaceCrate::{AdderInterface};
+use interface_crate::{AdderInterface};
 
-// Load the implementation of `dyn AdderInterface` that was published
-// using the `savefile_abi_export!` above.
-let connection = AbiConnection::<dyn AdderInterface>
-        ::load_shared_library("ImplementationCrate.so").unwrap();
 
-// The type `AbiConnection::<dyn AdderInterface>` implements
-// the `AdderInterface`-trait, so we can use it to call its methods.
-assert_eq!(connection.add(1, 2), 3);
+fn main() {
+    // Load the implementation of `dyn AdderInterface` that was published
+    // using the `savefile_abi_export!` above.
+    let connection = AbiConnection::<dyn AdderInterface>
+    ::load_shared_library("./ImplementationCrate.so").unwrap();
+
+    // The type `AbiConnection::<dyn AdderInterface>` implements
+    // the `AdderInterface`-trait, so we can use it to call its methods.
+    assert_eq!(connection.add(1, 2), 3);
+}
 
 ```
 
