@@ -6,9 +6,6 @@ Savefile-abi is a crate that is primarily meant to help building binary plugins 
 
 Note! This is a work-in-progress.
 
-Remaining todo:
-
-* Support tuples as parameters to trait methods!
 
 ```toml
 savefile-abi = "0.17.0-beta.1"
@@ -84,3 +81,13 @@ let connection = AbiConnection::<dyn AdderInterface>
 assert_eq!(connection.add(1, 2), 3);
 
 ```
+
+# Limitations
+
+There are multiple limitations:
+
+ * Tuples are presently not supported as direct function arguments!
+ * There may be safety issues, Savefile-Abi is not mature yet.
+
+
+See full docs: https://docs.rs/savefile/latest/savefile-abi/

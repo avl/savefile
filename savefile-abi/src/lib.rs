@@ -285,6 +285,13 @@ As long as the shared library is a real Savefile-Abi shared library, it should b
 even if it contains code that is completely incompatible. This will be detected at runtime,
 and either AbiConnection::load_shared_library will panic, or any calls made after will panic.
 
+# About Vec and String references
+
+Savefile-Abi allows passing references containing Vec and/or String to across the FFI-boundary.
+This is not guaranteed to be sound. However, Savefile-Abi uses heuristics to determine
+the actual memory layout of both Vec and String, and verifies that the two libraries agree
+on the layout of Vec. If they do not, the data is serialized instead.
+
 
 */
 
