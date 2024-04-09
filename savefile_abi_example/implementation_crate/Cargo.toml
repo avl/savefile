@@ -1,0 +1,14 @@
+[package]
+name = "implementation_crate"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+savefile-abi = "0.17.0-beta.2"
+savefile = "0.17.0-beta.2"
+savefile-derive = "0.17.0-beta.2"
+InterfaceCrate = { path = "../InterfaceCrate" }
+

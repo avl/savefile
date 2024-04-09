@@ -17,9 +17,8 @@ savefile-derive = "0.17.0-beta.2"
 
 Let's say we have a crate that defines this trait for adding u32s:
 
-*InterfaceCrate*
+*interface_crate*
 ```rust
-use std::fmt::{Debug, Formatter};
 use savefile_derive::Savefile;
 use savefile_derive::savefile_abi_exportable;
 
@@ -33,9 +32,9 @@ pub trait AdderInterface {
 Now, we want to implement addition in a different crate, compile it to a shared library
 (.dll or .so), and use it in the first crate (or some other crate):
 
-*ImplementationCrate*
+*implementation_crate*
 ```rust
-use IntefaceCrate::{AdderInterface};
+use interface_crate::{AdderInterface};
 use savefile_derive::savefile_abi_export;
 
 #[derive(Default)]
@@ -47,8 +46,8 @@ impl AdderInterface for MyAdder {
     }
 }
 
-/// Export this implementation as the default-implementation for
-/// the interface 'AdderInterface', for the current library.
+// Export this implementation as the default-implementation for
+// the interface 'AdderInterface', for the current library.
 savefile_abi_export!(MyAdder, AdderInterface);
 
 ```
@@ -60,7 +59,7 @@ We add the following to Cargo.toml in our implementation crate:
 crate-type = ["cdylib"]
 ```
 
-Now, in our application, we add a dependency to *InterfaceCrate*, but not
+Now, in our application, we add a dependency to *interface_crate*, but not
 to *ImplementationCrate*.
 
 We then load the implementation dynamically at runtime:
@@ -69,7 +68,7 @@ We then load the implementation dynamically at runtime:
 
 ```rust
 use savefile_abi::{AbiConnection};
-use IntefaceCrate::{AdderInterface};
+use InterfaceCrate::{AdderInterface};
 
 // Load the implementation of `dyn AdderInterface` that was published
 // using the `savefile_abi_export!` above.
