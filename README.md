@@ -76,8 +76,14 @@ making dynamically loaded plugins. I.e, a mechanism to allow rust code to be div
 up into different shared libraries (.so on linux, .dll on windows), and allow calls
 across library boundaries.
 
-Using this feature requires using the crate 'savefile-abi'.
+Using this feature requires using the crate 'savefile-abi'. Regular use of savefile
+can continue as usual.
 
+The dataformat for schemas has changed, but in a backward compatible way.
+
+Version 0.17.0-beta.1 is, as can be seen from the name, a beta. There will be bugs.
+
+The latest stable version is 0.16.5.
 
 ## 0.16.5
 
