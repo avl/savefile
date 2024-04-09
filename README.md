@@ -13,7 +13,7 @@ Docs: https://docs.rs/savefile/latest/savefile/
 Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
 shared libraries, written in rust, to be used as binary plugins in rust-programs.
 
-Docs: https://docs.rs/savefile/latest/savefile-abi/
+Docs: https://docs.rs/savefile-abi/latest/savefile-abi/
 
 Savefile is not yet a very widely used project. However, although there may be bugs, 
 the intention is that the quality should be enough for production when it comes to
@@ -21,8 +21,8 @@ the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.17.0-beta.3"
-savefile-derive = "0.17.0-beta.3"
+savefile = "0.17.0-beta.4"
+savefile-derive = "0.17.0-beta.4"
 ````
 
 # Sample 
@@ -69,7 +69,7 @@ fn main() {
 
 # Changelog
 
-## 0.17.0-beta.3
+## 0.17.0-beta.4
 
 This is a big change! With 0.17 Savefile gains yet another major function: Support for
 making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
@@ -81,7 +81,7 @@ can continue as usual.
 
 The dataformat for schemas has changed, but in a backward compatible way.
 
-Version 0.17.0-beta.3 is, as can be seen from the name, a beta. There will be bugs.
+Version 0.17.0-beta.4 is, as can be seen from the name, a beta. There will be bugs.
 
 The latest stable version is 0.16.5.
 
