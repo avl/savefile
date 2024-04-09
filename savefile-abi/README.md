@@ -1,6 +1,6 @@
 # Welcome to Savefile-abi!
 
-Full docs: https://docs.rs/savefile-abi/latest/savefile-abi/
+Full docs: https://docs.rs/savefile-abi/latest/
 
 Savefile-abi is a crate that is primarily meant to help building binary plugins using Rust.
 
@@ -8,9 +8,9 @@ Note! This is a work-in-progress.
 
 
 ```toml
-savefile-abi = "0.17.0-beta.4"
-savefile = "0.17.0-beta.4"
-savefile-derive = "0.17.0-beta.4"
+savefile-abi = "0.17.0-beta.5"
+savefile = "0.17.0-beta.5"
+savefile-derive = "0.17.0-beta.5"
 ```
 
 # Example
@@ -91,4 +91,4 @@ There are multiple limitations:
  * There may be safety issues, Savefile-Abi is not mature yet.
 
 
-See full docs: https://docs.rs/savefile-abi/latest/savefile-abi/
+See full docs: https://docs.rs/savefile-abi/latest/

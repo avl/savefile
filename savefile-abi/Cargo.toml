@@ -1,6 +1,6 @@
 [package]
 name = "savefile-abi"
-version = "0.17.0-beta.4"
+version = "0.17.0-beta.5"
 edition = "2021"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile-abi/"
@@ -19,8 +19,8 @@ license = "MIT/Apache-2.0"
 serde_derive = ["dep:serde_derive","serde"]
 
 [dependencies]
-savefile = { path="../savefile", version = "=0.17.0-beta.4"}
-savefile-derive = { path="../savefile-derive", version = "=0.17.0-beta.4"}
+savefile = { path="../savefile", version = "=0.17.0-beta.5"}
+savefile-derive = { path="../savefile-derive", version = "=0.17.0-beta.5"}
 byteorder = "1.4"
 libloading = "0.8"
 serde_derive = {version= "1.0", optional = true}
