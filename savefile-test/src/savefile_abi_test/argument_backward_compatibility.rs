@@ -57,6 +57,7 @@ mod v2 {
 
 
 #[test]
+#[cfg(not(miri))]
 pub fn test_abi_schemas_get_def() {
     let exportable = <dyn ArgInterfaceV2 as AbiExportable>::get_definition(0);
     insta::assert_yaml_snapshot!(exportable);

@@ -1512,10 +1512,12 @@ pub fn test_raw_write_region() {
 }
 
 #[quickcheck]
+#[cfg(not(miri))]
 fn test_quickcheck_roundtrip_simple_vec(xs: Vec<isize>) -> bool {
     xs == roundtrip(xs.clone())
 }
 #[quickcheck]
+#[cfg(not(miri))]
 fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
     println!("Yeah: {:?}", xs);
     xs == roundtrip(xs.clone())
