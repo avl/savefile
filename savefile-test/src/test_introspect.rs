@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::collections::BinaryHeap;
+use roundtrip;
 
 
 #[derive(Savefile)]
@@ -71,6 +72,7 @@ pub fn test_simple_enum_with_key() {
     assert_eq!(var3.introspect_value(), "EnumWithName::Variant3");
 
 }
+
 
 #[test]
 pub fn test_simple_with_key() {

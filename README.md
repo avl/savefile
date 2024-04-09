@@ -2,23 +2,27 @@
 
 # Introduction to Savefile 
 
-Savefile is a library to effortlessly serialize rust structs and enums. It uses
+Savefile is a crate to effortlessly serialize rust structs and enums. It uses
 an efficient binary format. It can serialize to anything implementing the 
 Write trait, and then deserialize from anything implementing the Read trait. This 
 means that savefile can be used to easily save in-memory data structures to 
 disk for persistent storage.
 
-You may ask what savefile brings to the table that serde doesn't already do
-better. The answer is: Not that much! Savefile is less capable, and not as well tested.
-It does have versioning support built-in as a first class feature.
+Docs: https://docs.rs/savefile/latest/savefile/
+
+Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
+shared libraries, written in rust, to be used as binary plugins in rust-programs.
+
+Docs: https://docs.rs/savefile/latest/savefile-abi/
 
 Savefile is not yet a very widely used project. However, although there may be bugs, 
-the intention is that the quality should be enough for production.
+the intention is that the quality should be enough for production when it comes to
+the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.16"
-savefile-derive = "0.16"
+savefile = "0.17.0-beta.1"
+savefile-derive = "0.17.0-beta.1"
 ````
 
 # Sample 
@@ -64,6 +68,16 @@ fn main() {
 
 
 # Changelog
+
+## 0.17.0-beta.1
+
+This is a big change! With 0.17 Savefile gains yet another major function: Support for
+making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
+up into different shared libraries (.so on linux, .dll on windows), and allow calls
+across library boundaries.
+
+Using this feature requires using the crate 'savefile-abi'.
+
 
 ## 0.16.5
 
@@ -549,6 +563,13 @@ Features savefile does not have, and will not have:
  * Support for serializing boxed traits ("objects"). You can (probably) hack this in by manually
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
+
+# Troubleshooting
+
+Common errors:
+
+## "the trait bound `MyStuff: WithSchema` is not satisfied"
+This probably means you've forgotten to derive the Savefile-traits. Add a `#[derive(Savefile)]`.
 
 
 # License

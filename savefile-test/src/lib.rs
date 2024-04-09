@@ -2,6 +2,12 @@
 #![cfg_attr(feature="nightly", feature(test))]
 #![deny(warnings)]
 
+#[cfg(test)]
+extern crate insta;
+extern crate quickcheck;
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -27,8 +33,12 @@ use indexmap::IndexMap;
 use indexmap::IndexSet;
 extern crate arrayvec;
 extern crate parking_lot;
+extern crate savefile_abi;
+extern crate bincode;
+
 
 mod test_versioning;
+mod savefile_abi_test;
 mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
@@ -39,6 +49,7 @@ mod test_generic;
 #[cfg(not(miri))]
 mod ext_benchmark;
 
+
 #[derive(Debug, Savefile, PartialEq)]
 struct NonCopy {
     ncfield: u8,
@@ -48,9 +59,39 @@ use std::io::Cursor;
 use std::io::BufWriter;
 
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
-    assert_roundtrip_version(sample, 0)
+    assert_roundtrip_version(sample, 0, true)
 }
-pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32) {
+pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32, schema: bool) {
+    let mut f = Cursor::new(Vec::new());
+    {
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            if schema {
+                Serializer::save(&mut bufw, version, &sample, false).unwrap();
+            } else {
+                Serializer::save_noschema(&mut bufw, version, &sample).unwrap();
+            }
+        }
+        bufw.flush().unwrap();
+    }
+    f.set_position(0);
+    {
+        let roundtrip_result =
+        if schema {
+            Deserializer::load::<E>(&mut f, version).unwrap()
+        } else {
+            Deserializer::load_noschema::<E>(&mut f, version).unwrap()
+        };
+        assert_eq!(sample, roundtrip_result);
+    }
+
+    let f_internal_size = f.get_ref().len();
+    assert_eq!(f.position() as usize,f_internal_size);
+}
+pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
+    roundtrip_version(sample, 0)
+}
+pub fn roundtrip_version<E: Serialize + Deserialize>(sample: E, version: u32) -> E {
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
@@ -60,34 +101,15 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
         bufw.flush().unwrap();
     }
     f.set_position(0);
-    {
-        let roundtrip_result = Deserializer::load::<E>(&mut f, version).unwrap();
-        assert_eq!(sample, roundtrip_result);
-    }
-
-    let f_internal_size = f.get_ref().len();
-    assert_eq!(f.position() as usize,f_internal_size);
-}
-pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
-    let mut f = Cursor::new(Vec::new());
-    {
-        let mut bufw = BufWriter::new(&mut f);
-        {
-            Serializer::save(&mut bufw, 0, &sample, false).unwrap();
-        }
-        bufw.flush().unwrap();
-    }
-    f.set_position(0);
     let roundtrip_result;
     {
-        roundtrip_result = Deserializer::load::<E>(&mut f, 0).unwrap();
+        roundtrip_result = Deserializer::load::<E>(&mut f, version).unwrap();
     }
 
     let f_internal_size = f.get_ref().len();
     assert_eq!(f.position() as usize,f_internal_size);
     roundtrip_result
 }
-
 #[derive(Debug, Savefile, PartialEq)]
 pub enum TestStructEnum {
     Variant1 { a: u8, b: u8 },
@@ -666,6 +688,14 @@ pub fn test_option() {
     assert_roundtrip(x);
 }
 
+#[test]
+pub fn test_result() {
+    let x:Result<u32,u32> = Ok(33);
+    assert_roundtrip(x);
+    let x:Result<u32,u32> = Err(33);
+    assert_roundtrip(x);
+}
+
 #[derive(Savefile,Debug,PartialEq)]
 struct NewTypeSample(u32);
 
@@ -702,7 +732,7 @@ struct OnlyRemoved {
 
 #[test]
 pub fn test_struct_only_removed_fields() {
-    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1);
+    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1, true);
 }
 
 
@@ -792,7 +822,7 @@ pub fn test_terrain() {
 #[cfg(test)]
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
-use savefile::save_compressed;
+use savefile::{save_compressed, VecOrStringLayout};
 use std::sync::Arc;
 use std::path::PathBuf;
 use smallvec::alloc::collections::BTreeMap;
@@ -821,6 +851,24 @@ pub fn test_atomic() {
     }
 }
 
+#[test]
+pub fn test_schema1()  {
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)), VecOrStringLayout::CapacityDataLength),
+        1, false
+    );
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::DataCapacityLength))), VecOrStringLayout::CapacityDataLength),
+        1, false
+    );
+}
+#[test]
+pub fn test_schema2()  {
+    assert_roundtrip_version(
+        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::DataCapacityLength))), VecOrStringLayout::CapacityDataLength),
+        1, false
+    );
+}
 
 #[derive(Savefile,Debug,PartialEq)]
 struct CanaryTest {
@@ -1452,7 +1500,7 @@ pub fn test_raw_write_region() {
     let mut data = vec![];
     let mut ser = Serializer {
         writer: &mut data,
-        version: 0,
+        file_version: 0,
     };
     let r = RawStruct {
         a: 0, b:0, c: 42
@@ -1461,4 +1509,14 @@ pub fn test_raw_write_region() {
     unsafe{
         ser.raw_write_region(&r,&r.a, &r.b, 0).unwrap();
     }
+}
+
+#[quickcheck]
+fn test_quickcheck_roundtrip_simple_vec(xs: Vec<isize>) -> bool {
+    xs == roundtrip(xs.clone())
+}
+#[quickcheck]
+fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
+    println!("Yeah: {:?}", xs);
+    xs == roundtrip(xs.clone())
 }

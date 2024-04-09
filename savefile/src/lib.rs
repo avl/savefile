@@ -3,7 +3,16 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 #![deny(missing_docs)]
 #![deny(warnings)]
-
+#![allow(clippy::box_default)]
+#![allow(clippy::needless_question_mark)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::manual_try_fold)] //Clean this up some day
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::transmute_num_to_bytes)] //Clean this up some day
+#![allow(clippy::manual_memcpy)] //Clean up some day
+#![allow(clippy::needless_late_init)]
 /*!
 This is the documentation for `savefile`
 
@@ -225,7 +234,7 @@ Rules for using the #\[savefile_versions] attribute:
  You may remove a field from your structs. If previously it had no #\[savefile_versions] attribute, you must
     add a #\[savefile_versions = "..N-1"] attribute. If it already had an attribute #[savefile_versions = "M.."], you must close
     its version interval using the current version of your data: #\[savefile_versions = "M..N-1"]. Whenever a field is removed,
-    its type must simply be changed to Removed<T> where T is its previous type. You may never completely remove
+    its type must simply be changed to `Removed<T>` where T is its previous type. You may never completely remove
     items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
     For example, if you remove a field in version 3, you should add a #\[savefile_versions="..2"] attribute.
  You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
@@ -309,7 +318,7 @@ Rules for using the #\[savefile_versions] attribute:
 
  ```
 
- savefile_ignore does not stop the generator from generating an implementation for [Introspect](crate::Introspect) for the given field. To stop
+ savefile_ignore does not stop the generator from generating an implementation for [Introspect] for the given field. To stop
  this as well, also supply the attribute savefile_introspect_ignore .
 
  ## The savefile_versions_as attribute
@@ -404,7 +413,7 @@ Rules for using the #\[savefile_versions] attribute:
  Savefile has an unsafe trait [crate::ReprC] that you must implement for each T. This trait
  has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
  - Is this type such that it can safely be copied byte-per-byte?
- Answering yes for a specific type T, causes savefile to optimize serialization of Vec<T> into being
+ Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
  a very fast, raw memory copy.
 
  Most of the time, the user doesn't need to implement ReprC, as it can be derived automatically
@@ -540,10 +549,14 @@ Rules for using the #\[savefile_versions] attribute:
  may be appropriate.
 
  Note that the implementor of Serialize and Deserialize have total freedom to serialize data
- to/from the binary stream. The Schema is meant as an extra sanity check, not as an exact format
- specification. The quality of this sanity check will depend on the implementation.
+ to/from the binary stream. It is important that the Schema accurately describes the format
+ produced by Serialize and expected by Deserialize. Deserialization from a file is always sound,
+ even if the Schema is wrong. However, the process may allocate too much memory, and data
+ deserialized may be gibberish.
 
-
+ When the Schema is used by the savefile-abi crate, unsoundness can occur if the Schema is
+ incorrect. However, the responsibility for ensuring correctness falls on the savefile-abi crate.
+ The savefile-library itself produces correct Schema-instances for all types it supports.
 
  ````rust
  extern crate savefile;
@@ -553,7 +566,7 @@ Rules for using the #\[savefile_versions] attribute:
  use savefile::prelude::*;
  impl WithSchema for MyPathBuf {
      fn schema(_version: u32) -> Schema {
-         Schema::Primitive(SchemaPrimitive::schema_string)
+         Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
      }
  }
  impl ReprC for MyPathBuf {
@@ -575,7 +588,7 @@ Rules for using the #\[savefile_versions] attribute:
  # Introspection
 
  The Savefile crate also provides an introspection feature, meant for diagnostics. This is implemented
- through the trait [Introspect](crate::Introspect). Any type implementing this can be introspected.
+ through the trait [Introspect]. Any type implementing this can be introspected.
 
  The savefile-derive crate supports automatically generating an implementation for most types.
 
@@ -743,6 +756,14 @@ through simple copying of bytes.
 
 /// The prelude contains all definitions thought to be needed by typical users of the library
 pub mod prelude;
+
+#[cfg(feature="serde_derive")]
+extern crate serde;
+#[cfg(feature="serde_derive")]
+extern crate serde_derive;
+#[cfg(feature="serde_derive")]
+use serde_derive::{Serialize, Deserialize};
+
 extern crate alloc;
 #[cfg(feature="arrayvec")]
 extern crate arrayvec;
@@ -753,18 +774,18 @@ extern crate parking_lot;
 extern crate smallvec;
 
 #[cfg(feature="parking_lot")]
-use parking_lot::{Mutex, MutexGuard,RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 
 use std::fs::File;
-use std::io::{Read, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Read};
 use std::borrow::Cow;
-use std::io::{Write};
+use std::io::Write;
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
     AtomicUsize, Ordering,
 };
 
-use self::byteorder::LittleEndian;
+pub use ::byteorder::LittleEndian;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -775,7 +796,7 @@ use std::mem::MaybeUninit;
 #[cfg(feature="indexmap")]
 extern crate indexmap;
 #[cfg(feature="indexmap")]
-use indexmap::{IndexMap,IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 #[cfg(feature="bit-vec")]
 extern crate bit_vec;
@@ -793,6 +814,15 @@ extern crate memoffset;
 
 #[cfg(feature="derive")]
 extern crate savefile_derive;
+
+
+/// The current savefile version.
+/// This versions number is used for serialized schemas.
+/// There is an ambition that savefiles created by earlier versions
+/// will be possible to open using later versions. The other way
+/// around is not supported.
+pub const CURRENT_SAVEFILE_LIB_VERSION:u16 = 1;
+
 
 /// This object represents an error in deserializing or serializing
 /// an item.
@@ -850,7 +880,38 @@ pub enum SavefileError {
     /// File was compressed, or user asked for compression, but bzip2-library feature was not enabled.
     CompressionSupportNotCompiledIn,
     /// Invalid char, i.e, a serialized value expected to be a char was encountered, but it had an invalid value.
-    InvalidChar
+    InvalidChar,
+    /// This occurs for example when using the stable ABI-functionality to call into a library,
+    /// and then it turns out that library uses a future, incompatible, Savefile-library version.
+    IncompatibleSavefileLibraryVersion,
+    /// This occurs if a foreign ABI entry point is missing a method
+    MissingMethod {
+        /// The name of the missing method
+        method_name: String
+    },
+    /// Savefile ABI only supports at most 63 arguments per function
+    TooManyArguments,
+    /// An ABI callee panicked
+    CalleePanic {
+        /// Descriptive message
+        msg: String,
+    },
+    /// Loading an extern library failed (only relevant for savefile-abi)
+    LoadLibraryFailed {
+        /// The library being loaded
+        libname: String,
+        /// Possible descriptive message
+        msg: String,
+    },
+    /// Loading an extern library failed (only relevant for savefile-abi)
+    LoadSymbolFailed {
+        /// The library being loaded
+        libname: String,
+        /// The symbol being loaded
+        symbol: String,
+        /// Possible descriptive message
+        msg: String,
+    }
 }
 
 impl Display for SavefileError {
@@ -895,6 +956,24 @@ impl Display for SavefileError {
             SavefileError::InvalidChar => {
                 write!(f, "Invalid char value encountered.")
             }
+            SavefileError::IncompatibleSavefileLibraryVersion => {
+                write!(f, "Incompatible savefile library version. Perhaps a plugin was loaded that is a future unsupported version?")
+            }
+            SavefileError::MissingMethod { method_name } => {
+                write!(f, "Plugin is missing method {}", method_name)
+            }
+            SavefileError::TooManyArguments => {
+                write!(f, "Function has too many arguments")
+            }
+            SavefileError::CalleePanic { msg } => {
+                write!(f, "Invocation target panicked: {}", msg)
+            }
+            SavefileError::LoadLibraryFailed { libname, msg } => {
+                write!(f, "Failed while loading library {}: {}", libname, msg)
+            }
+            SavefileError::LoadSymbolFailed { libname, symbol, msg } => {
+                write!(f, "Failed while loading symbol {} from library {}: {}", symbol, libname, msg)
+            }
         }
     }
 }
@@ -903,6 +982,12 @@ impl std::error::Error for SavefileError {
 
 }
 
+impl SavefileError {
+    /// Construct a SavefileError::GeneralError using the given string
+    pub fn general(something: impl Display) -> SavefileError {
+        SavefileError::GeneralError {msg: format!("{}", something)}
+    }
+}
 
 
 /// Object to which serialized data is to be written.
@@ -913,8 +998,10 @@ impl std::error::Error for SavefileError {
 pub struct Serializer<'a, W:Write> {
     /// The underlying writer. You should not access this.
     pub writer: &'a mut W,
-    /// The version of the data structures in memory which are being serialized.
-    pub version: u32,
+    /// The version of the data structures which we are writing to disk.
+    /// If this is < memory_version, we're serializing into an older format.
+    /// Serializing into a future format is logically impossible.
+    pub file_version: u32,
 }
 
 /// Object from which bytes to be deserialized are read.
@@ -922,21 +1009,20 @@ pub struct Serializer<'a, W:Write> {
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
 pub struct Deserializer<'a, R: Read> {
-    reader: &'a mut R,
+    /// The wrapped reader
+    pub reader: &'a mut R,
     /// The version of the input file
     pub file_version: u32,
-    /// The version of the data structures in memory
-    pub memory_version: u32,
     /// This contains ephemeral state that can be used to implement de-duplication of
     /// strings or possibly other situations where it is desired to deserialize DAGs.
-    ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
+    pub ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl<'a, TR: Read> Deserializer<'a, TR> {
     /// This function constructs a temporary state object of type R, and returns a mutable
     /// reference to it. This object can be used to store data that needs to live for the entire
     /// deserialization session. An example is de-duplicating Arc and other reference counted objects.
-    /// Out of the box, Arc<str> has this deduplication done for it.
+    /// Out of the box, `Arc<str>` has this deduplication done for it.
     /// The type T must be set to the type being deserialized, and is used as a key in a hashmap
     /// separating the state for different types.
     pub fn get_state<T: 'static, R: Default + 'static>(&mut self) -> &mut R {
@@ -964,7 +1050,7 @@ impl std::ops::BitAnd<IsReprC> for IsReprC {
 }
 
 impl IsReprC {
-    /// # SAFETY:
+    /// # Safety
     /// Must only ever be created and immediately returned from
     /// ReprC::repr_c_optimization_safe. Any other use, such
     /// that the value could conceivably be smuggled to
@@ -1001,7 +1087,9 @@ pub trait ReprC {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
     /// This may return true if and only if the given protocol version
-    /// has a serialized format identical to the given protocol version.
+    /// has a serialized format identical to the memory layout of the given protocol version.
+    /// Note, the only memory layout existing is that of the most recent version, so
+    /// ReprC-optimization only works when disk-format is identical to memory version.
     ///
     /// This can return true for types which have an in-memory layout that is packed
     /// and therefore identical to the layout that savefile will use on disk.
@@ -1019,12 +1107,13 @@ pub trait ReprC {
     /// documentation of 'IsReprC'. The idea is that the ReprC-trait itself
     /// can still be safe to implement, it just won't be possible to get hold of an
     /// instance of IsReprC(true). To make it impossible to just
-    /// 'steal' such a value from some other thing implementign 'ReprC',
-    /// this method is marked unsafe.
+    /// 'steal' such a value from some other thing implementing 'ReprC',
+    /// this method is marked unsafe (however, it can be left unimplemented,
+    /// making it still possible to safely implement ReprC).
     ///
-    /// # SAFETY
+    /// # Safety
     /// The returned value must not be used, except by the Savefile-framework.
-    /// It must *not* be be forwarded anywhere else.
+    /// It must *not* be forwarded anywhere else.
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC { IsReprC::no()}
 }
 
@@ -1054,11 +1143,11 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
 
 impl WithSchema for PathBuf {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
 impl Serialize for PathBuf {
-    fn serialize<'a>(&self, serializer: &mut Serializer<'a,impl Write>) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let as_string: String = self.to_string_lossy().to_string();
         as_string.serialize(serializer)
     }
@@ -1074,7 +1163,7 @@ impl Introspect for PathBuf {
         self.to_string_lossy().to_string()
     }
 
-    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
         None
     }
 }
@@ -1087,7 +1176,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
 impl<'a, T: 'a + ToOwned +?Sized> ReprC for Cow<'a, T> {}
 
 impl<'a, T: 'a + Serialize + ToOwned + ?Sized> Serialize for Cow<'a, T> {
-    fn serialize<'b>(&self, serializer: &mut Serializer<'b, impl Write>) -> Result<(), SavefileError> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         (**self).serialize(serializer)
     }
 }
@@ -1121,7 +1210,7 @@ mod crypto {
     use std::io::{Error, ErrorKind, Read, Write};
     use std::path::Path;
     use ring::aead;
-    use ring::aead::{BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM};
+    use ring::aead::{AES_256_GCM, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey};
     use ring::error::Unspecified;
 
     extern crate rand;
@@ -1422,7 +1511,7 @@ mod crypto {
     }
 }
 #[cfg(feature="ring")]
-pub use crypto::{CryptoReader,CryptoWriter, save_encrypted_file, load_encrypted_file};
+pub use crypto::{CryptoReader, CryptoWriter, load_encrypted_file, save_encrypted_file};
 
 impl<'a, W:Write+'a> Serializer<'a, W> {
     /// Writes a binary bool to the output
@@ -1478,6 +1567,22 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     #[inline(always)]
     pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
         Ok(self.writer.write_u64::<LittleEndian>(v)?)
+    }
+
+    /// Serialize the bytes of the pointer itself
+    #[inline(always)]
+    pub unsafe fn write_raw_ptr<T:?Sized>(&mut self, data: *const T) -> Result<(), SavefileError> {
+        let temp = &data as *const *const T;
+        let temp_data = temp as *const u8;
+        let buf = slice::from_raw_parts(temp_data, std::mem::size_of::<*const T>());
+        self.write_bytes(buf)
+    }
+
+    /// Writes a binary little endian u64 to the output
+    #[inline(always)]
+    pub fn write_ptr(&mut self, v: *const ()) -> Result<(), SavefileError> {
+        let slice_to_write = unsafe { std::slice::from_raw_parts(&v as *const *const () as *const u8, std::mem::size_of::<*const ()>()) };
+        Ok(self.writer.write_all(slice_to_write)?)
     }
     /// Writes a binary little endian i64 to the output
     #[inline(always)]
@@ -1565,6 +1670,17 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     ) -> Result<(), SavefileError> {
         Ok(Self::save_impl(writer, version, data, false, false)?)
     }
+
+
+    /// Serialize without any header. Using this means that bare_deserialize must be used to
+    /// deserialize. No metadata is sent, not even version.
+    pub fn bare_serialize<T: Serialize>(writer: &mut W, file_version: u32, data: &T) -> Result<(), SavefileError> {
+        let mut serializer = Serializer { writer, file_version };
+        data.serialize(&mut serializer)?;
+        writer.flush()?;
+        Ok(())
+    }
+
     fn save_impl<T: WithSchema + Serialize>(
         writer: &mut W,
         version: u32,
@@ -1576,7 +1692,7 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(0 /*savefile format version*/)?;
+        writer.write_u16::<LittleEndian>(CURRENT_SAVEFILE_LIB_VERSION /*savefile format version*/)?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
 
@@ -1590,11 +1706,11 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
                         let mut compressed_writer = bzip2::write::BzEncoder::new(writer, Compression::best());
                         if with_schema {
                             let schema = T::schema(version);
-                            let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(&mut compressed_writer);
+                            let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(&mut compressed_writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
                             schema.serialize(&mut schema_serializer)?;
                         }
 
-                        let mut serializer = Serializer { writer: &mut compressed_writer, version };
+                        let mut serializer = Serializer { writer: &mut compressed_writer, file_version: version }; //Savefile always serializes most recent version. Only savefile-abi ever writes old formats.
                         data.serialize(&mut serializer)?;
                         compressed_writer.flush()?;
                         return Ok(())
@@ -1609,11 +1725,11 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
                 writer.write_u8(0)?;
                 if with_schema {
                     let schema = T::schema(version);
-                    let mut schema_serializer = Serializer::<W>::new_raw(writer);
+                    let mut schema_serializer = Serializer::<W>::new_raw(writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
                     schema.serialize(&mut schema_serializer)?;
                 }
 
-                let mut serializer = Serializer { writer, version };
+                let mut serializer = Serializer { writer, file_version: version };
                 data.serialize(&mut serializer)?;
                 writer.flush()?;
                 Ok(())
@@ -1625,8 +1741,8 @@ impl<'a, W:Write+'a> Serializer<'a, W> {
     /// Create a Serializer.
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
-    pub fn new_raw(writer: &mut impl Write) -> Serializer<impl Write> {
-        Serializer { writer, version: 0 }
+    pub fn new_raw(writer: &mut impl Write, file_version: u32) -> Serializer<impl Write> {
+        Serializer { writer, file_version }
     }
 }
 
@@ -1652,6 +1768,29 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     /// Reads a little endian u64
     pub fn read_u64(&mut self) -> Result<u64, SavefileError> {
         Ok(self.reader.read_u64::<LittleEndian>()?)
+    }
+
+    /// Reads the raw bit pattern of a pointer
+    pub unsafe fn read_raw_ptr<T:?Sized>(&mut self) -> Result<*const T, SavefileError> {
+        let mut temp = MaybeUninit::<*const T>::zeroed();
+
+        let temp_data = &mut temp as *mut MaybeUninit<*const T> as *mut u8;
+        let temp_size = std::mem::size_of::<*const T>();
+        let buf = unsafe { slice::from_raw_parts_mut(temp_data, temp_size) };
+
+        self.read_bytes_to_buf(buf)?;
+
+        Ok(unsafe { temp.assume_init() })
+    }
+
+
+    /// Reads a pointer
+    pub fn read_ptr(&mut self) -> Result<*const (), SavefileError> {
+        let mut ptr: MaybeUninit<*const ()> = MaybeUninit::zeroed();
+        let data = ptr.as_mut_ptr();
+        let target = unsafe { slice::from_raw_parts_mut(data as *mut u8, std::mem::size_of::<*const ()>()) };
+        self.reader.read_exact(target)?;
+        Ok(unsafe { ptr.assume_init() })
     }
     /// Reads a little endian u128
     pub fn read_u128(&mut self) -> Result<u128, SavefileError> {
@@ -1687,7 +1826,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     }
     /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
     pub fn read_isize(&mut self) -> Result<isize, SavefileError> {
-        if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()? as isize) {
+        if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()?) {
             Ok(val)
         } else {
             Err(SavefileError::SizeOverflow)
@@ -1695,7 +1834,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     }
     /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
     pub fn read_usize(&mut self) -> Result<usize, SavefileError> {
-        if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()? as usize) {
+        if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()?) {
             Ok(val)
         } else {
             Err(SavefileError::SizeOverflow)
@@ -1708,20 +1847,18 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
         {
             if l > 1_000_000 {
                 return Err(SavefileError::GeneralError {
-                    msg: format!("String too large"),
+                    msg: format!("String too large: {}", l),
                 });
             }
         }
-        let mut v = Vec::with_capacity(l);
-        v.resize(l, 0); //TODO: Optimize this
+        let mut v = vec![0; l];
         self.reader.read_exact(&mut v)?;
         Ok(String::from_utf8(v)?)
     }
 
-    /// Reads 'len' raw u8 bytes as a Vec<u8>
+    /// Reads 'len' raw u8 bytes as a `Vec<u8>`
     pub fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, SavefileError> {
-        let mut v = Vec::with_capacity(len);
-        v.resize(len, 0); //TODO: Optimize this
+        let mut v = vec![0; len];
         self.reader.read_exact(&mut v)?;
         Ok(v)
     }
@@ -1745,6 +1882,18 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
     pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
         Deserializer::<TR>::load_impl::<T>(reader, version, false)
     }
+
+    /// Deserialize data which was serialized using 'bare_serialize'
+    pub fn bare_deserialize<T: Deserialize>(reader: &mut TR, file_version: u32) -> Result<T, SavefileError> {
+
+        let mut deserializer = Deserializer {
+            reader,
+            file_version,
+            ephemeral_state: HashMap::new(),
+        };
+        Ok(T::deserialize(&mut deserializer)?)
+    }
+
     fn load_impl<T: WithSchema + Deserialize>(
         reader: &mut TR,
         version: u32,
@@ -1753,13 +1902,13 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
         let mut head: [u8; 9] = [0u8; 9];
         reader.read_exact(&mut head)?;
 
-        if &head[..] != &("savefile\0".to_string().into_bytes())[..] {
-            return Err(SavefileError::GeneralError {msg: "File is not in new savefile-format. If you have a file in old format, contact crate author and we'll work something out! It is not the intention that binary compatibility will be broken any more in the future.".into()});
+        if head[..] != ("savefile\0".to_string().into_bytes())[..] {
+            return Err(SavefileError::GeneralError {msg: "File is not in new savefile-format.".into()});
         }
 
         let savefile_lib_version = reader.read_u16::<LittleEndian>()?;
-        if savefile_lib_version != 0 {
-            return Err(SavefileError::GeneralError {msg: "This file has been created by an earlier, incompatible version of the savefile crate (0.5.0 or before).".into()});
+        if savefile_lib_version > CURRENT_SAVEFILE_LIB_VERSION {
+            return Err(SavefileError::GeneralError {msg: "This file has been created by a future, incompatible version of the savefile crate.".into()});
         }
         let file_ver = reader.read_u32::<LittleEndian>()?;
 
@@ -1778,7 +1927,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 {
                     let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
                     if fetch_schema {
-                        let mut schema_deserializer = Deserializer::<bzip2::read::BzDecoder<TR>>::new_raw(&mut compressed_reader);
+                        let mut schema_deserializer = new_schema_deserializer(&mut compressed_reader, savefile_lib_version);
                         let memory_schema = T::schema(file_ver);
                         let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1794,7 +1943,6 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                     let mut deserializer = Deserializer {
                         reader: &mut compressed_reader,
                         file_version: file_ver,
-                        memory_version: version,
                         ephemeral_state: HashMap::new(),
                     };
                     Ok(T::deserialize(&mut deserializer)?)
@@ -1805,7 +1953,7 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
                 }
         } else {
             if fetch_schema {
-                let mut schema_deserializer = Deserializer::<TR>::new_raw(reader);
+                let mut schema_deserializer = new_schema_deserializer(reader, savefile_lib_version);
                 let memory_schema = T::schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
@@ -1821,7 +1969,6 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
             let mut deserializer = Deserializer {
                 reader,
                 file_version: file_ver,
-                memory_version: version,
                 ephemeral_state: HashMap::new(),
             };
             Ok(T::deserialize(&mut deserializer)?)
@@ -1829,16 +1976,17 @@ impl<'a, TR:Read> Deserializer<'a, TR> {
 
     }
 
-    /// Create a Deserializer.
-    /// Don't use this method directly, use the [crate::load] function
-    /// instead.
-    pub fn new_raw(reader: &mut impl Read) -> Deserializer<impl Read> {
-        Deserializer {
-            reader,
-            file_version: 0,
-            memory_version: 0,
-            ephemeral_state: HashMap::new(),
-        }
+
+}
+
+/// Create a Deserializer.
+/// Don't use this method directly, use the [crate::load] function
+/// instead.
+pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<impl Read> {
+    Deserializer {
+        reader,
+        file_version: file_schema_version as u32,
+        ephemeral_state: HashMap::new(),
     }
 }
 
@@ -1878,7 +2026,7 @@ pub fn save_compressed<T: WithSchema + Serialize>(
     Serializer::save::<T>(writer, version, data, true)
 }
 
-/// Serialize the given data and return as a Vec<u8>
+/// Serialize the given data and return as a `Vec<u8>`
 /// The current version of data must be `version`.
 pub fn save_to_mem<T: WithSchema + Serialize>(version: u32, data: &T) -> Result<Vec<u8>, SavefileError> {
     let mut retval = Vec::new();
@@ -1973,7 +2121,7 @@ pub trait Serialize: WithSchema {
 
 /// A child of an object implementing Introspect. Is a key-value pair. The only reason this is not
 /// simply (String, &dyn Introspect) is that Mutex wouldn't be introspectable in that case.
-/// Mutex needs something like (String, MutexGuard<T>). By having this a trait,
+/// Mutex needs something like `(String, MutexGuard<T>)`. By having this a trait,
 /// different types can have whatever reference holder needed (MutexGuard, RefMut etc).
 pub trait IntrospectItem<'a> {
     /// Should return a descriptive string for the given child. For structures,
@@ -2002,7 +2150,7 @@ impl Introspect for NullIntrospectable {
 }
 impl<'a> IntrospectItem<'a> for String {
     fn key(&self) -> &str {
-        &self
+        self
     }
 
     fn val(&self) -> &dyn Introspect {
@@ -2065,17 +2213,37 @@ pub trait Deserialize: WithSchema + Sized {
 /// A field is serialized according to its value.
 /// The name is just for diagnostics.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Field {
     /// Field name
     pub name: String,
     /// Field type
     pub value: Box<Schema>,
+    /// The field offset within the struct, if known.
+    /// This is used to determine layout compatibility between different shared libraries,
+    /// when using the savefile-abi crate. A value of None means offset is not known.
+    /// For fields in enums, the offset is the offset from the start of memory of the enum.
+    /// For a repr(C,?)-enum, this will be the offset from the start of the discriminant.
+    /// For repr(rust)-enums, the discriminant may not be at the start of the memory layout.
+    pub offset: Option<usize>,
+}
+
+impl Field {
+    /// Determine if the two fields are laid out identically in memory, in their parent objects.
+    pub fn layout_compatible(&self, other: &Field) -> bool {
+        let (Some(offset_a), Some(offset_b)) = (self.offset, other.offset) else {return false;};
+        if offset_a != offset_b {
+            return false;
+        }
+        self.value.layout_compatible(&other.value)
+    }
 }
 
 /// An array is serialized by serializing its items one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaArray {
     /// Type of array elements
     pub item_type: Box<Schema>,
@@ -2084,6 +2252,12 @@ pub struct SchemaArray {
 }
 
 impl SchemaArray {
+    fn layout_compatible(&self, other: &SchemaArray) -> bool {
+        if self.count != other.count {
+            return false
+        }
+        self.item_type.layout_compatible(&other.item_type)
+    }
     fn serialized_size(&self) -> Option<usize> {
         self.item_type.serialized_size().map(|x| x * self.count)
     }
@@ -2093,6 +2267,8 @@ impl SchemaArray {
 /// without any padding.
 /// The dbg_name is just for diagnostics.
 #[derive(Debug, PartialEq)]
+#[repr(C)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaStruct {
     /// Diagnostic value
     pub dbg_name: String,
@@ -2108,6 +2284,17 @@ fn maybe_add(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaStruct {
+    fn layout_compatible(&self, other: &SchemaStruct) -> bool {
+        if self.fields.len() != other.fields.len() {
+            return false;
+        }
+        for (a, b) in self.fields.iter().zip(other.fields.iter()) {
+            if !a.value.layout_compatible(&b.value) {
+                return false;
+            }
+        }
+        true
+    }
     fn serialized_size(&self) -> Option<usize> {
         self.fields
             .iter()
@@ -2118,15 +2305,31 @@ impl SchemaStruct {
 /// An enum variant is serialized as its fields, one by one,
 /// without any padding.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Variant {
     /// Name of variant
     pub name: String,
-    /// Discriminator in binary file-format
-    pub discriminator: u8,
+    /// Discriminant in binary file-format
+    pub discriminant: u8,
     /// Fields of variant
     pub fields: Vec<Field>,
 }
 impl Variant {
+    fn layout_compatible(&self, other: &Variant) -> bool {
+        if self.discriminant != other.discriminant {
+            return false;
+        }
+        if self.fields.len() != other.fields.len() {
+            return false;
+        }
+        for (a,b) in self.fields.iter().zip(other.fields.iter()) {
+            if !a.layout_compatible(b) {
+                println!("Fields not");
+                return false;
+            }
+        }
+        true
+    }
     fn serialized_size(&self) -> Option<usize> {
         self.fields
             .iter()
@@ -2134,11 +2337,12 @@ impl Variant {
     }
 }
 
-/// An enum is serialized as its u8 variant discriminator
+/// An enum is serialized as its u8 variant discriminant
 /// followed by all the field for that variant.
 /// The name of each variant, as well as its order in
-/// the enum (the discriminator), is significant.
+/// the enum (the discriminant), is significant.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaEnum {
     /// Diagnostic name
     pub dbg_name: String,
@@ -2155,8 +2359,20 @@ fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaEnum {
+    fn layout_compatible(&self, other: &SchemaEnum) -> bool {
+        if self.variants.len() != other.variants.len() {
+            return false;
+        }
+        for (a,b) in self.variants.iter().zip(other.variants.iter()) {
+            if !a.layout_compatible(b) {
+                println!("Variants not comp.");
+                return false;
+            }
+        }
+        true
+    }
     fn serialized_size(&self) -> Option<usize> {
-        let discr_size = 1usize; //Discriminator is always 1 byte
+        let discr_size = 1usize; //Discriminant is always 1 byte
         self.variants
             .iter()
             .fold(Some(discr_size), |prev, x| maybe_max(prev, x.serialized_size()))
@@ -2169,6 +2385,7 @@ impl SchemaEnum {
 /// by the string in utf8.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub enum SchemaPrimitive {
     /// i8
     schema_i8,
@@ -2187,7 +2404,7 @@ pub enum SchemaPrimitive {
     /// u64
     schema_u64,
     /// string
-    schema_string,
+    schema_string(VecOrStringLayout),
     /// f32
     schema_f32,
     /// f64
@@ -2214,7 +2431,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_u32 => "u32",
             SchemaPrimitive::schema_i64 => "i64",
             SchemaPrimitive::schema_u64 => "u64",
-            SchemaPrimitive::schema_string => "String",
+            SchemaPrimitive::schema_string(_) => "String",
             SchemaPrimitive::schema_f32 => "f32",
             SchemaPrimitive::schema_f64 => "f64",
             SchemaPrimitive::schema_bool => "bool",
@@ -2233,7 +2450,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_i16 | SchemaPrimitive::schema_u16 => Some(2),
             SchemaPrimitive::schema_i32 | SchemaPrimitive::schema_u32 => Some(4),
             SchemaPrimitive::schema_i64 | SchemaPrimitive::schema_u64 => Some(8),
-            SchemaPrimitive::schema_string => None,
+            SchemaPrimitive::schema_string(_) => None,
             SchemaPrimitive::schema_f32 => Some(4),
             SchemaPrimitive::schema_f64 => Some(8),
             SchemaPrimitive::schema_bool => Some(1),
@@ -2256,6 +2473,37 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
     None
 }
 
+/// The actual layout in memory of a Vec-like datastructure.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+pub enum VecOrStringLayout {
+    /// Nothing is known. We must assume that the memory layout could be anything
+    Unknown,
+    /// Data pointer, plus capacity and length usize
+    DataCapacityLength,
+    /// Data pointer, plus length and capacity usize
+    DataLengthCapacity,
+    ///
+    CapacityDataLength,
+    ///
+    LengthDataCapacity,
+    ///
+    CapacityLengthData,
+    ///
+    LengthCapacityData,
+    /// Length, then data
+    LengthData,
+    /// Data, then length
+    DataLength,
+}
+
+impl Default for VecOrStringLayout {
+    fn default() -> Self {
+        VecOrStringLayout::Unknown
+    }
+}
+
 /// The schema represents the save file format
 /// of your data structure. It is an AST (Abstract Syntax Tree)
 /// for consisting of various types of nodes in the savefile
@@ -2263,16 +2511,17 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 /// this tree, but must reuse these existing ones.
 /// See the various enum variants for more information:
 #[derive(Debug, PartialEq)]
+#[repr(C,u32)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub enum Schema {
-    /// Represents a struct. Custom implementations of Serialize may use this
-    /// format are encouraged to use this format.
+    /// Represents a struct. Custom implementations of Serialize are encouraged to use this format.
     Struct(SchemaStruct),
-    /// Represents an enum
+    /// Represents an enum.
     Enum(SchemaEnum),
     /// Represents a primitive: Any of the various integer types (u8, i8, u16, i16 etc...), or String
     Primitive(SchemaPrimitive),
     /// A Vector of arbitrary nodes, all of the given type
-    Vector(Box<Schema>),
+    Vector(Box<Schema>, VecOrStringLayout /*standard savefile memory layout*/),
     /// An array of N arbitrary nodes, all of the given type
     Array(SchemaArray),
     /// An Option variable instance of the given type.
@@ -2283,17 +2532,80 @@ pub enum Schema {
     ZeroSize,
     /// A user-defined, custom type. The string can be anything. The schema
     /// only matches if the string is identical
-    Custom(String)
+    Custom(String),
+    /// Boxed traits cannot be serialized, but they can be exchanged using savefile-abi
+    BoxedTrait(String)
+}
+/// Introspect is not implemented for Schema, though it could be
+impl Introspect for Schema {
+    fn introspect_value(&self) -> String {
+        "Schema".to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
 }
 
 impl Schema {
+    /// Get a short description of the major type of this schema.
+    /// 'struct', 'enum' etc.
+    pub fn top_level_description(&self) -> &'static str {
+        match self {
+            Schema::Struct(_) => "struct",
+            Schema::Enum(_) => "enum",
+            Schema::Primitive(_) => "primitive",
+            Schema::Vector(_, _) => "vector",
+            Schema::Array(_) => "array",
+            Schema::SchemaOption(_) => "option",
+            Schema::Undefined => "undefined",
+            Schema::ZeroSize => "zerosize",
+            Schema::Custom(_) => "custom",
+            Schema::BoxedTrait(_) => "boxed_trait",
+        }
+    }
+    /// Determine if the two fields are laid out identically in memory, in their parent objects.
+    pub fn layout_compatible(&self, other: &Schema) -> bool {
+        match (self, other) {
+            (Schema::Struct(a),Schema::Struct(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::Enum(a), Schema::Enum(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::Primitive(a), Schema::Primitive(b)) => {
+                a == b
+            }
+            (Schema::Vector(a, a_standard_layout), Schema::Vector(b, b_standard_layout)) => {
+                a.layout_compatible(b)
+                    && *a_standard_layout != VecOrStringLayout::Unknown
+                    && *b_standard_layout != VecOrStringLayout::Unknown
+                    && *a_standard_layout == *b_standard_layout
+            }
+            (Schema::Array(a), Schema::Array(b)) => {
+                a.layout_compatible(b)
+            }
+            (Schema::SchemaOption(_), Schema::SchemaOption(_)) => {
+                false // Layout of enums in memory is undefined, and also hard to determine at runtime
+            }
+            (Schema::ZeroSize, Schema::ZeroSize) => {
+                true
+            }
+            (Schema::Custom(_), Schema::Custom(_)) => {
+                false // Be conservative here
+            }
+            _ => false
+        }
+    }
     /// Create a 1-element tuple
     pub fn new_tuple1<T1: WithSchema>(version: u32) -> Schema {
+        let schema = Box::new(T1::schema(version));
         Schema::Struct(SchemaStruct {
             dbg_name: "1-Tuple".to_string(),
-            fields: vec![Field {
+            fields: vec![ Field {
                 name: "0".to_string(),
-                value: Box::new(T1::schema(version)),
+                value: schema,
+                offset: Some(offset_of_tuple!((T1,),0))
             }],
         })
     }
@@ -2306,10 +2618,12 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2),0))
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2),1))
                 },
             ],
         })
@@ -2322,14 +2636,17 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),0)),
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),1)),
                 },
                 Field {
                     name: "2".to_string(),
                     value: Box::new(T3::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3),2)),
                 },
             ],
         })
@@ -2342,18 +2659,22 @@ impl Schema {
                 Field {
                     name: "0".to_string(),
                     value: Box::new(T1::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),0)),
                 },
                 Field {
                     name: "1".to_string(),
                     value: Box::new(T2::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),1)),
                 },
                 Field {
                     name: "2".to_string(),
                     value: Box::new(T3::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),2)),
                 },
                 Field {
                     name: "3".to_string(),
                     value: Box::new(T4::schema(version)),
+                    offset: Some(offset_of_tuple!((T1,T2,T3,T4),3)),
                 },
             ],
         })
@@ -2364,12 +2685,13 @@ impl Schema {
             Schema::Struct(ref schema_struct) => schema_struct.serialized_size(),
             Schema::Enum(ref schema_enum) => schema_enum.serialized_size(),
             Schema::Primitive(ref schema_primitive) => schema_primitive.serialized_size(),
-            Schema::Vector(ref _vector) => None,
+            Schema::Vector(ref _vector,_) => None,
             Schema::Array(ref array) => array.serialized_size(),
             Schema::SchemaOption(ref _content) => None,
             Schema::Undefined => None,
             Schema::ZeroSize => Some(0),
             Schema::Custom(_) => None,
+            Schema::BoxedTrait(_) => {None}
         }
     }
 }
@@ -2410,10 +2732,10 @@ fn diff_enum(a: &SchemaEnum, b: &SchemaEnum, path: String) -> Option<String> {
                 &path, i, a.variants[i].name, b.variants[i].name
             ));
         }
-        if a.variants[i].discriminator != b.variants[i].discriminator {
+        if a.variants[i].discriminant != b.variants[i].discriminant {
             return Some(format!(
-                "At location [{}]: Enum variant #{} in memory has discriminator {}, but in disk format it has {}",
-                &path, i, a.variants[i].discriminator, b.variants[i].discriminator
+                "At location [{}]: Enum variant #{} in memory has discriminant {}, but in disk format it has {}",
+                &path, i, a.variants[i].discriminant, b.variants[i].discriminant
             ));
         }
         let r = diff_fields(
@@ -2475,119 +2797,45 @@ fn diff_fields(
 /// between the two schemas. The schema 'a' is assumed to be the current
 /// schema (used in memory).
 /// Returns None if both schemas are equivalent
-fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
-    let (atype, btype) = match *a {
-        Schema::Struct(ref xa) => match *b {
-            Schema::Struct(ref xb) => return diff_struct(xa, xb, path),
-            Schema::Enum(_) => ("struct", "enum"),
-            Schema::Primitive(_) => ("struct", "primitive"),
-            Schema::Vector(_) => ("struct", "vector"),
-            Schema::SchemaOption(_) => ("struct", "option"),
-            Schema::Undefined => ("struct", "undefined"),
-            Schema::ZeroSize => ("struct", "zerosize"),
-            Schema::Array(_) => ("struct", "array"),
-            Schema::Custom(_) => ("struct", "custom"),
-        },
-        Schema::Enum(ref xa) => match *b {
-            Schema::Enum(ref xb) => return diff_enum(xa, xb, path),
-            Schema::Struct(_) => ("enum", "struct"),
-            Schema::Primitive(_) => ("enum", "primitive"),
-            Schema::Vector(_) => ("enum", "vector"),
-            Schema::SchemaOption(_) => ("enum", "option"),
-            Schema::Undefined => ("enum", "undefined"),
-            Schema::ZeroSize => ("enum", "zerosize"),
-            Schema::Array(_) => ("enum", "array"),
-            Schema::Custom(_) => ("enum", "custom"),
-        },
-        Schema::Primitive(ref xa) => match *b {
-            Schema::Primitive(ref xb) => {
-                return diff_primitive(*xa, *xb, &path);
-            }
-            Schema::Struct(_) => ("primitive", "struct"),
-            Schema::Enum(_) => ("primitive", "enum"),
-            Schema::Vector(_) => ("primitive", "vector"),
-            Schema::SchemaOption(_) => ("primitive", "option"),
-            Schema::Undefined => ("primitive", "undefined"),
-            Schema::ZeroSize => ("primitive", "zerosize"),
-            Schema::Array(_) => ("primitive", "array"),
-            Schema::Custom(_) => ("primitive", "custom"),
-        },
-        Schema::SchemaOption(ref xa) => match *b {
-            Schema::SchemaOption(ref xb) => {
-                return diff_option(xa, xb, path);
-            }
-            Schema::Struct(_) => ("option", "struct"),
-            Schema::Enum(_) => ("option", "enum"),
-            Schema::Primitive(_) => ("option", "primitive"),
-            Schema::Vector(_) => ("option", "vector"),
-            Schema::Undefined => ("option", "undefined"),
-            Schema::ZeroSize => ("option", "zerosize"),
-            Schema::Array(_) => ("option", "array"),
-            Schema::Custom(_) => ("option", "custom"),
-        },
-        Schema::Vector(ref xa) => match *b {
-            Schema::Vector(ref xb) => {
-                return diff_vector(xa, xb, path);
-            }
-            Schema::Struct(_) => ("vector", "struct"),
-            Schema::Enum(_) => ("vector", "enum"),
-            Schema::Primitive(_) => ("vector", "primitive"),
-            Schema::SchemaOption(_) => ("vector", "option"),
-            Schema::Undefined => ("vector", "undefined"),
-            Schema::ZeroSize => ("vector", "zerosize"),
-            Schema::Array(_) => ("vector", "array"),
-            Schema::Custom(_) => ("vector", "custom"),
-        },
-        Schema::Undefined => {
-            return Some(format!("At location [{}]: Undefined schema encountered.", path));
-        }
-        Schema::ZeroSize => match *b {
-            Schema::ZeroSize => {
-                return None;
-            }
-            Schema::Vector(_) => ("zerosize", "vector"),
-            Schema::Struct(_) => ("zerosize", "struct"),
-            Schema::Enum(_) => ("zerosize", "enum"),
-            Schema::SchemaOption(_) => ("zerosize", "option"),
-            Schema::Primitive(_) => ("zerosize", "primitive"),
-            Schema::Undefined => ("zerosize", "undefined"),
-            Schema::Array(_) => ("zerosize", "array"),
-            Schema::Custom(_) => ("zerosize", "custom"),
+/// This does not care about memory layout, only serializability.
+pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
 
-        },
-        Schema::Array(ref xa) => match *b {
-            Schema::Vector(_) => ("array", "vector"),
-            Schema::Struct(_) => ("array", "struct"),
-            Schema::Enum(_) => ("array", "enum"),
-            Schema::Primitive(_) => ("array", "primitive"),
-            Schema::SchemaOption(_) => ("array", "option"),
-            Schema::Undefined => ("array", "undefined"),
-            Schema::ZeroSize => ("array", "zerosize"),
-            Schema::Array(ref xb) => return diff_array(xa, xb, path),
-            Schema::Custom(_) => ("array", "custom"),
-        },
-        Schema::Custom(ref custom_a) => match b {
-            Schema::Vector(_) => ("custom", "vector"),
-            Schema::Struct(_) => ("custom", "struct"),
-            Schema::Enum(_) => ("custom", "enum"),
-            Schema::Primitive(_) => ("custom", "primitive"),
-            Schema::SchemaOption(_) => ("custom", "option"),
-            Schema::Undefined => ("custom", "undefined"),
-            Schema::ZeroSize => ("custom", "zerosize"),
-            Schema::Array(_) => ("custom", "array"),
-            Schema::Custom(custom_b) => {
-                if a != b {
-                    return Some(format!(
-                        "At location [{}]: Application protocol has datatype Custom({}), but disk format has Custom({})",
-                        path,
-                        custom_a,
-                        custom_b
-                    ));
-                }
-                return None;
+    let (atype, btype) = match (a,b) {
+        (Schema::Struct(a),Schema::Struct(b)) => {return diff_struct(a, b, path)}
+        (Schema::Enum(a),Schema::Enum(b)) => {return diff_enum(a, b, path)}
+        (Schema::Primitive(a1),Schema::Primitive(b1),) => {return diff_primitive(*a1, *b1, &path)}
+        (Schema::Vector(a1, _a2),Schema::Vector(b1, _b2),) => {return diff_vector(a1, b1, path)}
+        (Schema::SchemaOption(a),Schema::SchemaOption(b)) => {return diff_option(a, b, path);}
+        (Schema::Undefined,Schema::Undefined) => {return Some(format!("At location [{}]: Undefined schema encountered.", path))}
+        (Schema::ZeroSize,Schema::ZeroSize) => {return None;}
+        (Schema::Array(a),Schema::Array(b)) => {return diff_array(a, b, path)}
+        (Schema::Custom(a),Schema::Custom(b)) => {
+            if a != b {
+                return Some(format!(
+                    "At location [{}]: Application protocol has datatype Custom({}), but foreign format has Custom({})",
+                    path,
+                    a,
+                    b
+                ));
             }
+            return None;
+        }
+        (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
+            if a!=b {
+                return Some(format!(
+                    "At location [{}]: Application protocol has datatype Box<dyn {}>, but foreign format has Box<dyn {}>",
+                    path,
+                    a,
+                    b
+                ));
+            }
+            return None;
+        }
+        (a,b) => {
+            (a.top_level_description(),b.top_level_description())
         }
     };
+
     Some(format!(
         "At location [{}]: In memory schema: {}, file schema: {}",
         path, atype, btype
@@ -2603,7 +2851,9 @@ impl WithSchema for Field {
 impl Serialize for Field {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
-        self.value.serialize(serializer)
+        self.value.serialize(serializer)?;
+        self.offset.serialize(serializer)?;
+        Ok(())
     }
 }
 impl ReprC for Field {}
@@ -2612,6 +2862,7 @@ impl Deserialize for Field {
         Ok(Field {
             name: deserializer.read_string()?,
             value: Box::new(Schema::deserialize(deserializer)?),
+            offset: if deserializer.file_version > 0 { Option::deserialize(deserializer)? } else {None},
         })
     }
 }
@@ -2623,7 +2874,7 @@ impl WithSchema for Variant {
 impl Serialize for Variant {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
-        serializer.write_u8(self.discriminator)?;
+        serializer.write_u8(self.discriminant)?;
         serializer.write_usize(self.fields.len())?;
         for field in &self.fields {
             field.serialize(serializer)?;
@@ -2637,7 +2888,7 @@ impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Variant {
             name: deserializer.read_string()?,
-            discriminator: deserializer.read_u8()?,
+            discriminant: deserializer.read_u8()?,
             fields: {
                 let l = deserializer.read_usize()?;
                 let mut ret = Vec::new();
@@ -2645,6 +2896,7 @@ impl Deserialize for Variant {
                     ret.push(Field {
                         name: deserializer.read_string()?,
                         value: Box::new(Schema::deserialize(deserializer)?),
+                        offset: if deserializer.file_version > 0 { Option::deserialize(deserializer)? } else {None},
                     });
                 }
                 ret
@@ -2722,7 +2974,6 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_u32 => 6,
             SchemaPrimitive::schema_i64 => 7,
             SchemaPrimitive::schema_u64 => 8,
-            SchemaPrimitive::schema_string => 9,
             SchemaPrimitive::schema_f32 => 10,
             SchemaPrimitive::schema_f64 => 11,
             SchemaPrimitive::schema_bool => 12,
@@ -2730,8 +2981,33 @@ impl Serialize for SchemaPrimitive {
             SchemaPrimitive::schema_i128 => 14,
             SchemaPrimitive::schema_u128 => 15,
             SchemaPrimitive::schema_char => 16,
+            SchemaPrimitive::schema_string(layout) => {
+                serializer.write_u8(9)?;
+                if serializer.file_version > 0 {
+                    serializer.write_u8(layout as u8)?;
+                }
+                return Ok(());
+            },
         };
         serializer.write_u8(discr)
+    }
+}
+impl WithSchema for VecOrStringLayout {
+    fn schema(_version: u32) -> Schema {
+        Schema::Undefined
+    }
+}
+impl Deserialize for VecOrStringLayout {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(match deserializer.read_u8()? {
+            1 => VecOrStringLayout::DataCapacityLength,
+            2 => VecOrStringLayout::DataLengthCapacity,
+            3 => VecOrStringLayout::CapacityDataLength,
+            4 => VecOrStringLayout::LengthDataCapacity,
+            5 => VecOrStringLayout::CapacityLengthData,
+            6 => VecOrStringLayout::LengthCapacityData,
+            _ => VecOrStringLayout::Unknown,
+        })
     }
 }
 impl ReprC for SchemaPrimitive {}
@@ -2746,7 +3022,13 @@ impl Deserialize for SchemaPrimitive {
             6 => SchemaPrimitive::schema_u32,
             7 => SchemaPrimitive::schema_i64,
             8 => SchemaPrimitive::schema_u64,
-            9 => SchemaPrimitive::schema_string,
+            9 => SchemaPrimitive::schema_string({
+                if deserializer.file_version > 0 {
+                    VecOrStringLayout::deserialize(deserializer)?
+                } else {
+                    VecOrStringLayout::Unknown
+                }
+            }),
             10 => SchemaPrimitive::schema_f32,
             11 => SchemaPrimitive::schema_f64,
             12 => SchemaPrimitive::schema_bool,
@@ -2803,22 +3085,27 @@ impl WithSchema for Schema {
 }
 impl Serialize for Schema {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        match *self {
-            Schema::Struct(ref schema_struct) => {
+        match self {
+            Schema::Struct(schema_struct) => {
                 serializer.write_u8(1)?;
                 schema_struct.serialize(serializer)
             }
-            Schema::Enum(ref schema_enum) => {
+            Schema::Enum(schema_enum) => {
                 serializer.write_u8(2)?;
                 schema_enum.serialize(serializer)
             }
-            Schema::Primitive(ref schema_prim) => {
+            Schema::Primitive(schema_prim) => {
                 serializer.write_u8(3)?;
-                schema_prim.serialize(serializer)
+                schema_prim.serialize(serializer)?;
+                Ok(())
             }
-            Schema::Vector(ref schema_vector) => {
+            Schema::Vector(schema_vector, is_standard_layout) => {
                 serializer.write_u8(4)?;
-                schema_vector.serialize(serializer)
+                schema_vector.serialize(serializer)?;
+                if serializer.file_version > 0 {
+                    serializer.write_u8(*is_standard_layout as u8)?;
+                }
+                Ok(())
             }
             Schema::Undefined => serializer.write_u8(5),
             Schema::ZeroSize => serializer.write_u8(6),
@@ -2826,13 +3113,17 @@ impl Serialize for Schema {
                 serializer.write_u8(7)?;
                 content.serialize(serializer)
             }
-            Schema::Array(ref array) => {
+            Schema::Array(array) => {
                 serializer.write_u8(8)?;
                 array.serialize(serializer)
             }
-            Schema::Custom(ref custom) => {
+            Schema::Custom(custom) => {
                 serializer.write_u8(9)?;
                 custom.serialize(serializer)
+            }
+            Schema::BoxedTrait(name) => {
+                serializer.write_u8(10)?;
+                name.serialize(serializer)
             }
         }
     }
@@ -2845,12 +3136,13 @@ impl Deserialize for Schema {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
-            4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?)),
+            4 => Schema::Vector(Box::new(Schema::deserialize(deserializer)?), if deserializer.file_version > 0 {VecOrStringLayout::deserialize(deserializer)?} else {VecOrStringLayout::Unknown}),
             5 => Schema::Undefined,
             6 => Schema::ZeroSize,
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
             9 => Schema::Custom(String::deserialize(deserializer)?),
+            10 => Schema::BoxedTrait(String::deserialize(deserializer)?),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),
@@ -2864,7 +3156,7 @@ impl Deserialize for Schema {
 
 impl WithSchema for String {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
     }
 }
 
@@ -3037,7 +3329,7 @@ impl<'a,T:Introspect> IntrospectItem<'a> for std::cell::Ref<'a,T> {
     }
     /// The introspectable value of the child.
     fn val(&self) -> &dyn Introspect {
-        &*self
+        self
     }
 }
 
@@ -3150,7 +3442,7 @@ impl<'a> IntrospectItem<'a> for IntrospectItemSimple<'a> {
 
 /// Create a default IntrospectItem with the given key and Introspect.
 pub fn introspect_item<'a>(key: String, val: &'a dyn Introspect) -> Box<dyn IntrospectItem<'a> + 'a> {
-    Box::new(IntrospectItemSimple { key: key, val: val })
+    Box::new(IntrospectItemSimple { key, val })
 }
 
 
@@ -3188,7 +3480,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
     default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         let bucket = index / 2;
         let off = index % 2;
-        if let Some((key, val)) = self.iter().skip(bucket).next() {
+        if let Some((key, val)) = self.iter().nth(bucket) {
             if off == 0 {
                 Some(introspect_item(format!("Key #{}", index), key))
             } else {
@@ -3213,7 +3505,7 @@ where
     }
 
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        if let Some((key, val)) = self.iter().skip(index).next() {
+        if let Some((key, val)) = self.iter().nth(index) {
             Some(introspect_item(key.to_string(), val))
         } else {
             None
@@ -3230,7 +3522,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Hash
     }
 
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
-        if let Some(key) = self.iter().skip(index).next() {
+        if let Some(key) = self.iter().nth(index) {
             Some(introspect_item(format!("#{}", index), key))
         } else {
             None
@@ -3251,7 +3543,7 @@ impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         let bucket = index / 2;
         let off = index % 2;
-        if let Some((key, val)) = self.iter().skip(bucket).next() {
+        if let Some((key, val)) = self.iter().nth(bucket) {
             if off == 0 {
                 Some(introspect_item(format!("Key #{}", index), key))
             } else {
@@ -3273,13 +3565,15 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
-        })))
+        })), VecOrStringLayout::Unknown)
     }
 }
 impl<K, V> ReprC for BTreeMap<K, V> {}
@@ -3326,7 +3620,7 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
 impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K,S> {}
 impl<K:WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K,S> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(K::schema(version)))
+        Schema::Vector(Box::new(K::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 impl<K:Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K,S> {
@@ -3357,13 +3651,15 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
-        })))
+        })), VecOrStringLayout::Unknown)
     }
 }
 impl<K:Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
@@ -3398,13 +3694,15 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "value".to_string(),
                     value: Box::new(V::schema(version)),
+                    offset: None,
                 },
             ],
-        })))
+        })), VecOrStringLayout::Unknown)
     }
 }
 
@@ -3548,8 +3846,9 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
             fields: vec![Field {
                 name: "key".to_string(),
                 value: Box::new(K::schema(version)),
+                offset: None,
             }],
-        })))
+        })), VecOrStringLayout::Unknown)
     }
 }
 
@@ -3576,6 +3875,36 @@ impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
     }
 }
 
+/// Something that can construct a value of type T
+pub trait ValueConstructor<T> {
+    /// Create a value of type T.
+    /// This is used by the AbiRemoved trait to be able to invent
+    /// values when writing removed fields from old protocols.
+    fn make_value() -> T;
+}
+
+impl<T:Default,R: Fn()->T + Default> ValueConstructor<T> for R {
+    fn make_value() -> T {
+        let r :R = Default::default();
+        r()
+    }
+}
+
+
+///
+#[derive(Debug, PartialEq,Eq)]
+pub struct DefaultValueConstructor<T:Default> {
+    phantom: PhantomData<*const T>
+}
+
+
+impl<T:Default> ValueConstructor<T> for DefaultValueConstructor<T> {
+    fn make_value() -> T {
+        <T as Default>::default()
+    }
+}
+
+
 /// Helper struct which represents a field which has been removed
 #[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash,Default)]
 pub struct Removed<T> {
@@ -3594,7 +3923,7 @@ unsafe impl<T> Sync for Removed<T> {
 }
 
 impl<T> Removed<T> {
-    /// Helper to create an instance of Removed<T>. Removed<T> has no data.
+    /// Helper to create an instance of `Removed<T>`. `Removed<T>` has no data.
     pub fn new() -> Removed<T> {
         Removed {
             phantom: std::marker::PhantomData,
@@ -3630,6 +3959,70 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         T::deserialize(deserializer)?;
         Ok(Removed {
+            phantom: std::marker::PhantomData,
+        })
+    }
+}
+
+
+/// Helper struct which represents a field which has been removed.
+/// This, in contrast to 'AbiRemoved',
+#[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash,Default)]
+pub struct AbiRemoved<T,D = DefaultValueConstructor<T>> where D: ValueConstructor<T> {
+    phantom: std::marker::PhantomData<(*const T, *const D)>,
+}
+
+/// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
+/// it doesn't implement Send or Sync per default. However, implementing these
+/// is actually safe, so implement it manually.
+unsafe impl<T,D: ValueConstructor<T>> Send for AbiRemoved<T,D> {
+}
+/// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
+/// it doesn't implement Send or Sync per default. However, implementing these
+/// is actually safe, so implement it manually.
+unsafe impl<T,D: ValueConstructor<T>> Sync for AbiRemoved<T,D> {
+}
+
+impl<T:Default,D:ValueConstructor<T>> AbiRemoved<T,D> {
+    /// Helper to create an instance of `Removed<T>`. `Removed<T>` has no data.
+    pub fn new() -> AbiRemoved<T,D> {
+        AbiRemoved {
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: WithSchema,D: ValueConstructor<T>> WithSchema for AbiRemoved<T,D> {
+    fn schema(version: u32) -> Schema {
+        <T>::schema(version)
+    }
+}
+
+impl<T: Introspect,D: ValueConstructor<T>> Introspect for AbiRemoved<T,D> {
+    fn introspect_value(&self) -> String {
+        format!("Removed<{}>", std::any::type_name::<T>())
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+impl<T,D: ValueConstructor<T>> ReprC for AbiRemoved<T,D> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
+        IsReprC::yes()
+    }
+}
+impl<T: WithSchema+Serialize+Default,D: ValueConstructor<T>> Serialize for AbiRemoved<T,D> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let dummy = D::make_value();
+        dummy.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl<T: WithSchema + Deserialize,D: ValueConstructor<T>> Deserialize for AbiRemoved<T,D> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        T::deserialize(deserializer)?;
+        Ok(AbiRemoved {
             phantom: std::marker::PhantomData,
         })
     }
@@ -3710,11 +4103,11 @@ impl<T> ReprC for Option<T> { } //Sadly, Option does not allow the #"reprC"-opti
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match self {
-            &Some(ref x) => {
+            Some(ref x) => {
                 serializer.write_bool(true)?;
                 x.serialize(serializer)
             }
-            &None => serializer.write_bool(false),
+            None => serializer.write_bool(false),
         }
     }
 }
@@ -3729,6 +4122,94 @@ impl<T: Deserialize> Deserialize for Option<T> {
     }
 }
 
+
+
+
+
+
+impl<T: Introspect,R: Introspect> Introspect for Result<T,R> {
+    fn introspect_value(&self) -> String {
+        match self {
+            Ok(cont) => format!("Ok({})", cont.introspect_value()),
+            Err(cont) => format!("Err({})", cont.introspect_value()),
+        }
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        match self {
+            Ok(cont) => cont.introspect_child(index),
+            Err(cont) => cont.introspect_child(index),
+        }
+    }
+    fn introspect_len(&self) -> usize {
+        match self {
+            Ok(cont) => cont.introspect_len(),
+            Err(cont) => cont.introspect_len(),
+        }
+    }
+}
+
+impl<T: WithSchema,R: WithSchema> WithSchema for Result<T,R> {
+    fn schema(version: u32) -> Schema {
+        Schema::Enum(
+            SchemaEnum{
+                dbg_name: "Result".to_string(),
+                variants: vec![
+                    Variant{
+                        name: "Ok".to_string(),
+                        discriminant: 0,
+                        fields: vec![
+                            Field{
+                                name: "ok".to_string(),
+                                value: Box::new(T::schema(version)),
+                                offset: None,
+                            }
+                        ],
+                    },
+                    Variant{
+                        name: "Err".to_string(),
+                        discriminant: 0,
+                        fields: vec![
+                            Field{
+                                name: "err".to_string(),
+                                value: Box::new(R::schema(version)),
+                                offset: None,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    }
+}
+impl<T,R> ReprC for Result<T,R> { } //Sadly, Result does not allow the #"reprC"-optimization
+impl<T: Serialize, R: Serialize> Serialize for Result<T,R> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        match self {
+            Ok(x) => {
+                serializer.write_bool(true)?;
+                x.serialize(serializer)
+            }
+            Err(x) => {
+                serializer.write_bool(false)?;
+                x.serialize(serializer)
+            },
+        }
+    }
+}
+impl<T: Deserialize,R: Deserialize> Deserialize for Result<T,R> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let issome = deserializer.read_bool()?;
+        if issome {
+            Ok(Ok(T::deserialize(deserializer)?))
+        } else {
+            Ok(Err(R::deserialize(deserializer)?))
+        }
+    }
+}
+
+
+
 #[cfg(feature="bit-vec")]
 #[cfg(target_endian="big")]
 compile_error!("savefile bit-vec feature does not support big-endian machines");
@@ -3742,14 +4223,17 @@ impl WithSchema for bit_vec::BitVec {
                 Field {
                     name: "num_bits".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
-                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)), VecOrStringLayout::Unknown)),
+                    offset: None,
                 },
             ],
         })
@@ -3784,7 +4268,7 @@ impl Serialize for bit_vec::BitVec<u32> {
         let rawbytes_ptr = storage.as_ptr() as *const u8;
         let rawbytes :&[u8] = unsafe{std::slice::from_raw_parts(rawbytes_ptr,4*storage.len())};
         serializer.write_usize(rawbytes.len()|(1<<63))?;
-        serializer.write_bytes(&rawbytes)?;
+        serializer.write_bytes(rawbytes)?;
         Ok(())
     }
 }
@@ -3832,14 +4316,17 @@ impl WithSchema for bit_set::BitSet {
                 Field {
                     name: "num_bits".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
                     value: Box::new(usize::schema(version)),
+                    offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
-                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)))),
+                    value: Box::new(Schema::Vector(Box::new(u8::schema(version)), VecOrStringLayout::Unknown)),
+                    offset: None,
                 },
             ],
         })
@@ -3895,7 +4382,7 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
         }
         return Some(introspect_item(
             index.to_string(),
-            self.iter().skip(index).next().unwrap(),
+            self.iter().nth(index).unwrap(),
         ));
     }
 
@@ -3907,7 +4394,7 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 impl<T> ReprC for BinaryHeap<T> {}
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
@@ -3959,7 +4446,7 @@ where
     T::Item: WithSchema,
 {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::Item::schema(version)))
+        Schema::Vector(Box::new(T::Item::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 #[cfg(feature="smallvec")]
@@ -4023,12 +4510,12 @@ fn regular_serialize_vec<T: Serialize>(items: &[T], serializer: &mut Serializer<
 
 impl<T: WithSchema> WithSchema for Box<[T]> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: WithSchema> WithSchema for Arc<[T]> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: Introspect> Introspect for Box<[T]> {
@@ -4065,7 +4552,7 @@ impl<T: Introspect> Introspect for Arc<[T]> {
 
 impl WithSchema for Arc<str> {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
 impl Introspect for Arc<str> {
@@ -4073,7 +4560,7 @@ impl Introspect for Arc<str> {
         self.deref().to_string()
     }
 
-    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
         None
     }
     fn introspect_len(&self) -> usize {
@@ -4082,7 +4569,7 @@ impl Introspect for Arc<str> {
 }
 impl Serialize for Arc<str> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_string(&*self)
+        serializer.write_string(self)
     }
 }
 
@@ -4106,8 +4593,8 @@ impl Deserialize for Arc<str> {
 impl<T: Serialize + ReprC> Serialize for Box<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
-            if T::repr_c_optimization_safe(serializer.version).is_false() {
-                regular_serialize_vec(&*self, serializer)
+            if T::repr_c_optimization_safe(serializer.file_version).is_false() {
+                regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
                 serializer.write_usize(l)?;
@@ -4125,8 +4612,8 @@ impl<T: ReprC> ReprC for Box<[T]> { }
 impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
-            if T::repr_c_optimization_safe(serializer.version).is_false() {
-                regular_serialize_vec(&*self, serializer)
+            if T::repr_c_optimization_safe(serializer.file_version).is_false() {
+                regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
                 serializer.write_usize(l)?;
@@ -4151,11 +4638,98 @@ impl<T: Deserialize+ReprC> Deserialize for Box<[T]> {
     }
 }
 
+impl<T:WithSchema> WithSchema for [T] {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::DataLength) //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
+    }
+}
+impl<T: Serialize + ReprC> Serialize for [T] {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        unsafe {
+            if T::repr_c_optimization_safe(serializer.file_version).is_false() {
+                regular_serialize_vec(self, serializer)
+            } else {
+                let l = self.len();
+                serializer.write_usize(l)?;
+                serializer.write_buf(std::slice::from_raw_parts(
+                    self.as_ptr() as *const u8,
+                    std::mem::size_of::<T>() * l,
+                ))
+            }
+        }
+    }
+}
+
+/// Deserialize a slice into a Vec
+/// Unsized slices cannot be deserialized into unsized slices.
+pub fn deserialize_slice_as_vec<R:Read, T:Deserialize+ReprC>(deserializer: &mut Deserializer<R>) -> Result<Vec<T>, SavefileError> {
+    Vec::deserialize(deserializer)
+}
+
 impl<T> ReprC for Vec<T> {}
 
+/// 0 = Uninitialized
+static STRING_IS_STANDARD_LAYOUT: AtomicU8 = AtomicU8::new(255);
+#[derive(Debug)]
+#[repr(C)]
+struct RawVecInspector {
+    p1: usize,
+    p2: usize,
+    p3: usize
+}
+
+impl RawVecInspector {
+    fn get_layout(&self, ptr: *const u8) -> VecOrStringLayout {
+        let ptr = ptr as usize;
+        // We know size is 1, and capacity is 2.
+        const LENGTH: usize = 0;
+        const CAPACITY : usize = 7;
+        match (self.p1,self.p2,self.p3) {
+            (LENGTH, CAPACITY,x) if x == ptr => VecOrStringLayout::LengthCapacityData,
+            (CAPACITY, LENGTH,x) if x == ptr => VecOrStringLayout::CapacityLengthData,
+            (LENGTH,x, CAPACITY) if x == ptr => VecOrStringLayout::LengthDataCapacity,
+            (CAPACITY,x, LENGTH) if x == ptr => VecOrStringLayout::CapacityDataLength,
+            (x,LENGTH, CAPACITY) if x == ptr => VecOrStringLayout::DataLengthCapacity,
+            (x,CAPACITY, LENGTH) if x == ptr => VecOrStringLayout::DataCapacityLength,
+            _ => VecOrStringLayout::Unknown
+        }
+    }
+}
+
+/// Calculate the memory layout of a Vec of the given type
+pub fn calculate_vec_memory_layout<T>() -> VecOrStringLayout {
+    if std::mem::size_of::<Vec<u8>>() != 24 || std::mem::size_of::<RawVecInspector>() != 24{
+        VecOrStringLayout::Unknown
+    } else {
+        let test_vec = Vec::with_capacity(7);
+        let insp:RawVecInspector = unsafe {std::mem::transmute_copy(&test_vec)};
+        let ptr = test_vec.as_ptr();
+        insp.get_layout(ptr)
+    }
+}
+fn calculate_string_memory_layout() -> VecOrStringLayout {
+    let mut is_std = STRING_IS_STANDARD_LAYOUT.load(Ordering::Relaxed);
+    if is_std != 255 {
+        return unsafe { std::mem::transmute(is_std) };
+    }
+    if std::mem::size_of::<String>() != 24 || std::mem::size_of::<RawVecInspector>() != 24 {
+        is_std = VecOrStringLayout::Unknown as u8;
+    } else {
+        let test_string = String::with_capacity(7);
+        let insp:RawVecInspector = unsafe {std::mem::transmute_copy(&test_string)};
+        let ptr = test_string.as_ptr();
+
+        is_std = insp.get_layout(ptr) as u8;
+
+        drop(test_string);
+    }
+
+    STRING_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
+    return unsafe { std::mem::transmute(is_std) };
+}
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), calculate_vec_memory_layout::<T>())
     }
 }
 
@@ -4178,7 +4752,7 @@ impl<T: Introspect> Introspect for Vec<T> {
 impl<T: Serialize + ReprC> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
-            if T::repr_c_optimization_safe(serializer.version).is_false() {
+            if T::repr_c_optimization_safe(serializer.file_version).is_false() {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
@@ -4235,7 +4809,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
                 if elem_size == 0 {
                     NonNull::dangling().as_ptr()
                 } else {
-                    let ptr = unsafe { std::alloc::alloc(layout.clone()) };
+                    let ptr = unsafe { std::alloc::alloc(layout) };
                     if ptr.is_null() {
                         panic!("Failed to allocate {} bytes of memory", num_bytes);
                     }
@@ -4245,7 +4819,7 @@ impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
 
             {
 
-                let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
+                let slice = unsafe { std::slice::from_raw_parts_mut(ptr, num_bytes) };
                 match deserializer.reader.read_exact(slice) {
                     Ok(()) => Ok(()),
                     Err(err) => {
@@ -4282,7 +4856,7 @@ impl<T: Introspect> Introspect for VecDeque<T> {
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)))
+        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 
@@ -4439,7 +5013,7 @@ impl<T: ReprC, const N: usize> ReprC for [T; N] {
 impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
-            if T::repr_c_optimization_safe(serializer.version).is_false() {
+            if T::repr_c_optimization_safe(serializer.file_version).is_false() {
                 for item in self.iter() {
                     item.serialize(serializer)?
                 }
@@ -4465,7 +5039,6 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
-            core::mem::forget(data);
             Ok(res)
         } else {
             let mut data: [MaybeUninit<T>; N] = unsafe {
@@ -4481,7 +5054,6 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
-            core::mem::forget(data);
             Ok(res)
         }
     }
@@ -4626,7 +5198,7 @@ impl<const C:usize> ReprC for arrayvec::ArrayString<C> {}
 #[cfg(feature="arrayvec")]
 impl<const C:usize> WithSchema for arrayvec::ArrayString<C> {
     fn schema(_version: u32) -> Schema {
-        Schema::Primitive(SchemaPrimitive::schema_string)
+        Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
 #[cfg(feature="arrayvec")]
@@ -4657,7 +5229,7 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
         self.to_string()
     }
 
-    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a>>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
         None
     }
 }
@@ -4665,7 +5237,7 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
 #[cfg(feature="arrayvec")]
 impl<V: WithSchema, const C: usize> WithSchema for arrayvec::ArrayVec<V,C> {
     fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(V::schema(version)))
+        Schema::Vector(Box::new(V::schema(version)), VecOrStringLayout::Unknown)
     }
 }
 
@@ -4701,7 +5273,7 @@ impl<V:ReprC, const C: usize> ReprC for arrayvec::ArrayVec<V,C> {
 impl<V: Serialize + ReprC, const C:usize> Serialize for arrayvec::ArrayVec<V,C> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
-            if V::repr_c_optimization_safe(serializer.version).is_false() {
+            if V::repr_c_optimization_safe(serializer.file_version).is_false() {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
@@ -4801,8 +5373,9 @@ use std::cell::RefCell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::path::{PathBuf, Path};
-use std::ptr::NonNull;
+use std::path::{Path, PathBuf};
+use std::ptr::{NonNull};
+use std::slice;
 use std::sync::Arc;
 
 
@@ -5863,12 +6436,10 @@ impl IntrospectionResult {
                 let is_selected = Some(idx) == cur_row.selected;
                 let pad = if is_selected {
                     "*"
+                } else if item.has_children {
+                    ">"
                 } else {
-                    if item.has_children {
-                        ">"
-                    } else {
-                        " "
-                    }
+                    " "
                 };
                 writeln!(f, "{:>indent$}{}", pad, item, indent = 1 + 2 * depth.len())?;
                 idx += 1;
@@ -5926,10 +6497,10 @@ impl Introspector {
         self.path.len()
     }
 
-    fn dive<'a>(
+    fn dive(
         &mut self,
         depth: usize,
-        object: &'a dyn Introspect,
+        object: &dyn Introspect,
         navigation_command: IntrospectorNavCommand,
     ) -> Result<Vec<IntrospectionFrame>, IntrospectionError> {
         let mut result_vec = Vec::new();
@@ -6051,9 +6622,9 @@ impl Introspector {
 
     /// Navigate the introspection tree using the given navigation_command, and also
     /// return the tree as an IntrospectionResult.
-    pub fn do_introspect<'a>(
+    pub fn do_introspect(
         &mut self,
-        object: &'a dyn Introspect,
+        object: &dyn Introspect,
         navigation_command: IntrospectorNavCommand,
     ) -> Result<IntrospectionResult, IntrospectionError> {
         match &navigation_command {
@@ -6074,7 +6645,7 @@ impl Introspector {
             total += frame.keyvals.len();
         }
         let accum = IntrospectionResult {
-            frames: frames,
+            frames,
             cached_total_len: total,
         };
         Ok(accum)

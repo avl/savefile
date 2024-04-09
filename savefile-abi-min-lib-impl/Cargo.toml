@@ -1,0 +1,13 @@
+[package]
+name = "savefile-abi-min-lib-impl"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+savefile = { path = "../savefile", features = ["derive"], default-features = false }
+savefile-abi = { path = "../savefile-abi" }
+savefile-derive = {path = "../savefile-derive"}
+savefile-abi-min-lib = {path = "../savefile-abi-min-lib"}

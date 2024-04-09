@@ -3,6 +3,14 @@ members = [
     "savefile",
     "savefile-derive",
     "savefile-test",
-    "savefile-min-build",
+    "savefile-min-build", 
+    "savefile-abi-min", 
+    "savefile-abi", 
+    "savefile-abi-min-lib", 
+    "savefile-abi-min-lib-impl",
 ]
 resolver = "2"
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

@@ -1,6 +1,6 @@
 [package]
 name = "savefile-derive"
-version = "0.16.5"
+version = "0.17.0-beta.1"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
@@ -22,7 +22,7 @@ proc-macro = true
 
 [dependencies]
 quote = "1.0"
-syn = "1.0"
+syn = { version = "1.0" , features = ["full","extra-traits"]}
 proc-macro2 = { version = "1.0", features = ["nightly"] }
 
 

@@ -17,7 +17,7 @@ struct Version2 {
 	c: usize
 }
 
-#[derive(Debug, PartialEq, Savefile)]
+#[derive(Debug, PartialEq, Savefile, Clone)]
 struct Version3 {
 	a: String,		
     #[savefile_versions = "0..0"]
@@ -28,8 +28,23 @@ struct Version3 {
     #[savefile_versions = "2.."]
 	d: usize
 }
+use quickcheck::{Arbitrary, Gen};
 
-
+impl Arbitrary for Version3 {
+    fn arbitrary(g: &mut Gen) -> Version3 {
+        Version3 {
+            a: String::arbitrary(g),
+            b: Removed::new(),
+            newb: 0,
+            c: usize::arbitrary(g),
+            d: usize::arbitrary(g),
+        }
+    }
+}
+#[quickcheck]
+fn test_quickcheck_version3(xs: Version3) -> bool {
+    xs == roundtrip_version(xs.clone(), 2)
+}
 
 #[test]
 fn simple_vertest1() {
@@ -193,18 +208,14 @@ fn test_versioning_of_enums4() {
 
 }
 
-#[derive(Debug, PartialEq, Savefile)]
+#[derive(Debug, PartialEq, Savefile, Default)]
 enum DefTraitEnum {
+    #[default]
 	VariantA,
 	VariantB,
 	VariantC,
 }
 
-impl Default for DefTraitEnum {
-	fn default() -> DefTraitEnum {
-		DefTraitEnum::VariantA
-	}
-}
 
 #[derive(Debug, PartialEq, Savefile)]
 struct DefTraitTest {
@@ -218,7 +229,7 @@ fn test_default_trait1() {
 	assert_roundtrip_version::<DefTraitTest>(
 		DefTraitTest {
 			removed_enum : DefTraitEnum::VariantA
-		},1);
+		}, 1, true);
 }
 
 
@@ -265,6 +276,8 @@ struct AnewType {
 }
 
 use std::convert::From;
+use ::{roundtrip, roundtrip_version};
+
 impl From<String> for AnewType {
     fn from(_dummy:String) -> AnewType {
         AnewType {

@@ -11,8 +11,8 @@ external_benchmarks = []
 nightly=["savefile/nightly"]
 
 [dependencies]
-savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.16.5" }
+savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive"]}
+savefile-derive = { path = "../savefile-derive", version = "=0.17.0-beta.1" }
 bit-vec = "0.6"
 arrayvec="0.7"
 smallvec="*"
@@ -25,9 +25,13 @@ serde_derive="*"
 bincode="1.2.1"
 bit-set="0.5"
 rustc-hash="1.1"
+savefile-abi = { path = "../savefile-abi" , features = [ "serde_derive" ] }
+quickcheck="1.0"
+quickcheck_macros ="1.0"
+insta = { version = "1.38.0", features = ["yaml"] }
 
 [build-dependencies]
-rustc_version="0.2"
+rustc_version="0.4"
 
 
 

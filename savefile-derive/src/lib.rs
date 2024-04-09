@@ -1,18 +1,33 @@
 #![recursion_limit = "128"]
 #![deny(warnings)]
+#![allow(clippy::needless_borrowed_reference)]
+#![allow(clippy::match_like_matches_macro)]
+#![allow(clippy::bool_assert_comparison)]
+#![allow(clippy::bool_comparison)]
+#![allow(clippy::match_ref_pats)] // This one I'd really like to clean up some day
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::let_and_return)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::single_match)]
+
 //! This crate allows automatic derivation of the Savefile-traits: Serialize, Deserialize, WithSchema, ReprC and Introspect .
-//! The documentatino for this is found in the Savefile crate documentation.
+//! The documentation for this is found in the Savefile crate documentation.
 
 extern crate proc_macro;
 extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
 extern crate syn;
-use proc_macro2::Span;
+
+use proc_macro2::{Literal, Span, TokenTree};
 use proc_macro2::TokenStream;
 use std::iter::IntoIterator;
-use syn::{DeriveInput, Expr, GenericParam, Generics, Ident, Lit, Type, WhereClause};
+use quote::ToTokens;
+use syn::{DeriveInput, Expr, FnArg, GenericArgument, GenericParam, Generics, Ident, Index, ItemTrait, Lit, ParenthesizedGenericArguments, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WhereClause};
 use syn::__private::bool;
+use syn::token::{Paren};
+use syn::Type::Tuple;
 
 #[derive(Debug)]
 struct VersionRange {
@@ -34,21 +49,38 @@ struct AttrsResult {
     introspect_ignore: bool,
 }
 
-fn check_is_remove(field_type: &syn::Type) -> bool {
-    use quote::ToTokens;
-    let mut is_remove = false;
+enum RemovedType {
+    NotRemoved,
+    Removed,
+    AbiRemoved
+}
+impl RemovedType {
+    fn is_removed(&self) -> bool {
+        match self {
+            RemovedType::NotRemoved => {false}
+            RemovedType::Removed => {true}
+            RemovedType::AbiRemoved => {true}
+        }
+    }
+}
+fn check_is_remove(field_type: &syn::Type) -> RemovedType {
+
     let mut tokens = TokenStream::new();
     field_type.to_tokens(&mut tokens);
     for tok in tokens.into_iter() {
         if tok.to_string() == "Removed" {
+            return RemovedType::Removed;
             //TODO: This is not robust, since it's based on text matching
-            is_remove = true;
+        }
+        if tok.to_string() == "AbiRemoved" {
+            return RemovedType::AbiRemoved;
+            //TODO: This is not robust, since it's based on text matching
         }
     }
-    is_remove
+    RemovedType::NotRemoved
 }
 
-fn parse_attr_tag(attrs: &Vec<syn::Attribute>) -> AttrsResult {
+fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
     parse_attr_tag2(attrs, false)
 }
 
@@ -62,10 +94,12 @@ fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
 }
 
 fn path_to_string(path: &syn::Path) -> String {
-    path.segments.last().unwrap().ident.to_string()
+    path.segments.last().expect("Expected at least one segment").ident.to_string()
 }
 
-fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) -> AttrsResult {
+
+
+fn parse_attr_tag2(attrs: &[syn::Attribute], _is_string_default_val: bool) -> AttrsResult {
     let mut field_from_version = None;
     let mut field_to_version = None;
     let mut default_fn = None;
@@ -78,7 +112,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
         match attr.parse_meta() {
             Ok(ref meta) => {
                 match meta {
-                    &syn::Meta::Path(ref x) => {
+                    syn::Meta::Path(x) => {
                         let x = path_to_string(x);
                         if x == "savefile_ignore" {
                             ignore = true;
@@ -97,7 +131,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
                         if path == "savefile_default_val" {
                             match &x.lit {
                                 &syn::Lit::Str(ref litstr) => {
-                                    default_val = Some(quote! { str::parse(#litstr).unwrap() })
+                                    default_val = Some(quote! { str::parse(#litstr).expect("Expected valid literal string") })
                                 },
                                 _ => {
                                     let lv = &x.lit;
@@ -129,7 +163,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
                             match &x.lit {
                                 &syn::Lit::Str(ref litstr2) => {
                                     let output2: Vec<String> =
-                                        litstr2.value().splitn(3, ":").map(|x| x.to_string()).collect();
+                                        litstr2.value().splitn(3, ':').map(|x| x.to_string()).collect();
                                     if output2.len() != 3 && output2.len() != 2 {
                                         panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
                                     }
@@ -213,7 +247,7 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
                                     } else {
                                         panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
                                     }
-                                    if field_to_version.unwrap() < field_from_version.unwrap() {
+                                    if field_to_version.expect("Expected field_to_version") < field_from_version.expect("expected field_from_version") {
                                         panic!("savefile_versions ranges must specify lower number first.");
                                     }
                                 }
@@ -247,9 +281,9 @@ fn parse_attr_tag2(attrs: &Vec<syn::Attribute>, _is_string_default_val: bool) ->
     AttrsResult {
         version_from: field_from_version.unwrap_or(0),
         version_to: field_to_version.unwrap_or(std::u32::MAX),
-        default_fn: default_fn,
-        default_val: default_val,
-        ignore: ignore,
+        default_fn,
+        default_val,
+        ignore,
         deserialize_types: deser_types,
         introspect_key,
         introspect_ignore,
@@ -261,6 +295,20 @@ struct FieldInfo<'a> {
     index: u32,
     ty: &'a syn::Type,
     attrs: &'a Vec<syn::Attribute>,
+}
+impl<'a> FieldInfo<'a> {
+    /// field name for named fields, .1 or .2 for tuple fields.
+    pub fn get_accessor(&self) -> TokenStream {
+        match &self.ident {
+            None => {
+                let index = syn::Index::from(self.index as usize);
+                index.to_token_stream()
+            }
+            Some(id) => {
+                id.to_token_stream()
+            }
+        }
+    }
 }
 fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*alignment*/)> {
     match typ {
@@ -353,12 +401,12 @@ fn compile_time_check_reprc(typ: &Type) -> bool {
             }
         }
         Type::Array(x) => {
-            compile_time_check_reprc(&*x.elem)
+            compile_time_check_reprc(&x.elem)
         }
         Type::Tuple(t) => {
             let mut size = None;
             for x in &t.elems {
-                if !compile_time_check_reprc(&x)
+                if !compile_time_check_reprc(x)
                 {
                     return false;
                 }
@@ -377,8 +425,8 @@ fn compile_time_check_reprc(typ: &Type) -> bool {
     }
 }
 
-fn implement_fields_serialize<'a>(
-    field_infos: Vec<FieldInfo<'a>>,
+fn implement_fields_serialize(
+    field_infos: Vec<FieldInfo>,
     implicit_self: bool,
     index: bool,
 ) -> (TokenStream, Vec<TokenStream>) {
@@ -420,14 +468,14 @@ fn implement_fields_serialize<'a>(
                 return output.push(quote!( #(#fallbacks)* ) );
             }
             let mut iter = deferred.into_iter();
-            let deferred_from = iter.next().unwrap();
+            let deferred_from = iter.next().expect("expected deferred_from");
             let deferred_to = iter.last().unwrap_or(deferred_from.clone());
 
             output.push(
                 quote!(
                     unsafe {
                         if #(#conditions)* {
-                         #local_serializer.raw_write_region(self,&#deferred_from,&#deferred_to, local_serializer.version)?;
+                         #local_serializer.raw_write_region(self,&#deferred_from,&#deferred_to, local_serializer.file_version)?;
                         } else {
                             #(#fallbacks)*
                         }
@@ -441,11 +489,11 @@ fn implement_fields_serialize<'a>(
             assert!(implicit_self);
             let id = syn::Index {
                 index: field.index,
-                span: span,
+                span,
             };
             quote! { self.#id}
         } else {
-            let id = field.ident.clone().unwrap();
+            let id = field.ident.clone().expect("Expected identifier[3]");
             if implicit_self {
                 quote! { self.#id}
             } else {
@@ -457,31 +505,31 @@ fn implement_fields_serialize<'a>(
 
 
 
-    for ref field in &field_infos {
+    for field in &field_infos {
         {
-            let verinfo = parse_attr_tag(&field.attrs);
+            let verinfo = parse_attr_tag(field.attrs);
 
             if verinfo.ignore {
                 continue;
             }
             let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
-            let removed = check_is_remove(&field.ty);
+            let removed = check_is_remove(field.ty);
 
-            let type_size_align = compile_time_size(&field.ty);
-            let compile_time_reprc = compile_time_check_reprc(&field.ty) && type_size_align.is_some();
+            let type_size_align = compile_time_size(field.ty);
+            let compile_time_reprc = compile_time_check_reprc(field.ty) && type_size_align.is_some();
 
             let obj_id = get_obj_id(field);
 
             if field_from_version == 0 && field_to_version == std::u32::MAX {
-                if removed {
+                if removed.is_removed() {
                     panic!(
                         "The Removed type can only be used for removed fields. Use the savefile_versions attribute."
                     );
                 }
 
                 if compile_time_reprc {
-                    let (_cursize, curalign) = type_size_align.unwrap();
+                    let (_cursize, curalign) = type_size_align.expect("type_size_align");
                     if let Some((deferred_align, deferred_items)) = &mut deferred_reprc {
                         if *deferred_align == curalign {
                             deferred_items.push(obj_id);
@@ -509,7 +557,7 @@ fn implement_fields_serialize<'a>(
                     min_safe_version = min_safe_version.max(field_from_version);
                 }
                 output.push(quote!(
-                if #local_serializer.version >= #field_from_version && #local_serializer.version <= #field_to_version {
+                if #local_serializer.file_version >= #field_from_version && #local_serializer.file_version <= #field_to_version {
                     <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
                 }));
             }
@@ -521,9 +569,9 @@ fn implement_fields_serialize<'a>(
 
     let total_reprc_opt: TokenStream;
     if field_infos.is_empty() == false {
-        let first_field = get_obj_id(field_infos.first().unwrap());
-        let last_field = get_obj_id(field_infos.last().unwrap());
-        total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(self,&#first_field, &#last_field, local_serializer.version)?; } );
+        let first_field = get_obj_id(field_infos.first().expect("field_infos.first"));
+        let last_field = get_obj_id(field_infos.last().expect("field_infos.last"));
+        total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(self,&#first_field, &#last_field, local_serializer.file_version)?; } );
     } else {
         total_reprc_opt = quote!( );
     }
@@ -531,12 +579,7 @@ fn implement_fields_serialize<'a>(
     let serialize2 = quote! {
         let local_serializer = serializer;
 
-        if #min_safe_version > local_serializer.version {
-                panic!("Version ranges on fields must not include memory schema version. Field version: {}, memory version: {}",
-                    #min_safe_version.saturating_sub(1), local_serializer.version);
-            }
-
-        if unsafe { <Self as #reprc>::repr_c_optimization_safe(local_serializer.version).is_yes() } {
+        if unsafe { <Self as #reprc>::repr_c_optimization_safe(local_serializer.file_version).is_yes() } {
             #total_reprc_opt
         } else {
             #(#output)*
@@ -609,8 +652,8 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                 panic!("This library is not capable of serializing enums with more than 255 variants. Our deepest apologies, we thought no-one would ever create such an enum!");
             }
 
-            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
-                let var_idx = var_idx as u8;
+            for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
+                let var_idx = var_idx_usize as u8;
                 let var_ident = (variant.ident).clone();
                 let variant_name = quote! { #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
@@ -621,7 +664,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().unwrap()),
+                                ident: Some(field.ident.clone().expect("Expected identifier[4]")),
                                 index: field_index as u32,
                                 ty: &field.ty,
                                 attrs: &field.attrs,
@@ -640,7 +683,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(idx, field)| FieldInfo {
-                                ident: Some(syn::Ident::new(
+                                ident: Some(syn::Ident::new( // We bind the tuple field to a real name, like x0, x1 etc.
                                     &("x".to_string() + &idx.to_string()),
                                     Span::call_site(),
                                 )),
@@ -650,7 +693,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             })
                             .collect();
 
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false);
+                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
 
                         output.push(
                             quote!( #variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
@@ -663,6 +706,8 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -689,7 +734,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Identifier[5]")),
                             ty: &field.ty,
                             index: field_index as u32,
                             attrs: &field.attrs,
@@ -724,6 +769,8 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -749,16 +796,17 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let removeddef = quote_spanned! { defspan => _savefile::prelude::Removed };
+    let abiremoveddef = quote_spanned! { defspan => _savefile::prelude::AbiRemoved };
     let local_deserializer = quote_spanned! { defspan => deserializer};
 
     let mut output = Vec::new();
     let mut min_safe_version = 0;
-    for ref field in &field_infos {
+    for field in &field_infos {
         let field_type = &field.ty;
 
         let is_removed = check_is_remove(field_type);
 
-        let verinfo = parse_attr_tag(&field.attrs);
+        let verinfo = parse_attr_tag(field.attrs);
         let (field_from_version, field_to_version, default_fn, default_val) = (
             verinfo.version_from,
             verinfo.version_to,
@@ -776,10 +824,15 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             }
         }
 
-        let effective_default_val = if is_removed {
-            quote! { #removeddef::new() }
+        let effective_default_val = if is_removed.is_removed() {
+            match is_removed {
+                RemovedType::Removed => quote! { #removeddef::new() },
+                RemovedType::AbiRemoved => quote! { #abiremoveddef::new() },
+                _ => unreachable!()
+            }
+
         } else if let Some(defval) = default_val {
-            quote! { #defval } //str::parse(#defval).unwrap() }
+            quote! { #defval }
         } else if let Some(default_fn) = default_fn {
             quote_spanned! { span => #default_fn() }
         } else if !exists_version_which_needs_default_value {
@@ -793,7 +846,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
         }
 
         let src = if field_from_version == 0 && field_to_version == std::u32::MAX && !verinfo.ignore {
-            if is_removed {
+            if is_removed.is_removed() {
                 panic!("The Removed type may only be used for fields which have an old version.");
                 //TODO: Better message, tell user how to do this annotation
             };
@@ -853,6 +906,798 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     output
 }
 
+fn emit_closure_helpers(
+    version: u32,
+    temp_trait_name: Ident, args: &ParenthesizedGenericArguments,
+    ismut: bool,
+    extra_definitions: &mut Vec<TokenStream>,
+    fnkind: Ident
+) {
+
+
+    let temp_trait_name_wrapper = Ident::new(
+        &format!("{}_wrapper", temp_trait_name), Span::call_site()
+    );
+
+    let mut formal_parameter_declarations = vec![];
+    let mut parameter_types = vec![];
+    let mut arg_names = vec![];
+
+    for (arg_index,arg) in args.inputs.iter().enumerate() {
+        let arg_name = Ident::new(&format!("x{}", arg_index), Span::call_site());
+        formal_parameter_declarations.push(quote!{#arg_name : #arg});
+        parameter_types.push(arg.to_token_stream());
+        arg_names.push(arg_name.to_token_stream());
+    }
+
+    let ret_type;
+    let ret_type_decl;
+
+    if let ReturnType::Type(_, rettype) = &args.output {
+        let typ = rettype.to_token_stream();
+        ret_type = quote!{#typ};
+        ret_type_decl = quote!{ -> #typ };
+    } else {
+        ret_type = quote!{ () };
+        ret_type_decl = quote!{};
+    }
+
+    let version = Literal::u32_unsuffixed(version);
+
+    let mutsymbol;
+    let mutorconst;
+    if ismut {
+        mutsymbol = quote!{mut};
+        mutorconst = quote!{mut};
+    } else {
+        mutsymbol = quote!{};
+        mutorconst = quote!{const};
+    }
+
+
+    let expanded = quote! {
+
+        #[savefile_abi_exportable(version=#version)]
+        pub trait #temp_trait_name {
+            fn docall(& #mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type;
+        }
+
+        struct #temp_trait_name_wrapper<'a> {
+            func: *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)
+        }
+        impl<'a> #temp_trait_name for #temp_trait_name_wrapper<'a> {
+            fn docall(&#mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type {
+                unsafe { (&#mutsymbol *self.func)( #(#arg_names,)* )}
+            }
+        }
+
+    };
+    extra_definitions.push(expanded);
+}
+
+#[proc_macro]
+pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = item.to_string();
+    let symbols: Vec<_> = input.split(',').map(|x|x.trim()).collect();
+    if symbols.len() != 2 {
+        panic!("savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
+    }
+    let defspan = Span::call_site();
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile_abi;
+        use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry};
+    };
+
+    let implementing_type = Ident::new(symbols[0], Span::call_site());
+    let trait_type = Ident::new(symbols[1], Span::call_site());
+    let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
+
+    let expanded = quote! {
+        #[allow(clippy::double_comparisons)]
+        const _:() = {
+            #uses
+            unsafe impl AbiExportableImplementation for #implementing_type {
+                const ABI_ENTRY: extern "C" fn (AbiProtocol) = #abi_entry;
+                type AbiInterface = dyn #trait_type;
+
+                fn new() -> Box<Self::AbiInterface> {
+                    Box::new(#implementing_type::default())
+                }
+            }
+            #[no_mangle]
+            pub extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
+                unsafe { abi_entry::<#implementing_type>(flag); }
+            }
+        };
+    };
+
+    expanded.into()
+}
+
+enum ArgType {
+    PlainData(TokenStream),
+    Reference(TokenStream),
+    SliceReference(TokenStream),
+    TraitReference(Ident, bool/*ismut*/),
+    BoxedTrait(Ident),
+    Fn(
+        Ident,/*Name of temporary trait generated to be able to handle Fn* as dyn TemporaryTrait. */
+        TokenStream,/*full closure definition (e.g "Fn(u32)->u16")*/
+        Vec<Type>,/*arg types*/
+        bool/*ismut*/
+    ),
+}
+
+struct MethodDefinitionComponents {
+    method_metadata: TokenStream,
+    callee_method_trampoline: TokenStream,
+    caller_method_trampoline: TokenStream,
+}
+
+fn generate_method_definitions(
+    version: u32,
+    trait_name: Ident,
+    method_number: u16,
+    method_name: Ident,
+    ret_declaration: TokenStream, //May be empty, for ()-returns
+    ret_type: TokenStream,
+    receiver_is_mut: bool,
+    args: Vec<(Ident, &Type)>,
+    name_generator: &mut impl FnMut() -> String,
+    extra_definitions: &mut Vec<TokenStream>
+) -> MethodDefinitionComponents {
+    let method_name_str = method_name.to_string();
+
+    let mut callee_trampoline_real_method_invocation_arguments:Vec<TokenStream> = vec![];
+    let mut callee_trampoline_variable_declaration = vec![];
+    let mut callee_trampoline_temp_variable_declaration = vec![];
+    let mut callee_trampoline_variable_deserializer = vec![];
+    let mut caller_arg_serializers = vec![];
+    let mut caller_fn_arg_list = vec![];
+    let mut metadata_arguments = vec![];
+
+
+    for (arg_index, (arg_name,typ)) in args.iter().enumerate() {
+
+        let argtype;
+
+        match typ {
+            Type::Tuple(tup) if tup.elems.is_empty() => {
+                argtype = ArgType::PlainData(typ.to_token_stream());
+            }
+            Type::Reference(typref) => {
+                if typref.lifetime.is_some() {
+                    panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
+                }
+                if let Type::TraitObject(trait_obj) = &*typref.elem {
+                    if trait_obj.dyn_token.is_some() {
+                        let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
+                            match x {
+                                TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().expect("Missing bounds of Box trait object"))}
+                                TypeParamBound::Lifetime(_) => {
+                                    panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
+                                }
+                            }
+                        }).collect();
+                        if type_bounds.len() == 0 {
+                            panic!("Method {}, argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
+                        }
+                        if type_bounds.len() > 1 {
+                            panic!("Method {}, argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
+                        }
+                        let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
+
+                        if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
+                            if bound.ident == "FnOnce" {
+                                panic!("Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?", method_name, arg_name);
+                            }
+                            let is_mutref = typref.mutability.is_some();
+                            if bound.ident == "FnMut" && !is_mutref {
+                                panic!("Method {}, argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
+                            }
+                            let fn_decl = bound.to_token_stream();
+                            match &bound.arguments {
+                                PathArguments::Parenthesized(pararg) => {
+                                    //pararg.inputs
+                                    let temp_name = Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
+                                    emit_closure_helpers(version, temp_name.clone(), pararg, typref.mutability.is_some(), extra_definitions, bound.ident.clone());
+                                    argtype = ArgType::Fn(temp_name, fn_decl, pararg.inputs.iter().map(|x|x.clone()).collect(), is_mutref);
+                                }
+                                _ => {
+                                    panic!("Fn/FnMut arguments must be enclosed in parenthesis")
+                                }
+                            }
+                        } else {
+                            argtype = ArgType::TraitReference(bound.ident.clone(), typref.mutability.is_some());
+                        }
+                    } else {
+                        panic!("Method {}, argument {}, reference to trait objects without 'dyn' are not supported.", method_name, arg_name);
+                    }
+                } else {
+                    if typref.mutability.is_some() {
+                        panic!("Method {}, argument {}, mutable references not supported", method_name, arg_name);
+                    }
+                    match &*typref.elem {
+                        Type::Path(_) => {
+                            argtype = ArgType::Reference(typref.elem.to_token_stream());
+                        }
+                        Type::Slice(slice) => {
+                            argtype = ArgType::SliceReference(slice.elem.to_token_stream());
+                        }
+                        _ => { panic!("Method {}, argument {}, unsupported reference type: {:?}", method_name, arg_name, typ); }
+                    }
+                }
+            }
+            Type::Path(path) => {
+                let first_seg = path.path.segments.iter().next().expect("Missing path segments");
+                if first_seg.ident == "Box" {
+                    match &first_seg.arguments {
+                        PathArguments::AngleBracketed(ang) => {
+                            let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
+                            match first_gen_arg {
+                                GenericArgument::Type(angargs) => {
+                                    match angargs {
+                                        Type::TraitObject(trait_obj) => {
+                                            let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
+                                                match x {
+                                                    TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().cloned().expect("Missing bounds of Box trait object").ident.clone())}
+                                                    TypeParamBound::Lifetime(_) => {None}
+                                                }
+                                            }).collect();
+                                            if type_bounds.len() == 0 {
+                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered zero traits in Box.", method_name, arg_name);
+                                            }
+                                            if type_bounds.len() > 1 {
+                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered multiple traits in Box: {:?}", method_name, arg_name, trait_obj);
+                                            }
+                                            if trait_obj.dyn_token.is_none() {
+                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
+                                            }
+                                            let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
+                                            argtype = ArgType::BoxedTrait(bound);
+                                        }
+                                        _ => panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
+                                    }
+                                }
+                                _ => panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
+                            }
+                        }
+                        _ => {
+                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name);
+                        }
+                    }
+
+                } else {
+                    argtype = ArgType::PlainData(path.to_token_stream());
+                }
+            }
+            _ => {
+                panic!("Method {}, argument {}, unsupported type: {:?}", method_name, arg_name, typ);
+            }
+        }
+
+        //let num_mask = 1u64 << (method_number as u64);
+        let temp_arg_name = Ident::new(&format!("temp_{}",arg_name), Span::call_site());
+        let temp_arg_name2 = Ident::new(&format!("temp2_{}",arg_name), Span::call_site());
+        match &argtype {
+            ArgType::PlainData(_) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
+            }
+            ArgType::Reference(_) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{&#arg_name});
+                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
+            }
+            ArgType::SliceReference(_) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{&#arg_name});
+                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
+            }
+            ArgType::BoxedTrait(_) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
+                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
+            }
+            ArgType::TraitReference(_,ismut) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
+                let mutsymbol = if *ismut {quote!(mut)} else {quote!{}};
+                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name;});
+            }
+            ArgType::Fn(_,_,_,ismut) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
+                let mutsymbol = if *ismut {quote!(mut)} else {quote!{}};
+                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name;});
+                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name2;});
+            }
+        }
+        callee_trampoline_variable_declaration.push(quote!{let #arg_name;});
+        match &argtype {
+            ArgType::Reference(arg_type) => {
+                callee_trampoline_variable_deserializer.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) != 0 {
+                                    #arg_name = unsafe { &*(deserializer.read_raw_ptr::<#arg_type>()?) };
+                                } else {
+                                    #temp_arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                                    #arg_name = &#temp_arg_name;
+                                }
+                            });
+                caller_arg_serializers.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) != 0 {
+                                    unsafe { serializer.write_raw_ptr(#arg_name as *const #arg_type).expect("Writing argument ref") };
+                                } else {
+                                    #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
+                                }
+                            });
+            }
+            ArgType::SliceReference(arg_type) => {
+                callee_trampoline_variable_deserializer.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) != 0 {
+                                    #arg_name = unsafe { &*(deserializer.read_raw_ptr::<[#arg_type]>()?) };
+                                } else {
+                                    #temp_arg_name = deserialize_slice_as_vec::<_,#arg_type>(&mut deserializer)?;
+                                    #arg_name = &#temp_arg_name;
+                                }
+                            });
+                caller_arg_serializers.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) != 0 {
+                                    unsafe { serializer.write_raw_ptr(#arg_name as *const [#arg_type]).expect("Writing argument ref") };
+                                } else {
+                                    #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
+                                }
+                            });
+            }
+            ArgType::PlainData(arg_type) => {
+                callee_trampoline_variable_deserializer.push(quote!{
+                                #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                            });
+                caller_arg_serializers.push(quote!{
+                                #arg_name.serialize(&mut serializer).expect("Serializing arg");
+                            });
+
+            }
+            ArgType::BoxedTrait(trait_type) => {
+                callee_trampoline_variable_deserializer.push(quote!{
+                                // SAFETY
+                                // Todo: Well, why exactly?
+                                #temp_arg_name = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
+                                #arg_name = Box::new(unsafe { AbiConnection::from_raw_packaged(#temp_arg_name, Owning::Owned)? } );
+                            });
+                caller_arg_serializers.push(quote!{
+                                PackagedTraitObject::new::<dyn #trait_type>(#arg_name).serialize(&mut serializer).expect("PackagedTraitObject");
+                            });
+            }
+            ArgType::TraitReference(trait_type, ismut) => {
+                let mutsymbol = if *ismut {quote!{mut}} else {quote!{}};
+                let newsymbol = if *ismut {quote!{new_from_ptr}} else {quote!{new_from_ptr}};
+                callee_trampoline_variable_deserializer.push(quote!{
+                                #temp_arg_name = unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
+                                #arg_name = & #mutsymbol #temp_arg_name;
+                            });
+                caller_arg_serializers.push(quote!{
+                                PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer).expect("PackagedTraitObject");
+                            });
+
+
+            }
+            ArgType::Fn(temp_trait_type, _,args, ismut) => {
+                let mutsymbol = if *ismut {quote!{mut}} else {quote!{}};
+                let mutorconst = if *ismut {quote!{mut}} else {quote!{const}};
+                let newsymbol = if *ismut {quote!{new_from_ptr}} else {quote!{new_from_ptr}};
+
+                let temp_trait_name_wrapper = Ident::new(
+                    &format!("{}_wrapper", temp_trait_type), Span::call_site()
+                );
+
+                let typedarglist:Vec<TokenStream> = args.iter().enumerate().map(|(idx,typ)|
+                    {
+                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
+                        quote!{#id : #typ}
+                    }
+                ).collect();
+
+                let arglist:Vec<Ident> = (0..args.len()).map(|idx|
+                    {
+                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
+                        id
+                    }
+                ).collect();
+                callee_trampoline_variable_deserializer.push(quote!{
+                        #temp_arg_name = unsafe { AbiConnection::<#temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
+                        #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
+                        #arg_name = & #mutsymbol #temp_arg_name2;
+                    });
+                caller_arg_serializers.push(quote!{
+
+                        let #mutsymbol temp = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
+                        let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol temp as *#mutorconst _;
+                        PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer).expect("PackagedTraitObject");
+                    });
+
+
+            }
+        }
+        match &argtype {
+            ArgType::Reference(arg_type) => {
+                caller_fn_arg_list.push(quote!{#arg_name : &#arg_type});
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: <#arg_type as WithSchema>::schema(version),
+                                    can_be_sent_as_ref: true
+                                }
+                            })
+            }
+            ArgType::SliceReference(arg_type) => {
+
+                caller_fn_arg_list.push(quote!{#arg_name : &[#arg_type]});
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: <[#arg_type] as WithSchema>::schema(version),
+                                    can_be_sent_as_ref: true
+                                }
+                            })
+            }
+            ArgType::PlainData(arg_type) => {
+                caller_fn_arg_list.push(quote!{#arg_name : #arg_type});
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: <#arg_type as WithSchema>::schema(version),
+                                    can_be_sent_as_ref: false
+                                }
+                            })
+            }
+            ArgType::BoxedTrait(trait_name) => {
+                caller_fn_arg_list.push(quote!{#arg_name : Box<dyn #trait_name>});
+                let trait_name_str = trait_name.to_string();
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: Schema::BoxedTrait(#trait_name_str.to_string()),
+                                    can_be_sent_as_ref: true
+                                }
+                            })
+            }
+            ArgType::TraitReference(trait_name, ismut) => {
+                if *ismut {
+                    caller_fn_arg_list.push(quote!{#arg_name : &mut dyn #trait_name });
+                } else {
+                    caller_fn_arg_list.push(quote!{#arg_name : &dyn #trait_name });
+                }
+                let trait_name_str = trait_name.to_string();
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: Schema::BoxedTrait(#trait_name_str.to_string()),
+                                    can_be_sent_as_ref: true,
+                                }
+                            })
+            }
+            ArgType::Fn(temp_trait_name, fndef,_,ismut) => {
+                if *ismut {
+                    caller_fn_arg_list.push(quote!{#arg_name : &mut dyn #fndef });
+                } else {
+                    caller_fn_arg_list.push(quote!{#arg_name : &dyn #fndef });
+                }
+                let temp_trait_name_str = temp_trait_name.to_string();
+                metadata_arguments.push(quote!{
+                                AbiMethodArgument {
+                                    schema: Schema::BoxedTrait(#temp_trait_name_str.to_string()),
+                                    can_be_sent_as_ref: true,
+                                }
+                            })
+            }
+        }
+    }
+
+    let callee_real_method_invocation_except_args;
+    if receiver_is_mut {
+        callee_real_method_invocation_except_args = quote!{ unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name };
+    } else {
+        callee_real_method_invocation_except_args = quote!{ unsafe { &*trait_object.as_const_ptr::<dyn #trait_name>() }.#method_name };
+    }
+
+    //let receiver_mut_str = receiver_mut.to_string();
+    let receiver_mut = if receiver_is_mut {quote!(mut)} else {quote!{}};
+    let caller_method_trampoline = quote!{
+        fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
+            let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
+
+            let Some(callee_method_number) = info.callee_method_number else {
+                panic!("Method '{}' does not exist in implementation.", info.method_name);
+            };
+
+            let mut result_buffer: MaybeUninit<Result<#ret_type,SavefileError>> = MaybeUninit::<Result<#ret_type,SavefileError>>::uninit();
+            let compatibility_mask = info.compatibility_mask;
+
+            let mut data = FlexBuffer::new();
+            let mut serializer = Serializer {
+                writer: &mut data,
+                file_version: self.template.effective_version,
+            };
+            serializer.write_u32(self.template.effective_version).unwrap();
+            #(#caller_arg_serializers)*
+
+            (self.template.entry)(AbiProtocol::RegularCall {
+                trait_object: self.trait_object,
+                compatibility_mask: compatibility_mask,
+                method_number: callee_method_number,
+                effective_version: self.template.effective_version,
+                data: data.as_ptr() as *const u8,
+                data_length: data.len(),
+                abi_result: &mut result_buffer as *mut MaybeUninit<Result<#ret_type,SavefileError>> as *mut (),
+                receiver: abi_result_receiver::<#ret_type>,
+            });
+            let resval = unsafe { result_buffer.assume_init() };
+
+            resval.expect("Unexpected panic in invocation target")
+        }
+    };
+
+    let method_metadata = quote!{
+        AbiMethod {
+            name: #method_name_str.to_string(),
+            info: AbiMethodInfo {
+                return_value: <#ret_type as WithSchema>::schema(version),
+                arguments: vec![ #(#metadata_arguments,)* ],
+            }
+        }
+    };
+
+    let callee_method_trampoline = quote!{
+                    #method_number => {
+                        #(#callee_trampoline_variable_declaration)*
+                        #(#callee_trampoline_temp_variable_declaration)*
+
+                        #(#callee_trampoline_variable_deserializer)*
+
+                        let ret = #callee_real_method_invocation_except_args( #(#callee_trampoline_real_method_invocation_arguments,)* );
+
+                        let mut slow_temp = FlexBuffer::new();
+                        let mut serializer = Serializer {
+                            writer: &mut slow_temp,
+                            file_version: #version,
+                        };
+                        serializer.write_u32(effective_version)?;
+                        match ret.serialize(&mut serializer)
+                        {
+                            Ok(()) => {
+                                let outcome = RawAbiCallResult::Success {data: slow_temp.as_ptr(), len: slow_temp.len()};
+                                receiver(&outcome as *const _, abi_result);
+                            }
+                            Err(err) => {
+                                let err_str = format!("{:?}", err);
+                                let outcome = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: err_str.as_ptr(), len: err_str.len()});
+                                receiver(&outcome as *const _, abi_result)
+                            }
+                        }
+
+                    }
+
+                };
+    MethodDefinitionComponents {
+        method_metadata,
+        callee_method_trampoline,
+        caller_method_trampoline,
+    }
+}
+
+#[proc_macro_attribute]
+pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let parsed: ItemTrait = syn::parse(input.clone()).expect("Expected valid rust-code");
+
+    let mut version = None;
+    for item in attr.to_string().split(',') {
+        let keyvals : Vec<_> = item.split('=').collect();
+        if keyvals.len() != 2 {
+            panic!("savefile_abi_exportable arguments should be of form #[savefile_abi_exportable(version=0)], not '{}'", attr);
+        }
+        let key = keyvals[0].trim();
+        let val = keyvals[1].trim();
+        match key {
+            "version" => {
+                if version.is_some() {
+                    panic!("version specified more than once");
+                }
+                version = Some(val.parse().expect(&format!("Version must be numeric, but was: {}", val)));
+            }
+            _ => panic!("Unknown savefile_abi_exportable key: '{}'", key)
+        }
+    }
+    let version:u32 = version.unwrap_or(0);
+
+
+
+    let trait_name_str = parsed.ident.to_string();
+    let trait_name = parsed.ident;
+    let defspan = proc_macro2::Span::mixed_site();
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile;
+        extern crate savefile_abi;
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec};
+        use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, AbiTraitDefinition, PackagedTraitObject, Owning, AbiMethodArgument, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
+        use savefile::LittleEndian;
+        use std::collections::HashMap;
+        use byteorder::ReadBytesExt;
+        use std::mem::MaybeUninit;
+        use std::io::Cursor;
+    };
+
+
+
+    let mut method_metadata:Vec<TokenStream> = vec![];
+    let mut callee_method_trampoline:Vec<TokenStream> = vec![];
+    let mut caller_method_trampoline = vec![];
+    let mut extra_definitions = vec![];
+
+
+    for (method_number,item) in parsed.items.iter().enumerate() {
+
+        if method_number > u16::MAX.into() {
+            panic!("Savefile only supports 2^16 methods per interface. Sorry.");
+        }
+        let method_number = method_number as u16;
+
+
+        match item {
+            TraitItem::Const(c) => {
+                panic!("savefile_abi_exportable does not support associated consts: {}",c.ident);
+            }
+            TraitItem::Method(method) => {
+                let method_name = method.sig.ident.clone();
+                //let method_name_str = method.sig.ident.to_string();
+                //let mut metadata_arguments = vec![];
+
+                let mut receiver_is_mut = false;
+                let ret_type;
+                let ret_declaration;
+                match &method.sig.output {
+                    ReturnType::Default => {
+                        ret_type = Tuple(TypeTuple{
+                            paren_token: Paren::default(),
+                            elems: Default::default(),
+                        }).to_token_stream();
+                        ret_declaration = quote!{}
+                    }
+                    ReturnType::Type(_, ty) => {
+                        match &**ty {
+                            Type::Path(_type_path) => {
+                                ret_type = ty.to_token_stream();
+                                ret_declaration = quote! { -> #ret_type }
+                            }
+                            Type::Reference(_) => {
+                                panic!("References in return-position are not supported.")
+                            }
+                            Type::Tuple(TypeTuple{elems, ..}) if elems.is_empty()=> {
+                                // Empty tuple!
+                                ret_type = ty.to_token_stream();
+                                ret_declaration = quote! { -> #ret_type }
+                            }
+                            _ => panic!("Unsupported type in return-position: {:?}", ty)
+                        }
+                    }
+                }
+
+
+
+                let self_arg = method.sig.inputs.iter().next().expect(&format!("Method {} has no arguments. This is not supported - it must at least have a self-argument.", method_name));
+                if let FnArg::Receiver(recv) = self_arg {
+                    if let Some(reference) = &recv.reference {
+                        if reference.1.is_some() {
+                            panic!("Method {} has a lifetime for 'self' argument. This is not supported", method_name);
+                        }
+                        if recv.mutability.is_some() {
+                            receiver_is_mut = true;
+                        }
+                    } else {
+                        panic!("Method {} takes 'self' by value. This is not supported. Use &self", method_name);
+                    }
+                } else {
+                    panic!("Method {} must have 'self'-parameter", method_name);
+                }
+                let mut args = Vec::with_capacity(method.sig.inputs.len());
+                for (arg_index,arg) in method.sig.inputs.iter().enumerate().skip(1) {
+                    match arg {
+                        FnArg::Typed(typ) => {
+                            match &*typ.pat {
+                                Pat::Ident(name) => {
+                                    args.push((name.ident.clone(), &*typ.ty));
+                                }
+                                _ => panic!("Method {} had a parameter (#{}, where self is #0) which contained a complex pattern. This is not supported.", method_name, arg_index)
+                            }
+                        },
+                        _ => panic!("Unexpected error: method {} had a self parameter that wasn't the first parameter!", method_name)
+                    }
+                }
+                let mut current_name_index = 0u32;
+                let name_baseplate = format!("Temp{}_{}", trait_name_str, method_name);
+                let mut temp_name_generator = move||{
+                    current_name_index += 1;
+                    format!("{}_{}",name_baseplate, current_name_index)
+                };
+
+                let method_defs = generate_method_definitions(version, trait_name.clone(), method_number, method_name, ret_declaration, ret_type, receiver_is_mut, args, &mut temp_name_generator, &mut extra_definitions);
+                method_metadata.push(method_defs.method_metadata);
+                callee_method_trampoline.push(method_defs.callee_method_trampoline);
+                caller_method_trampoline.push(method_defs.caller_method_trampoline);
+
+
+            }
+            TraitItem::Type(t) => {
+                panic!("savefile_abi_exportable does not support associated types: {}",t.ident);
+            }
+            TraitItem::Macro(m) => {
+                panic!("savefile_abi_exportable does not support macro items: {:?}", m);
+            }
+            x => panic!("Unsupported item in trait definition: {:?}", x)
+        }
+
+    }
+
+
+    let abi_entry_light = Ident::new(&format!("abi_entry_light_{}",trait_name_str), Span::call_site());
+
+    let exports_for_trait = quote!{
+
+        #[no_mangle]
+        pub extern "C" fn #abi_entry_light(flag: AbiProtocol) {
+            unsafe { abi_entry_light::<dyn #trait_name>(flag); }
+        }
+
+        unsafe impl AbiExportable for dyn #trait_name {
+            const ABI_ENTRY : extern "C" fn (flag: AbiProtocol)  = #abi_entry_light;
+            fn get_definition( version: u32) -> AbiTraitDefinition {
+                AbiTraitDefinition {
+                    name: #trait_name_str.to_string(),
+                    methods: vec! [ #(#method_metadata,)* ]
+                }
+            }
+
+            fn get_latest_version() -> u32 {
+                #version
+            }
+
+            fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+
+                let mut cursor = Cursor::new(data);
+
+                let mut deserializer = Deserializer {
+                    file_version: cursor.read_u32::<LittleEndian>()?,
+                    reader: &mut cursor,
+                    ephemeral_state: HashMap::new(),
+                };
+
+                match method_number {
+                    #(#callee_method_trampoline,)*
+                    _ => {
+                        return Err(SavefileError::general("Unknown method number"));
+                    }
+                }
+                Ok(())
+            }
+        }
+
+        impl #trait_name for AbiConnection<dyn #trait_name> {
+            #(#caller_method_trampoline)*
+        }
+    };
+
+    //let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+    let input = TokenStream::from(input);
+    let expanded = quote! {
+        #[allow(clippy::double_comparisons)]
+        #[allow(clippy::needless_late_init)]
+        const _:() = {
+            #uses
+
+            #(#extra_definitions)*
+
+            #exports_for_trait
+
+        };
+
+        #input
+    };
+
+    // For debugging, uncomment to write expanded procmacro to file
+    // std::fs::write(format!("/home/anders/savefile/savefile-abi-min-lib/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
+
+    expanded.into()
+}
+
 #[proc_macro_derive(
     Savefile,
     attributes(
@@ -867,7 +1712,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     )
 )]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [Savefile]");
 
     let s = savefile_derive_crate_serialize(input.clone());
 
@@ -906,7 +1751,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     )
 )]
 pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileNoIntrospect]");
 
     let s = savefile_derive_crate_serialize(input.clone());
 
@@ -941,7 +1786,7 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
     )
 )]
 pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse(input).unwrap();
+    let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileIntrospectOnly]");
 
     let i = savefile_derive_crate_introspect(input);
 
@@ -988,8 +1833,8 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 panic!("This library is not capable of deserializing enums with more than 255 variants. Our deepest apologies, we thought no-one would ever use more than 255 variants!");
             }
 
-            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
-                let var_idx = var_idx as u8;
+            for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
+                let var_idx = var_idx_usize as u8;
                 let var_ident = variant.ident.clone();
                 let variant_name = quote! { #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
@@ -1000,7 +1845,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .iter()
                             .enumerate()
                             .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().unwrap()),
+                                ident: Some(field.ident.clone().expect("Expected identifier [6]")),
                                 ty: &field.ty,
                                 index: field_index as u32,
                                 attrs: &field.attrs,
@@ -1035,6 +1880,8 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
                     impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
@@ -1058,7 +1905,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[7]")),
                             index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
@@ -1094,6 +1941,8 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
             };
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                         #uses
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
@@ -1172,8 +2021,9 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     for field in field_infos.windows(2) {
-        let field_name1 = field[0].ident.as_ref().expect("Field was expected to have a name");
-        let field_name2 = field[1].ident.as_ref().expect("Field was expected to have a name");
+        let field_name1 = field[0].get_accessor();
+        let field_name2 = field[1].get_accessor();
+
         optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
 
     }
@@ -1183,16 +2033,16 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
             optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
 
         } else {
-            let first = field_infos.first().unwrap().ident.as_ref().unwrap();
-            let last = field_infos.last().unwrap().ident.as_ref().unwrap();
+            let first = field_infos.first().expect("field_infos.first()[2]").get_accessor();
+            let last = field_infos.last().expect("field_infos.last()[2]").get_accessor();
             optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #first).start == 0 )));
             optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
         }
 
     }
 
-    for ref field in &field_infos {
-        let verinfo = parse_attr_tag(&field.attrs);
+    for field in &field_infos {
+        let verinfo = parse_attr_tag(field.attrs);
         if verinfo.ignore {
             if expect_fast{
                 panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for structures containing ignored fields");
@@ -1202,10 +2052,10 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
-        let removed = check_is_remove(&field.ty);
+        let removed = check_is_remove(field.ty);
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
-            if removed {
+            if removed.is_removed() {
                 if expect_fast {
                     panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
                 } else {
@@ -1221,7 +2071,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
 
             min_safe_version = min_safe_version.max(field_from_version);
 
-            if !removed {
+            if !removed.is_removed() {
                 optsafe_outputs.push(
                     quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()),
                 );
@@ -1233,6 +2083,7 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     quote! {
 
         #[allow(non_upper_case_globals)]
+        #[allow(clippy::manual_range_contains)]
         const #dummy_const: () = {
             extern crate std;
             #uses
@@ -1251,9 +2102,10 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     }
 }
 
-fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
+fn get_enum_size(attrs: &[syn::Attribute]) -> Option<(u32, bool/* have seen 'C' as in repr(u8,C) */)> {
 
     let mut size_u32: Option<u32> = None;
+    let mut repr_c_seen = false;
     for attr in attrs.iter() {
         if let Ok(ref meta) = attr.parse_meta() {
             match meta {
@@ -1268,7 +2120,7 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
                                     &syn::Meta::NameValue(ref _x) => {
                                         continue;
                                     }
-                                    &syn::Meta::Path(ref path) => path_to_string(&path),
+                                    &syn::Meta::Path(ref path) => path_to_string(path),
                                     &syn::Meta::List(ref _metalist) => {
                                         continue;
                                     }
@@ -1281,15 +2133,16 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
                                     }
                                 },
                             };
-                            size_u32 = match size_str.as_ref() {
-                                "u8" => Some(1),
-                                "i8" => Some(1),
-                                "u16" => Some(2),
-                                "i16" => Some(2),
-                                "u32" => Some(4),
-                                "i32" => Some(4),
-                                "u64" => Some(8),
-                                "i64" => Some(8),
+                            match size_str.as_ref() {
+                                "C" => repr_c_seen = true,
+                                "u8" =>  size_u32 = Some(1),
+                                "i8" =>  size_u32 = Some(1),
+                                "u16" => size_u32 = Some(2),
+                                "i16" => size_u32 = Some(2),
+                                "u32" => size_u32 = Some(4),
+                                "i32" => size_u32 = Some(4),
+                                "u64" => size_u32 = Some(8),
+                                "i64" => size_u32 = Some(8),
                                 _ => panic!("Unsupported repr(X) attribute on enum: {}", size_str),
                             }
                         }
@@ -1298,7 +2151,7 @@ fn get_enum_size(attrs: &Vec<syn::Attribute>) -> Option<u32> {
             }
         }
     }
-    size_u32
+    size_u32.map(|x|(x,repr_c_seen))
 }
 #[proc_macro_derive(
     ReprC,
@@ -1350,18 +2203,23 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 return implement_reprc_hardcoded_false(name, input.generics);
             }
             let enum_size = get_enum_size(&input.attrs);
-            if let Some(enum_size) = enum_size {
+            if let Some((enum_size,_c)) = enum_size {
                 if enum_size != 1 {
                     if opt_in_fast {
                         panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
                     }
                     return implement_reprc_hardcoded_false(name, input.generics);
                 }
+            } else {
+                if opt_in_fast {
+                    panic!("The #[savefile_unsafe_and_fast] requires an explicit #[repr(C,u8)] attribute.");
+                }
+                return implement_reprc_hardcoded_false(name, input.generics);
             }
 
-            let field_infos = Vec::<FieldInfo>::new();
-            for ref variant in enum1.variants.iter() {
+            for variant in enum1.variants.iter() {
                 match &variant.fields {
+                    //TODO: #[repr(u8,C)] enums could implement ReprC
                     &syn::Fields::Named(ref _fields_named) => {
                         if opt_in_fast {
                             panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
@@ -1376,16 +2234,10 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
                     }
                     &syn::Fields::Unit => {
-                        if enum_size.is_none() {
-                            if opt_in_fast {
-                                panic!("Enums which use the #[savefile_unsafe_and_fast] attribute must specify the enum size using the repr-attribute, like #[repr(u8)].");
-                            }
-                            return implement_reprc_hardcoded_false(name, input.generics);
-                        }
                     }
                 }
             }
-            implement_reprc(field_infos, input.generics, name,opt_in_fast)
+            implement_reprc(vec![], input.generics, name, opt_in_fast)
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
@@ -1394,7 +2246,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .iter()
                     .enumerate()
                     .map(|(field_index,field)| FieldInfo {
-                        ident: Some(field.ident.clone().unwrap()),
+                        ident: Some(field.ident.clone().expect("Expected identifier [8]")),
                         index: field_index as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
@@ -1410,24 +2262,16 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .iter()
                     .enumerate()
                     .map(|(idx, field)| FieldInfo {
-                        ident: Some(syn::Ident::new(
-                            &("x".to_string() + &idx.to_string()),
-                            Span::call_site(),
-                        )),
+                        ident: None,
                         index: idx as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
                     })
                     .collect();
 
-                if field_infos.len() == 1 {
-                    implement_reprc(field_infos, input.generics, name,opt_in_fast)
-                } else {
-                    if opt_in_fast {
-                        panic!("Enums with unnamed fields don't support #[savefile_unsafe_and_fast] attribute.");
-                    }
-                    return implement_reprc_hardcoded_false(name, input.generics);
-                }
+
+                implement_reprc(field_infos, input.generics, name, opt_in_fast)
+
             }
             &syn::Fields::Unit =>
                 implement_reprc(Vec::new(), input.generics, name,opt_in_fast),
@@ -1440,7 +2284,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
         }
     };
 
-    expanded.into()
+    expanded
 }
 
 #[allow(non_snake_case)]
@@ -1455,7 +2299,7 @@ fn implement_introspect(
     //let Introspect = quote_spanned! { defspan => _savefile::prelude::Introspect };
     //let fields1=quote_spanned! { defspan => fields1 };
     let index1 = quote_spanned! { defspan => index };
-    let introspect_item = quote_spanned! {defspan=>
+    let introspect_item = quote_spanned! { defspan=>
         _savefile::prelude::introspect_item
     };
 
@@ -1463,12 +2307,10 @@ fn implement_introspect(
     let mut fields_names = Vec::new();
     let mut introspect_key = None;
     let mut index_number = 0usize;
-    for (idx, ref field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(&field.attrs);
-        if verinfo.introspect_key {
-            if introspect_key.is_some() {
-                panic!("Type had more than one field with savefile_introspect_key - attribute");
-            }
+    for (idx, field) in field_infos.iter().enumerate() {
+        let verinfo = parse_attr_tag(field.attrs);
+        if verinfo.introspect_key && introspect_key.is_some() {
+            panic!("Type had more than one field with savefile_introspect_key - attribute");
         }
         if verinfo.introspect_ignore {
             continue;
@@ -1477,47 +2319,42 @@ fn implement_introspect(
             let fieldname;
             let fieldname_raw;
 
-            if let Some(id) = field.ident.clone() {
-                fieldname = quote! {&self.#id};
-                fieldname_raw = quote! {#id};
-            } else {
-                let idd = syn::Index::from(idx);
-                fieldname = quote! {&self.#idd};
-                fieldname_raw = quote! {#idd};
-            }
+            let id = field.get_accessor();
+            fieldname = quote! {&self.#id};
+            fieldname_raw = quote! {#id};
+
             fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(stringify!(#fieldname_raw).to_string(), #fieldname))}));
             if verinfo.introspect_key {
                 let fieldname_raw2 = fieldname_raw.clone();
                 introspect_key = Some(quote! {self.#fieldname_raw2});
             }
             fields_names.push(fieldname_raw);
+        } else if let Some(id) = field.ident.clone() {
+            let fieldname;
+            let quoted_fieldname;
+            let raw_fieldname = id.to_string();
+            let id2 = id.clone();
+            fieldname = id;
+            quoted_fieldname = quote! { #fieldname };
+            fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+            fields_names.push(quoted_fieldname);
+            if verinfo.introspect_key {
+                introspect_key = Some(quote!(#id2))
+            }
         } else {
-            if let Some(id) = field.ident.clone() {
-                let fieldname;
-                let quoted_fieldname;
-                let raw_fieldname = id.to_string();
-                let id2 = id.clone();
-                fieldname = id;
-                quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
-                fields_names.push(quoted_fieldname);
-                if verinfo.introspect_key {
-                    introspect_key = Some(quote!(#id2))
-                }
-            } else {
-                let fieldname;
-                let quoted_fieldname;
-                let raw_fieldname = idx.to_string();
-                fieldname = Ident::new(&format!("v{}", idx), span);
-                let fieldname2 = fieldname.clone();
-                quoted_fieldname = quote! { #fieldname };
-                fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
-                fields_names.push(quoted_fieldname);
-                if verinfo.introspect_key {
-                    introspect_key = Some(quote!(#fieldname2))
-                }
+            let fieldname;
+            let quoted_fieldname;
+            let raw_fieldname = idx.to_string();
+            fieldname = Ident::new(&format!("v{}", idx), span);
+            let fieldname2 = fieldname.clone();
+            quoted_fieldname = quote! { #fieldname };
+            fields.push(quote_spanned!( span => if #index1 == #index_number { return Some(#introspect_item(#raw_fieldname.to_string(), #quoted_fieldname))}));
+            fields_names.push(quoted_fieldname);
+            if verinfo.introspect_key {
+                introspect_key = Some(quote!(#fieldname2))
             }
         }
+
         index_number += 1;
     }
 
@@ -1558,7 +2395,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             let mut variants = Vec::new();
             let mut value_variants = Vec::new();
             let mut len_variants = Vec::new();
-            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
+            for (var_idx, variant) in enum1.variants.iter().enumerate() {
                 if var_idx > 255 {
                     panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
                 }
@@ -1569,13 +2406,13 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 
                 let mut field_infos = Vec::new();
 
-                let return_value_name_str = format!("{}::{}", name, var_ident.to_string());
+                let return_value_name_str = format!("{}::{}", name, var_ident);
                 let return_value_name = quote!(#return_value_name_str);
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
                         for (idx, f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
-                                ident: Some(f.ident.clone().unwrap()),
+                                ident: Some(f.ident.clone().expect("Expected identifier[9]")),
                                 index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
@@ -1647,6 +2484,8 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -1688,7 +2527,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(idx,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[10]")),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
@@ -1727,6 +2566,8 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -1758,7 +2599,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
 }
 
 #[allow(non_snake_case)]
-fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
+fn implement_withschema(structname: &str, field_infos: Vec<FieldInfo>, is_enum: FieldOffsetStrategy, ty_generics: &TypeGenerics) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
@@ -1766,26 +2607,49 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema };
     let fields1 = quote_spanned! { defspan => fields1 };
 
+    let structname = Ident::new(structname, defspan);
+    let offset_of = quote_spanned! {defspan=>
+        _savefile::prelude::offset_of
+    };
+
     let mut fields = Vec::new();
-    for (idx, ref field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(&field.attrs);
+    for (idx, field) in field_infos.iter().enumerate() {
+        let verinfo = parse_attr_tag(field.attrs);
         if verinfo.ignore {
             continue;
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
-        let name = if let Some(name) = field.ident.clone() {
-            (&name).to_string()
+        let offset;
+        match is_enum {
+            FieldOffsetStrategy::EnumWithKnownOffsets(variant_index) => {
+                offset = quote! { Some(get_variant_offsets(#variant_index)[#idx]) };
+            }
+            FieldOffsetStrategy::EnumWithUnknownOffsets => {
+                offset = quote! { None };
+            }
+            FieldOffsetStrategy::Struct => {
+                if let Some(name) = field.ident.clone() {
+                    offset = quote! { Some(#offset_of!(#structname #ty_generics, #name)) };
+                } else {
+                    let idx = Index::from(idx);
+                    offset = quote! { Some(#offset_of!(#structname #ty_generics, #idx)) }
+                };
+            }
+        }
+
+        let name_str = if let Some(name) = field.ident.clone() {
+            name.to_string()
         } else {
             idx.to_string()
         };
-        let removed = check_is_remove(&field.ty);
+        let removed = check_is_remove(field.ty);
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == std::u32::MAX {
-            if removed {
+            if removed.is_removed() {
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
             }
-            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))})));
+            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset })));
         } else {
             let mut version_mappings = Vec::new();
             for dt in verinfo.deserialize_types.iter() {
@@ -1794,7 +2658,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))});
+                        #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version)), offset: #offset });
                     }
                 });
             }
@@ -1803,7 +2667,7 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(#Field { name:#name.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version))});
+                    #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset });
                 }
                 ));
         }
@@ -1811,8 +2675,39 @@ fn implement_withschema(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     fields
 }
 
+
+enum FieldOffsetStrategy {
+    Struct,
+    EnumWithKnownOffsets(usize/*variant index*/),
+    EnumWithUnknownOffsets
+}
+
 #[allow(non_snake_case)]
 fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
+    //println!("Input: {:#?}", &input);
+
+
+    let mut have_c = false;
+    let mut have_u8 = false;
+    for attr in input.attrs.iter() {
+        if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "repr" {
+            for item in attr.tokens.clone().into_iter() {
+                if let TokenTree::Group(grp) = &item {
+                    for tok in grp.stream() {
+                        if let TokenTree::Ident(id) = tok {
+                            if id == "C" {
+                                have_c = true;
+                            }
+                            if id == "u8" {
+                                have_u8 = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let name = input.ident;
 
     let generics = input.generics;
@@ -1826,7 +2721,9 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     };
     let uses = quote_spanned! { defspan =>
         extern crate savefile as _savefile;
+        use std::mem::MaybeUninit;
     };
+
 
     let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
     let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
@@ -1836,10 +2733,19 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
+
+
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
+            let max_variant_fields = enum1.variants.iter().map(|x|x.fields.len()).max().unwrap_or(0);
+
+            let need_determine_offsets =
+                (max_variant_fields == 0 && have_u8) || (have_u8 && have_c);
+
+
             let mut variants = Vec::new();
-            for (var_idx, ref variant) in enum1.variants.iter().enumerate() {
+            let mut variant_field_offset_extractors = vec![];
+            for (var_idx, variant) in enum1.variants.iter().enumerate() {
                 if var_idx > 255 {
                     panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
                 }
@@ -1857,19 +2763,31 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
                 let mut field_infos = Vec::new();
 
+                let mut field_offset_extractors = vec![];
+
+                let offset_extractor_match_clause;
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
-                        for (idx,f) in fields_named.named.iter().enumerate() {
+                        let mut field_pattern = vec![];
+                        for (idx, f) in fields_named.named.iter().enumerate() {
+                            let field_name = f.ident.as_ref().expect("Enum variant with named fields *must* actually have a name").clone();
+                            field_offset_extractors.push(quote!(unsafe { (#field_name as *const _ as *const u8).offset_from(base_ptr) as usize }));
+                            field_pattern.push(field_name);
                             field_infos.push(FieldInfo {
-                                ident: Some(f.ident.clone().unwrap()),
+                                ident: Some(f.ident.clone().expect("Expected identifier[1]")),
                                 ty: &f.ty,
                                 index: idx as u32,
                                 attrs: &f.attrs,
                             });
                         }
+                        offset_extractor_match_clause = quote!{#name::#var_ident { #(#field_pattern,)* } };
                     }
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
+                        let mut field_pattern = vec![];
                         for (idx,f) in fields_unnamed.unnamed.iter().enumerate() {
+                            let field_binding = Ident::new(&format!("x{}", idx), Span::call_site());
+                            field_pattern.push(field_binding.clone());
+                            field_offset_extractors.push(quote!(unsafe { (#field_binding as *const _ as *const u8).offset_from(base_ptr) as usize }));
                             field_infos.push(FieldInfo {
                                 ident: None,
                                 index: idx as u32,
@@ -1877,18 +2795,35 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                                 attrs: &f.attrs,
                             });
                         }
+                        offset_extractor_match_clause = quote!{#name::#var_ident ( #(#field_pattern,)* ) };
                     }
                     &syn::Fields::Unit => {
+                        offset_extractor_match_clause = quote!{#name::#var_ident};
                         //No fields
                     }
                 }
+                while field_offset_extractors.len() < max_variant_fields {
+                    field_offset_extractors.push(quote!{0});
+                }
 
-                let fields = implement_withschema(field_infos);
+                variant_field_offset_extractors.push(quote!{
+                   #offset_extractor_match_clause => {
+                       [ #(#field_offset_extractors,)* ]
+                   }
+                });
+
+                let field_offset_strategy = if need_determine_offsets && field_infos.is_empty() == false {
+                    FieldOffsetStrategy::EnumWithKnownOffsets(var_idx as usize)
+                } else {
+                    FieldOffsetStrategy::EnumWithUnknownOffsets
+                };
+
+                let fields = implement_withschema(&name.to_string(), field_infos, field_offset_strategy, &ty_generics);
 
                 variants.push(quote! {
                 (#field_from_version,
                  #field_to_version,
-                 #Variant { name: #variant_name_spanned, discriminator: #var_idx, fields:
+                 #Variant { name: #variant_name_spanned, discriminant: #var_idx, fields:
                     {
                         let mut fields1 = Vec::<#Field>::new();
                         #(#fields;)*
@@ -1896,8 +2831,32 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     }}
                 )});
             }
+
+            let field_offset_impl ;
+            if need_determine_offsets {
+                field_offset_impl = quote! {
+                    pub fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
+                        assert!(std::mem::size_of::<#name>()>0);
+                        let base_ptr = value as *const #name as *const u8;
+                        match value {
+                            #(#variant_field_offset_extractors)*
+                        }
+                    }
+                    pub fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
+                        let mut value : MaybeUninit<#name> = MaybeUninit::uninit();
+                        let base_ptr = &mut value as *mut MaybeUninit<#name> as *mut u8;
+                        unsafe { *base_ptr = variant as u8; }
+                        get_field_offset_impl(unsafe { &*(&value as *const MaybeUninit<#name> as *const #name) } )
+                    }
+                };
+            } else {
+                field_offset_impl = quote!{};
+            }
+
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -1907,6 +2866,9 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         #[allow(unused_comparisons, unused_variables)]
                         fn schema(version:u32) -> #Schema {
                             let local_version = version;
+
+                            #field_offset_impl
+
                             #Schema::Enum (
                                 #SchemaEnum {
                                     dbg_name : stringify!(#name).to_string(),
@@ -1933,14 +2895,14 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(idx,field)| FieldInfo {
-                            ident: Some(field.ident.clone().unwrap()),
+                            ident: Some(field.ident.clone().expect("Expected identifier[2]")),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
                         })
                         .collect();
 
-                    fields = implement_withschema(field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos, FieldOffsetStrategy::Struct, &ty_generics);
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -1954,7 +2916,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             attrs: &f.attrs,
                         })
                         .collect();
-                    fields = implement_withschema(field_infos);
+                    fields = implement_withschema(&name.to_string(), field_infos, FieldOffsetStrategy::Struct, &ty_generics);
                 }
                 &syn::Fields::Unit => {
                     fields = Vec::new();
@@ -1962,6 +2924,8 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
 
@@ -1986,6 +2950,8 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             panic!("Unsupported datatype");
         }
     };
+    // For debugging, uncomment to write expanded procmacro to file
+    //std::fs::write(format!("/home/anders/savefile/savefile-abi-min-lib/src/expanded.rs"),expanded.to_string()).unwrap();
 
     expanded
 }

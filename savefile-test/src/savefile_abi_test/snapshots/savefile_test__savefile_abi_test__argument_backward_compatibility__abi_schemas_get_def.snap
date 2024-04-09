@@ -1,0 +1,37 @@
+---
+source: savefile-test/src/savefile_abi_test/argument_backward_compatibility.rs
+expression: exportable
+---
+name: ArgInterfaceV2
+methods:
+  - name: sums
+    info:
+      return_value:
+        Primitive: schema_u32
+      arguments:
+        - schema:
+            Struct:
+              dbg_name: ArgArgument
+              fields:
+                - name: data1
+                  value:
+                    Primitive: schema_u32
+                  offset: 8
+                - name: data2
+                  value:
+                    Primitive: schema_u32
+                  offset: 0
+          can_be_sent_as_ref: false
+        - schema:
+            Struct:
+              dbg_name: ArgArgument
+              fields:
+                - name: data1
+                  value:
+                    Primitive: schema_u32
+                  offset: 8
+                - name: data2
+                  value:
+                    Primitive: schema_u32
+                  offset: 0
+          can_be_sent_as_ref: false
