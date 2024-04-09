@@ -2,6 +2,19 @@
 name = "savefile-abi"
 version = "0.17.0-beta.1"
 edition = "2021"
+authors = ["Anders Musikka <anders@andersmusikka.se>"]
+documentation = "https://docs.rs/savefile-abi/"
+homepage = "https://github.com/avl/savefile/"
+
+description = "Easy to use, simple, stable ABI for Rust-libraries. Allows creating dynamically loadable plugins written in rust."
+
+readme = "README.md"
+
+keywords = ["dylib", "dlopen", "ffi"]
+
+license = "MIT/Apache-2.0"
+
+
 
 [features]
 serde_derive = ["dep:serde_derive","serde"]
