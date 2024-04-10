@@ -61,6 +61,7 @@ use std::io::BufWriter;
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0, true)
 }
+
 pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32, schema: bool) {
     let mut f = Cursor::new(Vec::new());
     {
@@ -88,6 +89,15 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     let f_internal_size = f.get_ref().len();
     assert_eq!(f.position() as usize,f_internal_size);
 }
+
+pub fn assert_roundtrip_debug<E: Serialize + Deserialize + Debug>(sample: E) {
+    let sample_debug_string = format!("{:?}", sample);
+    let round_tripped = roundtrip(sample);
+    assert_eq!(
+        sample_debug_string,
+        format!("{:?}", round_tripped));
+}
+
 pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
     roundtrip_version(sample, 0)
 }
@@ -829,6 +839,7 @@ use smallvec::alloc::collections::BTreeMap;
 use std::collections::HashSet;
 use std::borrow::Cow;
 use std::convert::TryInto;
+use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64};
 use std::time::Instant;
 use arrayvec::ArrayString;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -850,6 +861,21 @@ pub fn test_atomic() {
         assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));
     }
 }
+
+#[test]
+pub fn test_all_atomics() {
+    assert_roundtrip_debug(AtomicU8::new(42));
+    assert_roundtrip_debug(AtomicU16::new(42));
+    assert_roundtrip_debug(AtomicU32::new(42));
+    assert_roundtrip_debug(AtomicU64::new(42));
+    assert_roundtrip_debug(AtomicI8::new(42));
+    assert_roundtrip_debug(AtomicI16::new(42));
+    assert_roundtrip_debug(AtomicI32::new(42));
+    assert_roundtrip_debug(AtomicI64::new(42));
+    assert_roundtrip_debug(AtomicIsize::new(42));
+    assert_roundtrip_debug(AtomicUsize::new(42));
+}
+
 
 #[test]
 pub fn test_schema1()  {
@@ -883,6 +909,7 @@ pub fn test_canary1() {
         some_field : 43
     });
 }
+
 
 
 
