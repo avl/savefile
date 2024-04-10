@@ -288,10 +288,13 @@ and either AbiConnection::load_shared_library will panic, or any calls made afte
 
 # About Vec and String references
 
-Savefile-Abi allows passing references containing Vec and/or String to across the FFI-boundary.
+Savefile-Abi allows passing references containing Vec and/or String across the FFI-boundary.
 This is not guaranteed to be sound. However, Savefile-Abi uses heuristics to determine
 the actual memory layout of both Vec and String, and verifies that the two libraries agree
-on the layout of Vec. If they do not, the data is serialized instead.
+on the layout of Vec. If they do not, the data is serialized instead. Also, since
+parameters can never be mutable in Savefile-abi (except for closures), we know
+the callee is not going to be freeing something allocated by the caller. Parameters
+called by value are always serialized.
 
 
 */

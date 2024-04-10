@@ -41,6 +41,7 @@ impl Arbitrary for Version3 {
         }
     }
 }
+
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_version3(xs: Version3) -> bool {

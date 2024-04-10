@@ -764,6 +764,9 @@ extern crate serde_derive;
 #[cfg(feature="serde_derive")]
 use serde_derive::{Serialize, Deserialize};
 
+#[cfg(feature="quickcheck")]
+extern crate quickcheck;
+
 extern crate alloc;
 #[cfg(feature="arrayvec")]
 extern crate arrayvec;
@@ -797,6 +800,9 @@ use std::mem::MaybeUninit;
 extern crate indexmap;
 #[cfg(feature="indexmap")]
 use indexmap::{IndexMap, IndexSet};
+
+#[cfg(feature="quickcheck")]
+use quickcheck::{Arbitrary,Gen};
 
 #[cfg(feature="bit-vec")]
 extern crate bit_vec;
@@ -2212,7 +2218,7 @@ pub trait Deserialize: WithSchema + Sized {
 
 /// A field is serialized according to its value.
 /// The name is just for diagnostics.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Field {
     /// Field name
@@ -2242,7 +2248,7 @@ impl Field {
 /// An array is serialized by serializing its items one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaArray {
     /// Type of array elements
@@ -2266,7 +2272,7 @@ impl SchemaArray {
 /// A struct is serialized by serializing its fields one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaStruct {
@@ -2304,7 +2310,7 @@ impl SchemaStruct {
 
 /// An enum variant is serialized as its fields, one by one,
 /// without any padding.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Variant {
     /// Name of variant
@@ -2341,7 +2347,7 @@ impl Variant {
 /// followed by all the field for that variant.
 /// The name of each variant, as well as its order in
 /// the enum (the discriminant), is significant.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaEnum {
     /// Diagnostic name
@@ -2510,7 +2516,7 @@ impl Default for VecOrStringLayout {
 /// format. Custom Serialize-implementations cannot add new types to
 /// this tree, but must reuse these existing ones.
 /// See the various enum variants for more information:
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C,u32)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub enum Schema {
@@ -3006,6 +3012,8 @@ impl Deserialize for VecOrStringLayout {
             4 => VecOrStringLayout::LengthDataCapacity,
             5 => VecOrStringLayout::CapacityLengthData,
             6 => VecOrStringLayout::LengthCapacityData,
+            7 => VecOrStringLayout::LengthData,
+            8 => VecOrStringLayout::DataLength,
             _ => VecOrStringLayout::Unknown,
         })
     }
@@ -3075,6 +3083,135 @@ impl Deserialize for SchemaEnum {
             dbg_name,
             variants: ret,
         })
+    }
+}
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for VecOrStringLayout {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let x = u8::arbitrary(g);
+        match x%9 {
+            0 => VecOrStringLayout::Unknown,
+            1 => VecOrStringLayout::DataCapacityLength,
+            2 => VecOrStringLayout::DataLengthCapacity,
+            3 => VecOrStringLayout::CapacityDataLength,
+            4 => VecOrStringLayout::LengthDataCapacity,
+            5 => VecOrStringLayout::CapacityLengthData,
+            6 => VecOrStringLayout::LengthCapacityData,
+            7 => VecOrStringLayout::LengthData,
+            8 => VecOrStringLayout::DataLength,
+            _ => unreachable!()
+        }
+    }
+}
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for SchemaPrimitive {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let x = u8::arbitrary(g);
+        match x%16 {
+            0 => SchemaPrimitive::schema_i8,
+            1 => SchemaPrimitive::schema_u8,
+            2 => SchemaPrimitive::schema_i16,
+            3 => SchemaPrimitive::schema_u16,
+            4 => SchemaPrimitive::schema_i32,
+            5 => SchemaPrimitive::schema_u32,
+            6 => SchemaPrimitive::schema_i64,
+            7 => SchemaPrimitive::schema_u64,
+            8 => SchemaPrimitive::schema_string(VecOrStringLayout::arbitrary(g)),
+            9 => SchemaPrimitive::schema_f32,
+            10 => SchemaPrimitive::schema_f64,
+            11 => SchemaPrimitive::schema_bool,
+            12 => SchemaPrimitive::schema_canary1,
+            13 => SchemaPrimitive::schema_u128,
+            14 => SchemaPrimitive::schema_i128,
+            15 => SchemaPrimitive::schema_char,
+            _ => unreachable!()
+        }
+    }
+}
+
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for Field {
+    fn arbitrary(g: &mut Gen) -> Self {
+        Field {
+            name: <_ as Arbitrary>::arbitrary(g),
+            value: <_ as Arbitrary>::arbitrary(g),
+            offset: <_ as Arbitrary>::arbitrary(g),
+        }
+    }
+}
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for Variant {
+    fn arbitrary(g: &mut Gen) -> Self {
+        Variant {
+            name: <_ as Arbitrary>::arbitrary(g),
+            discriminant: <_ as Arbitrary>::arbitrary(g),
+            fields: <_ as Arbitrary>::arbitrary(g),
+        }
+    }
+}
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for SchemaEnum {
+    fn arbitrary(g: &mut Gen) -> Self {
+        SchemaEnum {
+            dbg_name: <_ as Arbitrary>::arbitrary(g),
+            variants: <_ as Arbitrary>::arbitrary(g),
+        }
+    }
+}
+
+#[cfg(feature="quickcheck")]
+impl Arbitrary for SchemaStruct {
+    fn arbitrary(g: &mut Gen) -> Self {
+        SchemaStruct {
+            fields: <_ as Arbitrary>::arbitrary(g),
+            dbg_name: <_ as Arbitrary>::arbitrary(g)
+        }
+    }
+}
+#[cfg(feature="quickcheck")]
+impl Arbitrary for SchemaArray {
+    fn arbitrary(g: &mut Gen) -> Self {
+        SchemaArray {
+            item_type: <_ as Arbitrary>::arbitrary(g),
+            count: <_ as Arbitrary>::arbitrary(g),
+        }
+    }
+}
+#[cfg(feature="quickcheck")]
+static QUICKCHECKBOUND: AtomicU8 = AtomicU8::new(0);
+#[cfg(feature="quickcheck")]
+impl Arbitrary for Schema {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let val = QUICKCHECKBOUND.fetch_add(1, Ordering::Relaxed);
+        //println!("Val: {}", val);
+        if val > 1 {
+            QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
+            return Schema::ZeroSize;
+        }
+        let arg = u8::arbitrary(g);
+        let temp = match arg%9 {
+            0 => Schema::Struct(<_ as Arbitrary>::arbitrary(g)),
+            1 => Schema::Enum(<_ as Arbitrary>::arbitrary(g)),
+            2 => Schema::Primitive(<_ as Arbitrary>::arbitrary(g)),
+            3 => Schema::Vector(<_ as Arbitrary>::arbitrary(g), VecOrStringLayout::arbitrary(g)),
+            4 => Schema::Array(SchemaArray::arbitrary(g)),
+            5 => Schema::SchemaOption(<_ as Arbitrary>::arbitrary(g)),
+            //Don't generate 'Undefined', since some of our tests assume not
+            6 => Schema::ZeroSize,
+            7 => Schema::Custom(String::arbitrary(g)),
+            8 => Schema::BoxedTrait(String::arbitrary(g)),
+            _ => Schema::ZeroSize
+        };
+        _ = QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
+        if val == 0 {
+            println!("Made: {}",format!("Made: {:?}",temp).len());
+        }
+        temp
     }
 }
 

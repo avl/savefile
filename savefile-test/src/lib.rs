@@ -832,7 +832,7 @@ pub fn test_terrain() {
 #[cfg(test)]
 use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
 use std::string::ToString;
-use savefile::{save_compressed, VecOrStringLayout};
+use savefile::{diff_schema, save_compressed, VecOrStringLayout};
 use std::sync::Arc;
 use std::path::PathBuf;
 use smallvec::alloc::collections::BTreeMap;
@@ -842,6 +842,7 @@ use std::convert::TryInto;
 use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64};
 use std::time::Instant;
 use arrayvec::ArrayString;
+use quickcheck::{Arbitrary, Gen};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[test]
@@ -1548,4 +1549,30 @@ fn test_quickcheck_roundtrip_simple_vec(xs: Vec<isize>) -> bool {
 fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
     println!("Yeah: {:?}", xs);
     xs == roundtrip(xs.clone())
+}
+
+
+
+
+#[ignore]
+#[quickcheck]
+#[cfg(not(miri))]
+fn test_quickcheck_schema_roundtrip(a: Schema) -> bool {
+    println!("Schema: {}", format!("{:?}",a).len());
+    assert_roundtrip_version(a, 1, false);
+    true
+}
+
+#[ignore]
+#[quickcheck]
+#[cfg(not(miri))]
+fn test_quickcheck_schema_diff_different(a: Schema, b: Schema) -> bool {
+    _ = diff_schema(&a, &b, "".into()); //Check this doesn't crash
+    true
+}
+#[ignore]
+#[quickcheck]
+#[cfg(not(miri))]
+fn test_quickcheck_schema_diff_same(a: Schema) -> bool {
+    diff_schema(&a, &a, "".into()).is_none() //Should always equal itself
 }
