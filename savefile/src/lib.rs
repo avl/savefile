@@ -2330,7 +2330,6 @@ impl Variant {
         }
         for (a,b) in self.fields.iter().zip(other.fields.iter()) {
             if !a.layout_compatible(b) {
-                println!("Fields not");
                 return false;
             }
         }
@@ -2371,7 +2370,6 @@ impl SchemaEnum {
         }
         for (a,b) in self.variants.iter().zip(other.variants.iter()) {
             if !a.layout_compatible(b) {
-                println!("Variants not comp.");
                 return false;
             }
         }
@@ -2510,6 +2508,197 @@ impl Default for VecOrStringLayout {
     }
 }
 
+impl ReprC for AbiMethodArgument {}
+
+/// The definition of an argument to a method
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+pub struct AbiMethodArgument {
+    /// The schema (type) of the argument. This contains
+    /// primarily the on-disk serialized format, but also
+    /// contains information that can allow savefile-abi to determine
+    /// if memory layouts are the same.
+    pub schema: Schema,
+    /// False if this type cannot be sent as a reference
+    pub can_be_sent_as_ref: bool,
+}
+
+impl Deserialize for AbiMethodArgument {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(AbiMethodArgument {
+            schema: <_ as Deserialize>::deserialize(deserializer)?,
+            can_be_sent_as_ref: <_ as Deserialize>::deserialize(deserializer)?,
+        })
+    }
+}
+
+impl WithSchema for AbiMethodArgument {
+    fn schema(_version: u32) -> Schema {
+        Schema::Undefined
+    }
+}
+
+impl Serialize for AbiMethodArgument {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.schema.serialize(serializer)?;
+        self.can_be_sent_as_ref.serialize(serializer)?;
+        Ok(())
+    }
+}
+
+/// Return value and argument types for a method
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+pub struct AbiMethodInfo {
+    /// The return value type of the method
+    pub return_value: Schema,
+    /// The arguments of the method.
+    pub arguments: Vec<AbiMethodArgument>,
+}
+impl ReprC for AbiMethodInfo {}
+impl WithSchema for AbiMethodInfo {
+    fn schema(_version: u32) -> Schema {
+        Schema::Undefined
+    }
+}
+
+impl Serialize for AbiMethodInfo {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.return_value.serialize(serializer)?;
+        self.arguments.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl Deserialize for AbiMethodInfo {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(AbiMethodInfo {
+            return_value: <_ as Deserialize>::deserialize(deserializer)?,
+            arguments: <_ as Deserialize>::deserialize(deserializer)?,
+        })
+    }
+}
+
+/// A method exposed through savefile-abi.
+/// Contains a name, and a signature.
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+pub struct AbiMethod {
+    /// The name of the method
+    pub name: String,
+    /// The function signature
+    pub info: AbiMethodInfo
+}
+impl ReprC for AbiMethod {}
+impl WithSchema for AbiMethod {
+    fn schema(_version: u32) -> Schema {
+        Schema::Undefined
+    }
+}
+impl Serialize for AbiMethod {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.name.serialize(serializer)?;
+        self.info.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl Deserialize for AbiMethod {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(AbiMethod {
+            name: <_ as Deserialize>::deserialize(deserializer)?,
+            info: <_ as Deserialize>::deserialize(deserializer)?,
+        })
+    }
+}
+
+/// Defines a dyn trait, basically
+#[derive(Default, Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+pub struct AbiTraitDefinition {
+    /// The name of the trait
+    pub name: String,
+    /// The set of methods available on the trait
+    pub methods: Vec<AbiMethod>
+}
+impl ReprC for AbiTraitDefinition {}
+impl WithSchema for AbiTraitDefinition {
+    fn schema(_version: u32) -> Schema {
+        Schema::Undefined
+    }
+}
+impl Serialize for AbiTraitDefinition {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.name.serialize(serializer)?;
+        self.methods.serialize(serializer)?;
+        Ok(())
+    }
+}
+impl Deserialize for AbiTraitDefinition {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let name = <_ as Deserialize>::deserialize(deserializer)?;
+        let t=AbiTraitDefinition {
+            name,
+            methods: <_ as Deserialize>::deserialize(deserializer)?,
+        };
+        Ok(t)
+    }
+}
+
+
+impl AbiTraitDefinition {
+    /// Verify that the 'self' trait definition is compatible with the 'old' definition.
+    /// Note, this routine ignores methods which only exist in 'self'.
+    /// The motivation is that older clients won't call them. Of course, a newer client
+    /// might call such a method, but this will be detected at runtime, and will panic.
+    /// However, it is hard to do very much better than this.
+    ///
+    /// This routine will flag an error if a method that used to exist, no longer does.
+    /// Note that the _existence_ of methods is not itself versioned with a version number.
+    ///
+    /// The version number is only for the data types of the arguments.
+    ///
+    fn verify_compatible_with_old_impl(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), String> {
+
+        for old_method in old.methods.iter() {
+            let Some(new_method) = self.methods.iter().find(|x|x.name == old_method.name) else {
+                return Err(format!("In trait {}, the method {} existed in version {}, but has been removed. This is not a backward-compatible change.",
+                                   self.name, old_method.name, old_version,
+                ));
+            };
+            if new_method.info.arguments.len() != old_method.info.arguments.len() {
+                return Err(format!("In trait {}, method {}, the number of arguments has changed from {} in version {} to {}. This is not a backward-compatible change.",
+                                   self.name, old_method.name, old_method.info.arguments.len(), old_version, new_method.info.arguments.len()
+                ));
+            }
+            if let Some(diff) = diff_schema(&new_method.info.return_value, &old_method.info.return_value,  "".into()) {
+                return Err(format!("In trait {}, method {}, the return value type has changed from version {}: {}. This is not a backward-compatible change.",
+                                   self.name, old_method.name, old_version, diff
+                ));
+            }
+            for (arg_index, (new_arg, old_arg)) in new_method.info.arguments.iter().zip(old_method.info.arguments.iter()).enumerate() {
+                if let Some(diff) = diff_schema(&new_arg.schema, &old_arg.schema, "".into()) {
+                    return Err(format!("In trait {}, method {}, argument {}, the type has changed from version {}: {}. This is not a backward-compatible change.",
+                                       self.name, old_method.name, arg_index , old_version, diff
+                    ));
+                }
+            }
+        }
+
+        if self.name != old.name {
+            return Err(format!("Schema name has changed from {} to {}. This is not actually a compatibility problem, but still indicative of some sort of fault somewhere.", old.name, self.name));
+        }
+        Ok(())
+    }
+
+    /// Verify that 'self' represents a newer version of a trait, that is backward compatible
+    /// with 'old'. 'old_version' is the version number of the old version being inspected.
+    /// To guarantee compatibility, all versions must be checked
+    pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), SavefileError> {
+        self.verify_compatible_with_old_impl(old_version, old).map_err(|x|{
+            SavefileError::IncompatibleSchema {message: x}
+        })
+    }
+}
+
 /// The schema represents the save file format
 /// of your data structure. It is an AST (Abstract Syntax Tree)
 /// for consisting of various types of nodes in the savefile
@@ -2540,7 +2729,9 @@ pub enum Schema {
     /// only matches if the string is identical
     Custom(String),
     /// Boxed traits cannot be serialized, but they can be exchanged using savefile-abi
-    BoxedTrait(String)
+    BoxedTrait(String),
+    /// Closures cannot be serialized, but they can be exchanged using savefile-abi
+    FnClosure(bool/*mut self*/, AbiTraitDefinition)
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -2568,6 +2759,7 @@ impl Schema {
             Schema::ZeroSize => "zerosize",
             Schema::Custom(_) => "custom",
             Schema::BoxedTrait(_) => "boxed_trait",
+            Schema::FnClosure(_, _) => {"fntrait"}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -2599,6 +2791,15 @@ impl Schema {
             }
             (Schema::Custom(_), Schema::Custom(_)) => {
                 false // Be conservative here
+            }
+            (Schema::FnClosure(a1,a2), Schema::FnClosure(b1,b2)) => {
+                println!("Compare fn closures");
+                dbg!(a1 == b1);
+                dbg!(a2 == b2);
+                a1 == b1 && a2 == b2
+            }
+            (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
+                a == b
             }
             _ => false
         }
@@ -2698,6 +2899,7 @@ impl Schema {
             Schema::ZeroSize => Some(0),
             Schema::Custom(_) => None,
             Schema::BoxedTrait(_) => {None}
+            Schema::FnClosure(_, _) => {None}
         }
     }
 }
@@ -2834,6 +3036,38 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                     a,
                     b
                 ));
+            }
+            return None;
+        }
+        (Schema::FnClosure(amut,a), Schema::FnClosure(bmut,b)) => {
+            if amut!=bmut {
+                if *amut {
+                    return Some(format!(
+                        "At location [{}]: Application protocol has mutable Fn*, but foreign format has non-mutable.",
+                        path
+                    ));
+                }
+                if *bmut {
+                    return Some(format!(
+                        "At location [{}]: Application protocol has non-mutable Fn*, but foreign format has mutable.",
+                        path
+                    ));
+                }
+            }
+            for amet in a.methods.iter() {
+                if let Some(bmet) = b.methods.iter().find(|x|x.name == amet.name) {
+                    if amet.info.arguments.len() != bmet.info.arguments.len() {
+                        return Some(format!(
+                            "At location [{}]: Application protocol method {} has {} args, but foreign version has {}.",
+                            path, amet.name, amet.info.arguments.len(), bmet.info.arguments.len()
+                        ));
+                    }
+                    for (arg_index, (a_arg,b_arg)) in amet.info.arguments.iter().zip(bmet.info.arguments.iter()).enumerate() {
+                         if let Some(diff) = diff_schema(&a_arg.schema, &b_arg.schema, format!("{}(arg #{})", amet.name, arg_index)) {
+                             return Some(diff);
+                         }
+                    }
+                }
             }
             return None;
         }
@@ -3188,7 +3422,6 @@ static QUICKCHECKBOUND: AtomicU8 = AtomicU8::new(0);
 impl Arbitrary for Schema {
     fn arbitrary(g: &mut Gen) -> Self {
         let val = QUICKCHECKBOUND.fetch_add(1, Ordering::Relaxed);
-        //println!("Val: {}", val);
         if val > 1 {
             QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
             return Schema::ZeroSize;
@@ -3208,9 +3441,6 @@ impl Arbitrary for Schema {
             _ => Schema::ZeroSize
         };
         _ = QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
-        if val == 0 {
-            println!("Made: {}",format!("Made: {:?}",temp).len());
-        }
         temp
     }
 }
@@ -3262,6 +3492,12 @@ impl Serialize for Schema {
                 serializer.write_u8(10)?;
                 name.serialize(serializer)
             }
+            Schema::FnClosure(a, b) => {
+                serializer.write_u8(11)?;
+                a.serialize(serializer)?;
+                b.serialize(serializer)?;
+                Ok(())
+            }
         }
     }
 }
@@ -3280,6 +3516,7 @@ impl Deserialize for Schema {
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
             9 => Schema::Custom(String::deserialize(deserializer)?),
             10 => Schema::BoxedTrait(String::deserialize(deserializer)?),
+            11 => Schema::FnClosure(<_ as Deserialize>::deserialize(deserializer)?,<_ as Deserialize>::deserialize(deserializer)?),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),
@@ -5518,6 +5755,7 @@ use std::sync::Arc;
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use memoffset::offset_of_tuple;
+
 
 impl<T> ReprC for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {

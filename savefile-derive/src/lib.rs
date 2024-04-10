@@ -1373,10 +1373,10 @@ fn generate_method_definitions(
                 } else {
                     caller_fn_arg_list.push(quote!{#arg_name : &dyn #fndef });
                 }
-                let temp_trait_name_str = temp_trait_name.to_string();
+                //let temp_trait_name_str = temp_trait_name.to_string();
                 metadata_arguments.push(quote!{
                                 AbiMethodArgument {
-                                    schema: Schema::BoxedTrait(#temp_trait_name_str.to_string()),
+                                    schema: Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)),
                                     can_be_sent_as_ref: true,
                                 }
                             })
@@ -1508,8 +1508,8 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian};
-        use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, AbiTraitDefinition, PackagedTraitObject, Owning, AbiMethodArgument, AbiMethod, AbiMethodInfo, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
+        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;

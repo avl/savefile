@@ -14,14 +14,8 @@ keywords = ["dylib", "dlopen", "ffi"]
 
 license = "MIT/Apache-2.0"
 
-
-[features]
-serde_derive = ["dep:serde_derive","serde"]
-
 [dependencies]
 savefile = { path="../savefile", version = "=0.17.0-beta.7"}
 savefile-derive = { path="../savefile-derive", version = "=0.17.0-beta.7"}
 byteorder = "1.4"
 libloading = "0.8"
-serde_derive = {version= "1.0", optional = true}
-serde = {version= "1.0", optional = true}

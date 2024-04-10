@@ -9,6 +9,7 @@ pub use memoffset::span_of;
 pub use memoffset::offset_of;
 pub use memoffset::offset_of_tuple;
 pub use byteorder::{ReadBytesExt, LittleEndian};
+pub use {super::AbiMethodArgument,super::AbiMethod,super::AbiMethodInfo,super::AbiTraitDefinition};
 
 #[cfg(feature="ring")]
 pub use super::{CryptoReader, CryptoWriter, save_encrypted_file, load_encrypted_file};

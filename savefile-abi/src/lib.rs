@@ -312,115 +312,14 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
-use savefile::{CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_file_noschema, load_noschema, save_file_noschema, SavefileError, Schema, Serializer};
-use savefile_derive::Savefile;
+use savefile::{AbiMethodInfo, AbiTraitDefinition, CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_file_noschema, load_noschema, save_file_noschema, SavefileError, Serializer};
+
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
 
-#[cfg(feature = "serde_derive")]
-use serde_derive::{Serialize, Deserialize};
 
 
 
-/// The definition of an argument to a method
-#[derive(Savefile, Debug)]
-#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
-pub struct AbiMethodArgument {
-    /// The schema (type) of the argument. This contains
-    /// primarily the on-disk serialized format, but also
-    /// contains information that can allow savefile-abi to determine
-    /// if memory layouts are the same.
-    pub schema: Schema,
-    /// False if this type cannot be sent as a reference
-    pub can_be_sent_as_ref: bool,
-}
-
-
-/// Return value and argument types for a method
-#[derive(Savefile, Debug)]
-#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
-pub struct AbiMethodInfo {
-    /// The return value type of the method
-    pub return_value: Schema,
-    /// The arguments of the method.
-    pub arguments: Vec<AbiMethodArgument>,
-}
-
-/// A method exposed through savefile-abi.
-/// Contains a name, and a signature.
-#[derive(Savefile, Debug)]
-#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
-pub struct AbiMethod {
-    /// The name of the method
-    pub name: String,
-    /// The function signature
-    pub info: AbiMethodInfo
-}
-
-/// Defines a dyn trait, basically
-#[derive(Savefile, Default, Debug)]
-#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
-pub struct AbiTraitDefinition {
-    /// The name of the trait
-    pub name: String,
-    /// The set of methods available on the trait
-    pub methods: Vec<AbiMethod>
-}
-
-impl AbiTraitDefinition {
-    /// Verify that the 'self' trait definition is compatible with the 'old' definition.
-    /// Note, this routine ignores methods which only exist in 'self'.
-    /// The motivation is that older clients won't call them. Of course, a newer client
-    /// might call such a method, but this will be detected at runtime, and will panic.
-    /// However, it is hard to do very much better than this.
-    ///
-    /// This routine will flag an error if a method that used to exist, no longer does.
-    /// Note that the _existence_ of methods is not itself versioned with a version number.
-    ///
-    /// The version number is only for the data types of the arguments.
-    ///
-    fn verify_compatible_with_old_impl(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), String> {
-
-        for old_method in old.methods.iter() {
-            let Some(new_method) = self.methods.iter().find(|x|x.name == old_method.name) else {
-                return Err(format!("In trait {}, the method {} existed in version {}, but has been removed. This is not a backward-compatible change.",
-                    self.name, old_method.name, old_version,
-                ));
-            };
-            if new_method.info.arguments.len() != old_method.info.arguments.len() {
-                return Err(format!("In trait {}, method {}, the number of arguments has changed from {} in version {} to {}. This is not a backward-compatible change.",
-                                   self.name, old_method.name, old_method.info.arguments.len(), old_version, new_method.info.arguments.len()
-                ));
-            }
-            if let Some(diff) = diff_schema(&new_method.info.return_value, &old_method.info.return_value,  "".into()) {
-                return Err(format!("In trait {}, method {}, the return value type has changed from version {}: {}. This is not a backward-compatible change.",
-                                   self.name, old_method.name, old_version, diff
-                ));
-            }
-            for (arg_index, (new_arg, old_arg)) in new_method.info.arguments.iter().zip(old_method.info.arguments.iter()).enumerate() {
-                if let Some(diff) = diff_schema(&new_arg.schema, &old_arg.schema, "".into()) {
-                    return Err(format!("In trait {}, method {}, argument {}, the type has changed from version {}: {}. This is not a backward-compatible change.",
-                                   self.name, old_method.name, arg_index , old_version, diff
-                    ));
-                }
-            }
-        }
-
-        if self.name != old.name {
-            return Err(format!("Schema name has changed from {} to {}. This is not actually a compatibility problem, but still indicative of some sort of fault somewhere.", old.name, self.name));
-        }
-        Ok(())
-    }
-
-    /// Verify that 'self' represents a newer version of a trait, that is backward compatible
-    /// with 'old'. 'old_version' is the version number of the old version being inspected.
-    /// To guarantee compatibility, all versions must be checked
-    pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), SavefileError> {
-        self.verify_compatible_with_old_impl(old_version, old).map_err(|x|{
-            SavefileError::IncompatibleSchema {message: x}
-        })
-    }
-}
 
 /// This trait is meant to be exported for a 'dyn SomeTrait'.
 /// It can be automatically implemented by using the
@@ -1016,6 +915,8 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         for caller_native_method in caller_native_definition.methods.into_iter() {
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition.methods.iter().enumerate().find(|x|x.1.name == caller_native_method.name) else {
 
+                println!("Method not found: {:?}", caller_native_method.name);
+                println!("CAlle: {:#?}", callee_native_definition);
                 methods.push(AbiConnectionMethod{
                     method_name: caller_native_method.name,
                     caller_info: caller_native_method.info,
