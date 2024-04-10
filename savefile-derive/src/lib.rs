@@ -1257,10 +1257,16 @@ fn generate_method_definitions(
                 callee_trampoline_variable_deserializer.push(quote!{
                                 // SAFETY
                                 // Todo: Well, why exactly?
+                                if compatibility_mask&(1<<#arg_index) == 0 {
+                                    panic!("Function arg is not layout-compatible!")
+                                }
                                 #temp_arg_name = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
                                 #arg_name = Box::new(unsafe { AbiConnection::from_raw_packaged(#temp_arg_name, Owning::Owned)? } );
                             });
                 caller_arg_serializers.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) == 0 {
+                                    panic!("Function arg is not layout-compatible!")
+                                }
                                 PackagedTraitObject::new::<dyn #trait_type>(#arg_name).serialize(&mut serializer).expect("PackagedTraitObject");
                             });
             }
@@ -1268,10 +1274,16 @@ fn generate_method_definitions(
                 let mutsymbol = if *ismut {quote!{mut}} else {quote!{}};
                 let newsymbol = if *ismut {quote!{new_from_ptr}} else {quote!{new_from_ptr}};
                 callee_trampoline_variable_deserializer.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) == 0 {
+                                    panic!("Function arg is not layout-compatible!")
+                                }
                                 #temp_arg_name = unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
                                 #arg_name = & #mutsymbol #temp_arg_name;
                             });
                 caller_arg_serializers.push(quote!{
+                                if compatibility_mask&(1<<#arg_index) == 0 {
+                                    panic!("Function arg is not layout-compatible!")
+                                }
                                 PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer).expect("PackagedTraitObject");
                             });
 
@@ -1300,11 +1312,18 @@ fn generate_method_definitions(
                     }
                 ).collect();
                 callee_trampoline_variable_deserializer.push(quote!{
+                        if compatibility_mask&(1<<#arg_index) == 0 {
+                            panic!("Function arg is not layout-compatible!")
+                        }
+
                         #temp_arg_name = unsafe { AbiConnection::<#temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
                         #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
                         #arg_name = & #mutsymbol #temp_arg_name2;
                     });
                 caller_arg_serializers.push(quote!{
+                        if compatibility_mask&(1<<#arg_index) == 0 {
+                            panic!("Function arg is not layout-compatible!")
+                        }
 
                         let #mutsymbol temp = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
                         let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol temp as *#mutorconst _;

@@ -97,3 +97,17 @@ fn test_closure_with_custom_arg_call_older() {
     });
     assert_eq!(result, 42);
 }
+#[test]
+#[should_panic(expected="Function arg is not layout-compatible")]
+fn test_closure_with_custom_arg_call_older2() {
+    //TODO: Figure out why the following _crashes_!
+    let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
+    // Here we deliberately use the ABI_ENTRY ExampleNewer, with a trait object for Example.
+    // This is not a compatible thing to do, and _should_ panic (but not be unsafe)
+    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn ExampleNewer as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+
+    let result = conn.call_closure_with_custom_arg(&|arg|{
+        arg.x
+    });
+    assert_eq!(result, 42);
+}
