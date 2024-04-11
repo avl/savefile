@@ -312,7 +312,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
-use savefile::{AbiMethodInfo, AbiTraitDefinition, CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_file_noschema, load_noschema, save_file_noschema, SavefileError, Serializer};
+use savefile::{AbiMethodInfo, AbiTraitDefinition, CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_file_noschema, load_noschema, save_file_noschema, SavefileError, Schema, Serializer};
 
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
@@ -896,6 +896,33 @@ impl FlexBuffer {
     }
 }
 
+/// Arguments are layout compatible if their native versions are layout_compatible,
+/// or if they are traits and the effective version of the traits are compatible.
+/// For traits, the actual fat pointer is always compatible, so can always be used.
+/// The trait-objects themselves can never be serialized, so they can only be used as references.
+fn arg_layout_compatible(a_native: &Schema, b_native: &Schema, a_effective: &Schema, b_effective: &Schema, effective_version: u32) -> bool {
+    match (a_native, b_native) {
+        (Schema::FnClosure(a1, _a2), Schema::FnClosure(b1, _b2)) => {
+
+            let (Schema::FnClosure(effective_a1, effective_a2),
+                 Schema::FnClosure(effective_b1, effective_b2))
+                = (a_effective, b_effective) else {return false;};
+
+            a1 == b1 && a1 == effective_a1 && a1 == effective_b1 &&
+                effective_a2.verify_backward_compatible(effective_version, effective_b2).is_ok()
+        }
+        (Schema::BoxedTrait(_), Schema::BoxedTrait(_)) => {
+
+            let (Schema::BoxedTrait(effective_a2),
+                Schema::BoxedTrait(effective_b2))
+                = (a_effective, b_effective) else {return false;};
+
+            effective_a2.verify_backward_compatible(effective_version, effective_b2).is_ok()
+        }
+        (a,b) => a.layout_compatible(b)
+    }
+}
+
 impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
     /// Analyse the difference in definitions between the two sides,
@@ -915,8 +942,6 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         for caller_native_method in caller_native_definition.methods.into_iter() {
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition.methods.iter().enumerate().find(|x|x.1.name == caller_native_method.name) else {
 
-                println!("Method not found: {:?}", caller_native_method.name);
-                println!("CAlle: {:#?}", callee_native_definition);
                 methods.push(AbiConnectionMethod{
                     method_name: caller_native_method.name,
                     caller_info: caller_native_method.info,
@@ -952,7 +977,8 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
             let retval_effective_schema_diff = diff_schema(
                 &caller_effective_method.info.return_value,
-                &callee_effective_method.info.return_value,"".to_string());
+                &callee_effective_method.info.return_value,
+                "".to_string());
             if let Some(diff) = retval_effective_schema_diff {
                 return Err(SavefileError::IncompatibleSchema{
                     message: format!("Incompatible ABI detected. Trait: {}, method: {}, return value error: {}",
@@ -978,7 +1004,14 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
                 let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
                 let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                if caller_isref && callee_isref && caller_native_method.info.arguments[index].schema.layout_compatible(&callee_native_method.info.arguments[index].schema) {
+                if caller_isref && callee_isref &&
+                    arg_layout_compatible(
+                        &caller_native_method.info.arguments[index].schema,
+                        &callee_native_method.info.arguments[index].schema,
+                        &caller_effective_method.info.arguments[index].schema,
+                        &callee_effective_method.info.arguments[index].schema,
+                        effective_version
+                    ) {
                     mask |= 1<<index;
                 }
             }
@@ -1257,7 +1290,6 @@ pub unsafe fn abi_entry_light<T:AbiExportable+?Sized>(flag: AbiProtocol) {
             let result = catch_unwind(||{
                 let data = unsafe { slice::from_raw_parts(data, data_length) };
 
-                //println!("Parameter length: {}", data.len());
                 match unsafe { call_trait_obj::<T>(trait_object, method_number, effective_version, compatibility_mask, data, abi_result, receiver) } {
                     Ok(_) => {}
                     Err(err) => {

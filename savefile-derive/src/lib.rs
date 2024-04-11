@@ -1364,10 +1364,9 @@ fn generate_method_definitions(
             }
             ArgType::BoxedTrait(trait_name) => {
                 caller_fn_arg_list.push(quote!{#arg_name : Box<dyn #trait_name>});
-                let trait_name_str = trait_name.to_string();
                 metadata_arguments.push(quote!{
                                 AbiMethodArgument {
-                                    schema: Schema::BoxedTrait(#trait_name_str.to_string()),
+                                    schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
                                     can_be_sent_as_ref: true
                                 }
                             })
@@ -1378,10 +1377,10 @@ fn generate_method_definitions(
                 } else {
                     caller_fn_arg_list.push(quote!{#arg_name : &dyn #trait_name });
                 }
-                let trait_name_str = trait_name.to_string();
+
                 metadata_arguments.push(quote!{
                                 AbiMethodArgument {
-                                    schema: Schema::BoxedTrait(#trait_name_str.to_string()),
+                                    schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
                                     can_be_sent_as_ref: true,
                                 }
                             })
@@ -1394,11 +1393,14 @@ fn generate_method_definitions(
                 }
                 //let temp_trait_name_str = temp_trait_name.to_string();
                 metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)),
-                                    can_be_sent_as_ref: true,
+                                {
+                                    AbiMethodArgument {
+                                        schema: Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)),
+                                        can_be_sent_as_ref: true,
+                                    }
                                 }
                             })
+
             }
         }
     }
@@ -1649,8 +1651,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     let abi_entry_light = Ident::new(&format!("abi_entry_light_{}",trait_name_str), Span::call_site());
 
     let exports_for_trait = quote!{
-
-        #[no_mangle]
+        
         pub extern "C" fn #abi_entry_light(flag: AbiProtocol) {
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
@@ -2702,7 +2703,6 @@ enum FieldOffsetStrategy {
 
 #[allow(non_snake_case)]
 fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
-    //println!("Input: {:#?}", &input);
 
 
     let mut have_c = false;

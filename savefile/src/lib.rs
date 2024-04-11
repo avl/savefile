@@ -2683,9 +2683,6 @@ impl AbiTraitDefinition {
             }
         }
 
-        if self.name != old.name {
-            return Err(format!("Schema name has changed from {} to {}. This is not actually a compatibility problem, but still indicative of some sort of fault somewhere.", old.name, self.name));
-        }
         Ok(())
     }
 
@@ -2729,7 +2726,7 @@ pub enum Schema {
     /// only matches if the string is identical
     Custom(String),
     /// Boxed traits cannot be serialized, but they can be exchanged using savefile-abi
-    BoxedTrait(String),
+    BoxedTrait(AbiTraitDefinition),
     /// Closures cannot be serialized, but they can be exchanged using savefile-abi
     FnClosure(bool/*mut self*/, AbiTraitDefinition)
 }
@@ -2763,8 +2760,8 @@ impl Schema {
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
-    pub fn layout_compatible(&self, other: &Schema) -> bool {
-        match (self, other) {
+    pub fn layout_compatible(&self, b_native: &Schema) -> bool {
+        match (self, b_native) {
             (Schema::Struct(a),Schema::Struct(b)) => {
                 a.layout_compatible(b)
             }
@@ -2792,14 +2789,15 @@ impl Schema {
             (Schema::Custom(_), Schema::Custom(_)) => {
                 false // Be conservative here
             }
-            (Schema::FnClosure(a1,a2), Schema::FnClosure(b1,b2)) => {
-                println!("Compare fn closures");
-                dbg!(a1 == b1);
-                dbg!(a2 == b2);
-                a1 == b1 && a2 == b2
+            (Schema::FnClosure(_a1, _a2), Schema::FnClosure(_b1, _b2)) => {
+                // Closures as arguments are handled differently.
+                // Closures are not supported in any other position
+                false
             }
-            (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
-                a == b
+            (Schema::BoxedTrait(_a), Schema::BoxedTrait(_b)) => {
+                // Boxed traits can never "just be serialized". We alway have to serialize
+                // if boxed traits are contained in a data structure
+                false
             }
             _ => false
         }
@@ -3031,7 +3029,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
         (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
             if a!=b {
                 return Some(format!(
-                    "At location [{}]: Application protocol has datatype Box<dyn {}>, but foreign format has Box<dyn {}>",
+                    "At location [{}]: Application protocol has datatype Box<dyn {:?}>, but foreign format has Box<dyn {:?}>",
                     path,
                     a,
                     b
@@ -3437,7 +3435,6 @@ impl Arbitrary for Schema {
             //Don't generate 'Undefined', since some of our tests assume not
             6 => Schema::ZeroSize,
             7 => Schema::Custom(String::arbitrary(g)),
-            8 => Schema::BoxedTrait(String::arbitrary(g)),
             _ => Schema::ZeroSize
         };
         _ = QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
@@ -3515,7 +3512,7 @@ impl Deserialize for Schema {
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
             9 => Schema::Custom(String::deserialize(deserializer)?),
-            10 => Schema::BoxedTrait(String::deserialize(deserializer)?),
+            10 => Schema::BoxedTrait(<_ as Deserialize>::deserialize(deserializer)?),
             11 => Schema::FnClosure(<_ as Deserialize>::deserialize(deserializer)?,<_ as Deserialize>::deserialize(deserializer)?),
             c => {
                 return Err(SavefileError::GeneralError {
