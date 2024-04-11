@@ -55,7 +55,7 @@ fn check_various_vec_layouts() {
 #[test]
 fn test_simple_enum_owned() {
     let boxed: Box<dyn SimpleInterfaceWithEnums> = Box::new(Implementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn SimpleInterfaceWithEnums as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     assert_eq!(
         conn.count_arg_owned(AbiSimpleEnum::Variant2(42,"hej".into(),"då".into(),"osv".into())),
         42);
@@ -64,7 +64,7 @@ fn test_simple_enum_owned() {
 #[test]
 fn test_simple_enum_ref() {
     let boxed: Box<dyn SimpleInterfaceWithEnums> = Box::new(Implementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn SimpleInterfaceWithEnums as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
 
     assert_eq!(
@@ -80,7 +80,7 @@ fn test_simple_enum_ref() {
 #[test]
 fn test_closure_arg() {
     let boxed: Box<dyn SimpleInterfaceWithEnums> = Box::new(Implementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn SimpleInterfaceWithEnums as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     conn.closure_arg(&|x:&AbiSimpleEnum|x.clone());
 }

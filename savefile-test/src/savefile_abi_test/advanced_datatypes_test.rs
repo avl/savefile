@@ -26,7 +26,7 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
 #[test]
 fn test_abi_removed_with_custom_default() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn AdvancedTestInterface>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let mut mymap = HashMap::new();
     mymap.insert("mascot".to_string(),  "ferris".to_string());

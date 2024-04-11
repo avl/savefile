@@ -1098,23 +1098,29 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     }
 
     /// Crate a AbiConnection from an entry point and a boxed trait object.
+    /// This is undocumented, since it's basically useless except for tests.
+    /// If you have a Box<dyn Example>, you'd want to just use it directly,
+    /// not make an AbiConnection wrapping it.
+    ///
+    /// This method is still useful during testing.
+    ///
     /// # Safety
-    ///  * The entry point must contain a correct implemenation matching the type T.
+    ///  * The entry point must contain a correct implementation matching the type T.
     ///  * T must be a dyn trait object
     #[doc(hidden)]
-    pub unsafe fn from_boxed_trait(entry_point: extern "C" fn(AbiProtocol), trait_object: Box<T>) -> Result<AbiConnection<T>, SavefileError>
+    pub fn from_boxed_trait(trait_object: Box<T>) -> Result<AbiConnection<T>, SavefileError>
     {
         let trait_object = TraitObject::new(trait_object);
-        Self::new_internal(entry_point, Some(trait_object), Owning::Owned)
+        Self::new_internal(T::ABI_ENTRY, Some(trait_object), Owning::Owned)
     }
 
 
     /// Crate a AbiConnection from an entry point and a boxed trait object.
     /// This allows using a different interface trait for the backing implementation, for
-    /// test cases which want to test version evoluation.
+    /// test cases which want to test version evolution.
     ///
     /// # Safety
-    ///  * The entry point must contain a correct implemenation matching the type T.
+    ///  * The entry point must contain a correct implementation matching the type T.
     ///  * T must be a dyn trait object
     #[doc(hidden)]
     pub unsafe fn from_boxed_trait_for_test<O:AbiExportable + ?Sized>(entry_point: extern "C" fn(AbiProtocol), trait_object: Box<O>) -> Result<AbiConnection<T>, SavefileError>

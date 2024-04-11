@@ -85,7 +85,7 @@ savefile_abi_export!(TestInterfaceImpl, TestInterface);
 fn test_basic_call_abi() {
 
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});
-    let mut conn = unsafe { AbiConnection::from_boxed_trait(TestInterfaceImpl::ABI_ENTRY, boxed).unwrap() };
+    let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let mut callback = CallbackImpl {
         x: 43
@@ -97,7 +97,7 @@ fn test_basic_call_abi() {
 #[test]
 fn test_slices() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(TestInterfaceImpl::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let t = conn.arrays_add(&[1,2,3],&[1,2,3]);
     assert_eq!(t, vec![2,4,6]);
@@ -105,13 +105,13 @@ fn test_slices() {
 #[test]
 fn test_zero_sized_arg() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(TestInterfaceImpl::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     conn.zero_sized_arg( () );
 }
 #[test]
 fn test_big_slices() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(TestInterfaceImpl::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     let a = vec![1u32;10000];
     let b = vec![1u32;10000];
 
@@ -155,7 +155,7 @@ fn test_abi_removed_with_custom_default() {
 #[bench]
 fn bench_simple_add(b: &mut Bencher) {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn TestInterface as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     b.iter(move || {
         conn.simple_add(std::hint::black_box(1),std::hint::black_box(2))

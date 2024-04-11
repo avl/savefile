@@ -53,7 +53,7 @@ impl Example for ExampleImplementation {
 #[test]
 fn test_closure() {
     let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn Example as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     conn.call_closure(&|x,y|(x+y));
 }
@@ -61,7 +61,7 @@ fn test_closure() {
 #[test]
 fn test_mut_closure() {
     let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn Example as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
 
     let mut num_calls = 0;
@@ -76,7 +76,7 @@ fn test_mut_closure() {
 #[test]
 fn test_closure_with_custom_arg() {
     let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn Example as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let result = conn.call_closure_with_custom_arg(&|arg|{
         arg.x
@@ -85,29 +85,10 @@ fn test_closure_with_custom_arg() {
 }
 #[test]
 fn test_closure_with_custom_arg_call_older() {
-    //TODO: Figure out why the following _crashes_!
-    //let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
-    //let conn = unsafe { AbiConnection::<dyn ExampleNewer>::from_boxed_trait(<dyn Example as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
+
     let iface1 : Box<dyn Example> = Box::new(ExampleImplementation {});
     let conn = unsafe { AbiConnection::<dyn ExampleNewer>::from_boxed_trait_for_test(<dyn Example>::ABI_ENTRY, iface1 ) }.unwrap();
 
-
-    let result = conn.call_closure_with_custom_arg(&|arg|{
-        arg.x
-    });
-    assert_eq!(result, 42);
-}
-#[test]
-#[should_panic(expected="Function arg is not layout-compatible")]
-fn test_closure_with_custom_arg_call_older2() {
-    //TODO: Figure out why the following _crashes_!
-    let boxed: Box<dyn Example> = Box::new(ExampleImplementation{});
-    // Here we deliberately use the ABI_ENTRY ExampleNewer, with a trait object for Example.
-    // This is not a compatible thing to do, and _should_ panic (but not be unsafe)
-    let conn = unsafe { AbiConnection::from_boxed_trait(<dyn ExampleNewer as AbiExportable>::ABI_ENTRY, boxed).unwrap() };
-
-    let result = conn.call_closure_with_custom_arg(&|arg|{
-        arg.x
-    });
+    let result = conn.call_closure_with_custom_arg(&|arg| arg.x);
     assert_eq!(result, 42);
 }
