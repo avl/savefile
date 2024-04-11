@@ -21,8 +21,8 @@ the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.17.0-beta.7"
-savefile-derive = "0.17.0-beta.7"
+savefile = "0.17.0-beta.8"
+savefile-derive = "0.17.0-beta.8"
 ````
 
 # Sample 
@@ -69,7 +69,7 @@ fn main() {
 
 # Changelog
 
-## 0.17.0-beta.7
+## 0.17.0-beta.8
 
 Fixed bug where schema of slices was not serialized correctly. Introduced in 0.17, so 
 only present in beta releases.
@@ -86,7 +86,7 @@ can continue as usual.
 
 The dataformat for schemas has changed, but in a backward compatible way.
 
-Version 0.17.0-beta.7 is, as can be seen from the name, a beta. There will be bugs.
+Version 0.17.0-beta.8 is, as can be seen from the name, a beta. There will be bugs.
 
 The latest stable version is 0.16.5.
 
