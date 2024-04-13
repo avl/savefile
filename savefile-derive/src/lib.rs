@@ -20,7 +20,7 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 
-use proc_macro2::{Literal, Span, TokenTree};
+use proc_macro2::{Literal, Span};
 use proc_macro2::TokenStream;
     #[allow(unused_imports)]
 use std::iter::IntoIterator;
@@ -648,13 +648,24 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
-            let variant_count = enum1.variants.len();
-            if variant_count > 255 {
-                panic!("This library is not capable of serializing enums with more than 255 variants. Our deepest apologies, we thought no-one would ever create such an enum!");
-            }
+            //let variant_count = enum1.variants.len();
+            /*if variant_count >= 256 {
+                panic!("This library is not capable of serializing enums with 256 variants or more. Our deepest apologies, we thought no-one would ever create such an enum!");
+            }*/
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
-                let var_idx = var_idx_usize as u8;
+                let var_idx_u8:u8 = var_idx_usize as u8;
+                let var_idx_u16:u16 = var_idx_usize as u16;
+                let var_idx_u32:u32 = var_idx_usize as u32;
+
+                let variant_serializer = match enum_size.discriminant_size {
+                    1 => quote! { serializer.write_u8(#var_idx_u8)? ; },
+                    2 => quote! { serializer.write_u16(#var_idx_u16)? ; },
+                    4 => quote! { serializer.write_u32(#var_idx_u32)? ; },
+                    _ => unreachable!(),
+                };
+
                 let var_ident = (variant.ident).clone();
                 let variant_name = quote! { #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
@@ -674,7 +685,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
 
                         let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false);
                         output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => { 
-                                serializer.write_u8(#var_idx)?; 
+                                #variant_serializer
                                 #fields_serialized 
                             } ));
                     }
@@ -697,11 +708,11 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                         let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
 
                         output.push(
-                            quote!( #variant_name_spanned(#(#fields_names,)*) => { serializer.write_u8(#var_idx)?; #fields_serialized  } ),
+                            quote!( #variant_name_spanned(#(#fields_names,)*) => { #variant_serializer ; #fields_serialized  } ),
                         );
                     }
                     &syn::Fields::Unit => {
-                        output.push(quote!( #variant_name_spanned => { serializer.write_u8(#var_idx)? } ));
+                        output.push(quote!( #variant_name_spanned => { #variant_serializer ; } ));
                     }
                 }
             }
@@ -1035,6 +1046,159 @@ struct MethodDefinitionComponents {
     caller_method_trampoline: TokenStream,
 }
 
+fn parse_type(version: u32, arg_name: &Ident, typ: &Type, method_name: &Ident, name_generator: &mut impl FnMut() -> String,extra_definitions: &mut Vec<TokenStream>, is_reference: bool, is_mut_ref: bool) -> ArgType {
+    let rawtype;
+    match typ {
+        Type::Tuple(tup) if tup.elems.is_empty() => {
+            rawtype = typ.to_token_stream();
+            //argtype = ArgType::PlainData(typ.to_token_stream());
+        }
+        Type::Reference(typref) => {
+            if typref.lifetime.is_some() {
+                panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
+            }
+            if is_reference {
+                panic!("Method {}, argument {}: Method arguments cannot be reference to reference in Savefile-abi. Try removing a '&' from the type: {}", method_name, arg_name, typ.to_token_stream());
+            }
+            return parse_type(version, arg_name, &*typref.elem, method_name, &mut *name_generator, extra_definitions, true, typref.mutability.is_some());
+        }
+        Type::Tuple(tuple) => {
+            if tuple.elems.len() > 3 {
+                panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
+            }
+            rawtype = tuple.to_token_stream();
+        }
+        Type::Slice(slice) => {
+            if !is_reference {
+                panic!("Method {}, argument {}: Slices must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
+            }
+            if is_mut_ref {
+                panic!("Method {}, argument {}: Mutable refernces are not supported by Savefile-abi, except for FnMut-trait objects. {}", method_name, arg_name, typ.to_token_stream());
+            }
+            return ArgType::SliceReference(slice.elem.to_token_stream());
+        }
+        Type::TraitObject(trait_obj) => {
+            if !is_reference {
+                panic!("Method {}, argument {}: Trait objects must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
+            }
+            if trait_obj.dyn_token.is_some() {
+                let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
+                    match x {
+                        TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().expect("Missing bounds of Box trait object"))}
+                        TypeParamBound::Lifetime(_) => {
+                            panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
+                        }
+                    }
+                }).collect();
+                if type_bounds.len() == 0 {
+                    panic!("Method {}, argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
+                }
+                if type_bounds.len() > 1 {
+                    panic!("Method {}, argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
+                }
+                let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
+
+                if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
+                    if bound.ident == "FnOnce" {
+                        panic!("Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?", method_name, arg_name);
+                    }
+
+                    if bound.ident == "FnMut" && !is_mut_ref {
+                        panic!("Method {}, argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
+                    }
+                    let fn_decl = bound.to_token_stream();
+                    match &bound.arguments {
+                        PathArguments::Parenthesized(pararg) => {
+                            //pararg.inputs
+                            let temp_name = Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
+                            emit_closure_helpers(version, temp_name.clone(), pararg, is_mut_ref, extra_definitions, bound.ident.clone());
+                            return ArgType::Fn(temp_name, fn_decl, pararg.inputs.iter().map(|x|x.clone()).collect(), is_mut_ref);
+                        }
+                        _ => {
+                            panic!("Fn/FnMut arguments must be enclosed in parenthesis")
+                        }
+                    }
+                } else {
+                    return ArgType::TraitReference(bound.ident.clone(), is_mut_ref);
+                }
+            } else {
+                panic!("Method {}, argument {}, reference to trait objects without 'dyn' are not supported.", method_name, arg_name);
+            }
+
+        }
+        Type::Path(path) => {
+            let first_seg = path.path.segments.iter().next().expect("Missing path segments");
+            if first_seg.ident == "Box" {
+                match &first_seg.arguments {
+                    PathArguments::AngleBracketed(ang) => {
+                        let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
+                        if ang.args.len() != 1 {
+                            panic!("Method {}, argument {}. Savefile requires Box arguments to have exactly one generic argument, a requirement not satisfied by type: {:?}", method_name, arg_name, typ);
+                        }
+                        match first_gen_arg {
+                            GenericArgument::Type(angargs) => {
+                                match angargs {
+                                    Type::TraitObject(trait_obj) => {
+                                        if is_reference {
+                                            panic!("Method {}, argument {}: Reference to boxed trait object is not supported by savefile. Try using a regular reference to the box content instead.", method_name, arg_name);
+                                        }
+                                        let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
+                                            match x {
+                                                TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().cloned().expect("Missing bounds of Box trait object").ident.clone())}
+                                                TypeParamBound::Lifetime(_) => {None}
+                                            }
+                                        }).collect();
+                                        if type_bounds.len() == 0 {
+                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered zero traits in Box.", method_name, arg_name);
+                                        }
+                                        if type_bounds.len() > 1 {
+                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered multiple traits in Box: {:?}", method_name, arg_name, trait_obj);
+                                        }
+                                        if trait_obj.dyn_token.is_none() {
+                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
+                                        }
+                                        let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
+                                        return ArgType::BoxedTrait(bound);
+                                    }
+                                    _ =>
+                                    {
+                                        match parse_type(version, arg_name, angargs, method_name, &mut *name_generator, extra_definitions, is_reference, is_mut_ref) {
+                                            ArgType::PlainData(_plain) => {
+                                                rawtype = path.to_token_stream();
+                                            }
+                                            _ => { panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ); }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ);
+                            }
+                        }
+                    }
+                    _ => {
+                        panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ);
+                    }
+                }
+
+            } else {
+                rawtype = path.to_token_stream();
+            }
+        }
+        _ => {
+            panic!("Method {}, argument {}, unsupported type: {:?}", method_name, arg_name, typ);
+        }
+    }
+    if !is_reference {
+        ArgType::PlainData(rawtype)
+    } else {
+        if is_mut_ref {
+            panic!("Method {}, argument {}: Mutable references are not supported by Savefile-abi (except for FnMut-trait objects): {}", method_name, arg_name, typ.to_token_stream());
+        }
+        ArgType::Reference(rawtype)
+    }
+}
+
 fn generate_method_definitions(
     version: u32,
     trait_name: Ident,
@@ -1060,122 +1224,7 @@ fn generate_method_definitions(
 
     for (arg_index, (arg_name,typ)) in args.iter().enumerate() {
 
-        let argtype;
-
-        match typ {
-            Type::Tuple(tup) if tup.elems.is_empty() => {
-                argtype = ArgType::PlainData(typ.to_token_stream());
-            }
-            Type::Reference(typref) => {
-                if typref.lifetime.is_some() {
-                    panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
-                }
-                if let Type::TraitObject(trait_obj) = &*typref.elem {
-                    if trait_obj.dyn_token.is_some() {
-                        let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
-                            match x {
-                                TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().expect("Missing bounds of Box trait object"))}
-                                TypeParamBound::Lifetime(_) => {
-                                    panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
-                                }
-                            }
-                        }).collect();
-                        if type_bounds.len() == 0 {
-                            panic!("Method {}, argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
-                        }
-                        if type_bounds.len() > 1 {
-                            panic!("Method {}, argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
-                        }
-                        let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
-
-                        if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
-                            if bound.ident == "FnOnce" {
-                                panic!("Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?", method_name, arg_name);
-                            }
-                            let is_mutref = typref.mutability.is_some();
-                            if bound.ident == "FnMut" && !is_mutref {
-                                panic!("Method {}, argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
-                            }
-                            let fn_decl = bound.to_token_stream();
-                            match &bound.arguments {
-                                PathArguments::Parenthesized(pararg) => {
-                                    //pararg.inputs
-                                    let temp_name = Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
-                                    emit_closure_helpers(version, temp_name.clone(), pararg, typref.mutability.is_some(), extra_definitions, bound.ident.clone());
-                                    argtype = ArgType::Fn(temp_name, fn_decl, pararg.inputs.iter().map(|x|x.clone()).collect(), is_mutref);
-                                }
-                                _ => {
-                                    panic!("Fn/FnMut arguments must be enclosed in parenthesis")
-                                }
-                            }
-                        } else {
-                            argtype = ArgType::TraitReference(bound.ident.clone(), typref.mutability.is_some());
-                        }
-                    } else {
-                        panic!("Method {}, argument {}, reference to trait objects without 'dyn' are not supported.", method_name, arg_name);
-                    }
-                } else {
-                    if typref.mutability.is_some() {
-                        panic!("Method {}, argument {}, mutable references not supported", method_name, arg_name);
-                    }
-                    match &*typref.elem {
-                        Type::Path(_) => {
-                            argtype = ArgType::Reference(typref.elem.to_token_stream());
-                        }
-                        Type::Slice(slice) => {
-                            argtype = ArgType::SliceReference(slice.elem.to_token_stream());
-                        }
-                        _ => { panic!("Method {}, argument {}, unsupported reference type: {:?}", method_name, arg_name, typ); }
-                    }
-                }
-            }
-            Type::Path(path) => {
-                let first_seg = path.path.segments.iter().next().expect("Missing path segments");
-                if first_seg.ident == "Box" {
-                    match &first_seg.arguments {
-                        PathArguments::AngleBracketed(ang) => {
-                            let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
-                            match first_gen_arg {
-                                GenericArgument::Type(angargs) => {
-                                    match angargs {
-                                        Type::TraitObject(trait_obj) => {
-                                            let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
-                                                match x {
-                                                    TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().cloned().expect("Missing bounds of Box trait object").ident.clone())}
-                                                    TypeParamBound::Lifetime(_) => {None}
-                                                }
-                                            }).collect();
-                                            if type_bounds.len() == 0 {
-                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered zero traits in Box.", method_name, arg_name);
-                                            }
-                                            if type_bounds.len() > 1 {
-                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered multiple traits in Box: {:?}", method_name, arg_name, trait_obj);
-                                            }
-                                            if trait_obj.dyn_token.is_none() {
-                                                panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
-                                            }
-                                            let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
-                                            argtype = ArgType::BoxedTrait(bound);
-                                        }
-                                        _ => panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
-                                    }
-                                }
-                                _ => panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
-                            }
-                        }
-                        _ => {
-                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name);
-                        }
-                    }
-
-                } else {
-                    argtype = ArgType::PlainData(path.to_token_stream());
-                }
-            }
-            _ => {
-                panic!("Method {}, argument {}, unsupported type: {:?}", method_name, arg_name, typ);
-            }
-        }
+        let argtype = parse_type(version, arg_name, *typ, &method_name, &mut *name_generator, extra_definitions, false, false);
 
         //let num_mask = 1u64 << (method_number as u64);
         let temp_arg_name = Ident::new(&format!("temp_{}",arg_name), Span::call_site());
@@ -1581,7 +1630,10 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                             Type::Reference(_) => {
                                 panic!("References in return-position are not supported.")
                             }
-                            Type::Tuple(TypeTuple{elems, ..}) if elems.is_empty()=> {
+                            Type::Tuple(TypeTuple{elems, ..}) => {
+                                if elems.len() > 3 {
+                                    panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
+                                }
                                 // Empty tuple!
                                 ret_type = ty.to_token_stream();
                                 ret_declaration = quote! { -> #ret_type }
@@ -1826,6 +1878,8 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize + _savefile::prelude::ReprC});
 
+
+
     let deserialize = quote_spanned! {defspan=>
         _savefile::prelude::Deserialize
     };
@@ -1847,13 +1901,12 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
-            let variant_count = enum1.variants.len();
-            if variant_count > 255 {
-                panic!("This library is not capable of deserializing enums with more than 255 variants. Our deepest apologies, we thought no-one would ever use more than 255 variants!");
-            }
+            //let variant_count = enum1.variants.len();
+            let enum_size = get_enum_size(&input.attrs,enum1.variants.len());
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
-                let var_idx = var_idx_usize as u8;
+                let var_idx = Literal::u32_unsuffixed(var_idx_usize as u32);
+
                 let var_ident = variant.ident.clone();
                 let variant_name = quote! { #name::#var_ident };
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
@@ -1897,6 +1950,13 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 }
             }
 
+            let variant_deserializer = match enum_size.discriminant_size {
+                1 => quote! { deserializer.read_u8()?  },
+                2 => quote! { deserializer.read_u16()?  },
+                4 => quote! { deserializer.read_u32()?  },
+                _ => unreachable!(),
+            };
+
             quote! {
                 #[allow(non_upper_case_globals)]
                 #[allow(clippy::double_comparisons)]
@@ -1907,7 +1967,7 @@ fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
 
-                            Ok(match deserializer.read_u8()? {
+                            Ok(match #variant_deserializer {
                                 #(#output,)*
                                 _ => return Err(_savefile::prelude::SavefileError::GeneralError{msg:format!("Corrupt file - unknown enum variant detected.")})
                             })
@@ -2121,10 +2181,17 @@ fn implement_reprc(field_infos: Vec<FieldInfo>, generics: syn::Generics, name: s
     }
 }
 
-fn get_enum_size(attrs: &[syn::Attribute]) -> Option<(u32, bool/* have seen 'C' as in repr(u8,C) */)> {
+struct EnumSize {
+    discriminant_size: u8,
+    repr_c: bool,
+    explicit_size: bool,
+}
 
-    let mut size_u32: Option<u32> = None;
+fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
+
+    let mut size_u8: Option<u8> = None;
     let mut repr_c_seen = false;
+    let mut have_seen_explicit_size = false;
     for attr in attrs.iter() {
         if let Ok(ref meta) = attr.parse_meta() {
             match meta {
@@ -2154,14 +2221,14 @@ fn get_enum_size(attrs: &[syn::Attribute]) -> Option<(u32, bool/* have seen 'C' 
                             };
                             match size_str.as_ref() {
                                 "C" => repr_c_seen = true,
-                                "u8" =>  size_u32 = Some(1),
-                                "i8" =>  size_u32 = Some(1),
-                                "u16" => size_u32 = Some(2),
-                                "i16" => size_u32 = Some(2),
-                                "u32" => size_u32 = Some(4),
-                                "i32" => size_u32 = Some(4),
-                                "u64" => size_u32 = Some(8),
-                                "i64" => size_u32 = Some(8),
+                                "u8" =>  { size_u8 = Some(1); have_seen_explicit_size = true; },
+                                "i8" =>  { size_u8 = Some(1); have_seen_explicit_size = true; },
+                                "u16" => { size_u8 = Some(2); have_seen_explicit_size = true; },
+                                "i16" => { size_u8 = Some(2); have_seen_explicit_size = true; },
+                                "u32" => { size_u8 = Some(4); have_seen_explicit_size = true; },
+                                "i32" => { size_u8 = Some(4); have_seen_explicit_size = true; },
+                                "u64" |
+                                "i64" => panic!("Savefile does not support enums with more than 2^32 variants."),
                                 _ => panic!("Unsupported repr(X) attribute on enum: {}", size_str),
                             }
                         }
@@ -2170,7 +2237,23 @@ fn get_enum_size(attrs: &[syn::Attribute]) -> Option<(u32, bool/* have seen 'C' 
             }
         }
     }
-    size_u32.map(|x|(x,repr_c_seen))
+    let discriminant_size = size_u8.unwrap_or_else(||{
+        if actual_variants <= 256 {
+            1
+        } else if actual_variants <= 65536 {
+            2
+        } else {
+            if actual_variants >= u32::MAX as usize {
+                panic!("The enum had an unreasonable number of variants");
+            }
+            4
+        }
+    });
+    EnumSize {
+        discriminant_size,
+        repr_c: repr_c_seen,
+        explicit_size: have_seen_explicit_size,
+    }
 }
 #[proc_macro_derive(
     ReprC,
@@ -2215,26 +2298,20 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
-            if enum1.variants.len() > 256 {
+            /*if enum1.variants.len() >= 256 {
                 if opt_in_fast {
                     panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
                 }
                 return implement_reprc_hardcoded_false(name, input.generics);
-            }
-            let enum_size = get_enum_size(&input.attrs);
-            if let Some((enum_size,_c)) = enum_size {
-                if enum_size != 1 {
-                    if opt_in_fast {
-                        panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
-                    }
-                    return implement_reprc_hardcoded_false(name, input.generics);
-                }
-            } else {
+            }*/
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            if !enum_size.explicit_size {
                 if opt_in_fast {
-                    panic!("The #[savefile_unsafe_and_fast] requires an explicit #[repr(C,u8)] attribute.");
+                    panic!("The #[savefile_unsafe_and_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
                 }
                 return implement_reprc_hardcoded_false(name, input.generics);
             }
+            _ = enum_size.repr_c; //We're going to use this in the future
 
             for variant in enum1.variants.iter() {
                 match &variant.fields {
@@ -2414,10 +2491,10 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             let mut variants = Vec::new();
             let mut value_variants = Vec::new();
             let mut len_variants = Vec::new();
-            for (var_idx, variant) in enum1.variants.iter().enumerate() {
-                if var_idx > 255 {
-                    panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
-                }
+            for (_var_idx, variant) in enum1.variants.iter().enumerate() {
+                /*if var_idx >= 256 {
+                    panic!("Savefile does not support enums with 256 variants or more. Sorry.");
+                }*/
                 //let var_idx = var_idx as u8;
                 let var_ident = variant.ident.clone();
                 let variant_name = quote! { #var_ident };
@@ -2705,26 +2782,11 @@ enum FieldOffsetStrategy {
 fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
 
-    let mut have_c = false;
-    let mut have_u8 = false;
-    for attr in input.attrs.iter() {
-        if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "repr" {
-            for item in attr.tokens.clone().into_iter() {
-                if let TokenTree::Group(grp) = &item {
-                    for tok in grp.stream() {
-                        if let TokenTree::Ident(id) = tok {
-                            if id == "C" {
-                                have_c = true;
-                            }
-                            if id == "u8" {
-                                have_u8 = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    //let mut have_u8 = false;
+
+
+
+    //let discriminant_size = discriminant_size.expect("Enum discriminant must be u8, u16 or u32. Use for example #[repr(u8)].");
 
     let name = input.ident;
 
@@ -2757,16 +2819,17 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
         &syn::Data::Enum(ref enum1) => {
             let max_variant_fields = enum1.variants.iter().map(|x|x.fields.len()).max().unwrap_or(0);
 
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
             let need_determine_offsets =
-                (max_variant_fields == 0 && have_u8) || (have_u8 && have_c);
+                (max_variant_fields == 0 && enum_size.explicit_size) || (enum_size.explicit_size && enum_size.repr_c);
 
 
             let mut variants = Vec::new();
             let mut variant_field_offset_extractors = vec![];
             for (var_idx, variant) in enum1.variants.iter().enumerate() {
-                if var_idx > 255 {
-                    panic!("Savefile does not support enums with more than 255 total variants. Sorry.");
-                }
+                /*if var_idx >= 256 {
+                    panic!("Savefile does not support enums with 256 total variants. Sorry.");
+                }*/
                 let var_idx = var_idx as u8;
                 let var_ident = variant.ident.clone();
                 let variant_name = quote! { #var_ident };
@@ -2871,6 +2934,8 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 field_offset_impl = quote!{};
             }
 
+            let discriminant_size = enum_size.discriminant_size;
+
             quote! {
                 #[allow(non_upper_case_globals)]
                 #[allow(clippy::double_comparisons)]
@@ -2890,13 +2955,15 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             #Schema::Enum (
                                 #SchemaEnum {
                                     dbg_name : stringify!(#name).to_string(),
+                                    discriminant_size: #discriminant_size,
                                     variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
                                         if local_version >= fromver && local_version <= tover {
                                             Some(x)
                                         } else {
                                             None
                                         }
-                                    }).collect()
+                                    }).collect(),
+
                                 }
                             )
                         }

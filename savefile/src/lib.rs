@@ -2353,6 +2353,11 @@ pub struct SchemaEnum {
     pub dbg_name: String,
     /// Variants of enum
     pub variants: Vec<Variant>,
+    /// If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
+    /// Valid values are 1, 2 or 4.
+    /// Otherwise, this is the number of bytes needed to represent the discriminant.
+    /// This is always the size of the enum in the disk-format.
+    pub discriminant_size: u8,
 }
 
 fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
@@ -3299,6 +3304,7 @@ impl Serialize for SchemaEnum {
         for var in &self.variants {
             var.serialize(serializer)?;
         }
+        self.discriminant_size.serialize(serializer)?;
         Ok(())
     }
 }
@@ -3311,9 +3317,15 @@ impl Deserialize for SchemaEnum {
         for _ in 0..l {
             ret.push(Variant::deserialize(deserializer)?);
         }
+        let size = if deserializer.file_version > 0 {
+            u8::deserialize(deserializer)?
+        } else {
+            1
+        };
         Ok(SchemaEnum {
             dbg_name,
             variants: ret,
+            discriminant_size: size
         })
     }
 }
@@ -3392,6 +3404,7 @@ impl Arbitrary for SchemaEnum {
         SchemaEnum {
             dbg_name: <_ as Arbitrary>::arbitrary(g),
             variants: <_ as Arbitrary>::arbitrary(g),
+            discriminant_size: *g.choose(&[1,2,4]).unwrap(),
         }
     }
 }
@@ -4549,6 +4562,7 @@ impl<T: WithSchema,R: WithSchema> WithSchema for Result<T,R> {
                         ],
                     }
                 ],
+                discriminant_size: 1,
             }
         )
     }

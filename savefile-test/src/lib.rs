@@ -44,6 +44,7 @@ mod test_nested_non_repr_c;
 mod test_nested_repr_c;
 mod test_arrayvec;
 mod test_generic;
+mod test_enum_many_variants;
 
 #[cfg(feature = "external_benchmarks")]
 #[cfg(not(miri))]

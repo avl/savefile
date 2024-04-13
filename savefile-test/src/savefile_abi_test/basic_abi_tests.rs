@@ -24,6 +24,12 @@ pub trait TestInterface {
 
     fn zero_sized_arg(&self, zero: ());
     fn simple_add(&self, a: u32, b: u32) -> u32;
+
+    fn tuple_add1(&self, a: (u32,), b: (u32,)) -> (u32,);
+    fn tuple_add2(&self, a: (u32,u32), b: (u32,u32)) -> (u32,u32);
+    fn tuple_add3(&self, a: (u32,u32,u32), b: (u32,u32,u32)) -> (u32,u32,u32);
+
+    fn boxes(&self, a: Box<u32>) -> Box<u32>;
 }
 
 #[derive(Default)]
@@ -51,31 +57,40 @@ impl TestInterface for TestInterfaceImpl {
     }
 
     fn call_callback(&mut self, callback: &mut dyn CallbackInterface) {
-
         callback.set(42);
     }
     fn arrays_add(&self, a: &[u32], b: &[u32]) -> Vec<u32> {
         let mut ret = Vec::new();
-        for (a0,b0) in a.iter().copied().zip(b.iter().copied())
+        for (a0, b0) in a.iter().copied().zip(b.iter().copied())
         {
             ret.push(a0 + b0);
         }
 
         ret
     }
-    fn do_nothing(&self) {
+    fn do_nothing(&self) {}
+    fn do_mut_nothing(&mut self) {}
 
-    }
-    fn do_mut_nothing(&mut self) {
-
-    }
-
-    fn zero_sized_arg(&self, _zero: ()) {
-
-    }
+    fn zero_sized_arg(&self, _zero: ()) {}
 
     fn simple_add(&self, a: u32, b: u32) -> u32 {
-        a+b
+        a + b
+    }
+
+    fn tuple_add1(&self, a: (u32, ), b: (u32, )) -> (u32, ) {
+        (a.0 + b.0, )
+    }
+
+    fn tuple_add2(&self, a: (u32, u32), b: (u32, u32)) -> (u32, u32) {
+        (a.0 + b.0, a.1 + b.1)
+    }
+
+    fn tuple_add3(&self, a: (u32, u32, u32), b: (u32, u32, u32)) -> (u32, u32, u32) {
+        (a.0 + b.0, a.1 + b.1, a.2 + b.2)
+    }
+
+    fn boxes(&self, a: Box<u32>) -> Box<u32> {
+        a
     }
 }
 
@@ -93,7 +108,16 @@ fn test_basic_call_abi() {
     conn.call_callback(&mut callback);
 
     assert_eq!(callback.x, 42);
+
+    assert_eq!(conn.tuple_add1((1,),(2,)), (3,));
+    assert_eq!(conn.tuple_add2((1,1),(2,2)), (3,3));
+    assert_eq!(conn.tuple_add3((1,1,1),(2,2,2)), (3,3,3));
+    assert_eq!(conn.boxes(Box::new(42u32)), Box::new(42u32));
+
+
 }
+
+
 #[test]
 fn test_slices() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl{});

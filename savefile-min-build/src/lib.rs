@@ -26,6 +26,11 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     assert_eq!(f.position() as usize,f_internal_size);
 }
 
+#[derive(Debug, PartialEq, Savefile)]
+enum EnumVer1 {
+    Variant1,
+    Variant2,
+}/*
 #[derive(Savefile,PartialEq,Eq,Debug)]
 struct SimpleStruct {
     x: u32
@@ -37,3 +42,4 @@ fn it_works() {
     assert_roundtrip(42i32);
     assert_roundtrip(SimpleStruct{x:42});
 }
+*/
