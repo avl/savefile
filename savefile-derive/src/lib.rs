@@ -441,6 +441,7 @@ pub fn savefile_abi_exportable(
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
         #[allow(clippy::needless_late_init)]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
         const _:() = {
             #uses
 
