@@ -8,8 +8,12 @@ pub(crate) fn get_extra_where_clauses(
     the_trait: TokenStream,
 ) -> TokenStream {
     let extra_where_separator;
-    if where_clause.is_some() {
-        extra_where_separator = quote!(,);
+    if let Some(where_clause) = where_clause {
+        if where_clause.predicates.trailing_punct() {
+            extra_where_separator = quote!();
+        } else {
+            extra_where_separator = quote!(,);
+        }
     } else {
         extra_where_separator = quote!(where);
     }

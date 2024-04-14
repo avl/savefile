@@ -87,6 +87,7 @@ pub(crate) struct MethodDefinitionComponents {
     pub(crate) caller_method_trampoline: TokenStream,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_type(
     version: u32,
     arg_name: &Ident,
@@ -116,7 +117,7 @@ fn parse_type(
             return parse_type(
                 version,
                 arg_name,
-                &*typref.elem,
+                &typref.elem,
                 method_name,
                 &mut *name_generator,
                 extra_definitions,
@@ -152,14 +153,13 @@ fn parse_type(
                 let type_bounds: Vec<_> = trait_obj
                     .bounds
                     .iter()
-                    .filter_map(|x| match x {
-                        TypeParamBound::Trait(t) => Some(
+                    .map(|x| match x {
+                        TypeParamBound::Trait(t) =>
                             t.path
                                 .segments
                                 .iter()
                                 .last()
                                 .expect("Missing bounds of Box trait object"),
-                        ),
                         TypeParamBound::Lifetime(_) => {
                             panic!(
                                 "Method {}, argument {}: Specifying lifetimes is not supported.",
@@ -204,7 +204,7 @@ fn parse_type(
                             return ArgType::Fn(
                                 temp_name,
                                 fn_decl,
-                                pararg.inputs.iter().map(|x| x.clone()).collect(),
+                                pararg.inputs.iter().cloned().collect(),
                                 is_mut_ref,
                             );
                         }
@@ -325,6 +325,7 @@ fn parse_type(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn generate_method_definitions(
     version: u32,
     trait_name: Ident,
@@ -351,7 +352,7 @@ pub(super) fn generate_method_definitions(
         let argtype = parse_type(
             version,
             arg_name,
-            *typ,
+            typ,
             &method_name,
             &mut *name_generator,
             extra_definitions,
@@ -465,11 +466,7 @@ pub(super) fn generate_method_definitions(
                 } else {
                     quote! {}
                 };
-                let newsymbol = if *ismut {
-                    quote! {new_from_ptr}
-                } else {
-                    quote! {new_from_ptr}
-                };
+                let newsymbol = quote! {new_from_ptr};
                 callee_trampoline_variable_deserializer.push(quote! {
                             if compatibility_mask&(1<<#arg_index) == 0 {
                                 panic!("Function arg is not layout-compatible!")
@@ -495,11 +492,7 @@ pub(super) fn generate_method_definitions(
                 } else {
                     quote! {const}
                 };
-                let newsymbol = if *ismut {
-                    quote! {new_from_ptr}
-                } else {
-                    quote! {new_from_ptr}
-                };
+                let newsymbol = quote! {new_from_ptr};
 
                 let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
 
@@ -642,6 +635,7 @@ pub(super) fn generate_method_definitions(
             serializer.write_u32(self.template.effective_version).unwrap();
             #(#caller_arg_serializers)*
 
+            unsafe {
             (self.template.entry)(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
                 compatibility_mask: compatibility_mask,
@@ -652,6 +646,7 @@ pub(super) fn generate_method_definitions(
                 abi_result: &mut result_buffer as *mut MaybeUninit<Result<#ret_type,SavefileError>> as *mut (),
                 receiver: abi_result_receiver::<#ret_type>,
             });
+            }
             let resval = unsafe { result_buffer.assume_init() };
 
             resval.expect("Unexpected panic in invocation target")
@@ -687,12 +682,12 @@ pub(super) fn generate_method_definitions(
             {
                 Ok(()) => {
                     let outcome = RawAbiCallResult::Success {data: slow_temp.as_ptr(), len: slow_temp.len()};
-                    receiver(&outcome as *const _, abi_result);
+                    unsafe { receiver(&outcome as *const _, abi_result) }
                 }
                 Err(err) => {
                     let err_str = format!("{:?}", err);
                     let outcome = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: err_str.as_ptr(), len: err_str.len()});
-                    receiver(&outcome as *const _, abi_result)
+                    unsafe { receiver(&outcome as *const _, abi_result) }
                 }
             }
 

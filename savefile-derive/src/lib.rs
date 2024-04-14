@@ -241,7 +241,7 @@ pub fn savefile_abi_exportable(
                 }
                 version = Some(
                     val.parse()
-                        .expect(&format!("Version must be numeric, but was: {}", val)),
+                        .unwrap_or_else(|_|panic!("Version must be numeric, but was: {}", val)),
                 );
             }
             _ => panic!("Unknown savefile_abi_exportable key: '{}'", key),
@@ -319,7 +319,7 @@ pub fn savefile_abi_exportable(
                     }
                 }
 
-                let self_arg = method.sig.inputs.iter().next().expect(&format!(
+                let self_arg = method.sig.inputs.iter().next().unwrap_or_else(||panic!(
                     "Method {} has no arguments. This is not supported - it must at least have a self-argument.",
                     method_name
                 ));
@@ -394,12 +394,12 @@ pub fn savefile_abi_exportable(
 
     let exports_for_trait = quote! {
 
-        pub extern "C" fn #abi_entry_light(flag: AbiProtocol) {
+        pub unsafe extern "C" fn #abi_entry_light(flag: AbiProtocol) {
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
 
         unsafe impl AbiExportable for dyn #trait_name {
-            const ABI_ENTRY : extern "C" fn (flag: AbiProtocol)  = #abi_entry_light;
+            const ABI_ENTRY : unsafe extern "C" fn (flag: AbiProtocol)  = #abi_entry_light;
             fn get_definition( version: u32) -> AbiTraitDefinition {
                 AbiTraitDefinition {
                     name: #trait_name_str.to_string(),
@@ -411,7 +411,7 @@ pub fn savefile_abi_exportable(
                 #version
             }
 
-            fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+            fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: unsafe extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
 
                 let mut cursor = Cursor::new(data);
 
@@ -454,7 +454,7 @@ pub fn savefile_abi_exportable(
     };
 
     // For debugging, uncomment to write expanded procmacro to file
-    // std::fs::write(format!("/home/anders/savefile/savefile-abi-min-lib/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
+    std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
 
     expanded.into()
 }
@@ -480,7 +480,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         const _:() = {
             #uses
             unsafe impl AbiExportableImplementation for #implementing_type {
-                const ABI_ENTRY: extern "C" fn (AbiProtocol) = #abi_entry;
+                const ABI_ENTRY: unsafe extern "C" fn (AbiProtocol) = #abi_entry;
                 type AbiInterface = dyn #trait_type;
 
                 fn new() -> Box<Self::AbiInterface> {
@@ -488,7 +488,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
                 }
             }
             #[no_mangle]
-            pub extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
+            pub unsafe extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
                 unsafe { abi_entry::<#implementing_type>(flag); }
             }
         };
@@ -534,6 +534,8 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         #r
     };
+    //std::fs::write("/home/anders/savefile/savefile-min-build/src/expanded.rs", expanded.to_string()).unwrap();
+
 
     expanded.into()
 }
@@ -1056,7 +1058,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             let mut variants = Vec::new();
             let mut value_variants = Vec::new();
             let mut len_variants = Vec::new();
-            for (_var_idx, variant) in enum1.variants.iter().enumerate() {
+            for variant in enum1.variants.iter() {
                 /*if var_idx >= 256 {
                     panic!("Savefile does not support enums with 256 variants or more. Sorry.");
                 }*/
@@ -1383,7 +1385,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
             let need_determine_offsets =
-                (max_variant_fields == 0 && enum_size.explicit_size) || (enum_size.explicit_size && enum_size.repr_c);
+                enum_size.explicit_size && (enum_size.repr_c || max_variant_fields == 0);
 
             let mut variants = Vec::new();
             let mut variant_field_offset_extractors = vec![];

@@ -1,3 +1,8 @@
+
+extern crate savefile_abi;
+extern crate savefile_derive;
+
+
 use savefile::prelude::*;
 use savefile::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Debug;
@@ -29,16 +34,18 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
 enum EnumVer1 {
     Variant1,
     Variant2,
-} /*
-  #[derive(Savefile,PartialEq,Eq,Debug)]
-  struct SimpleStruct {
-      x: u32
-  }
+}
 
-  #[test]
-  fn it_works() {
-      assert_roundtrip("Test-string".to_string());
-      assert_roundtrip(42i32);
-      assert_roundtrip(SimpleStruct{x:42});
-  }
-  */
+
+#[derive(Savefile,PartialEq,Eq,Debug)]
+struct SimpleStruct {
+    x: u32
+}
+
+#[test]
+fn it_works() {
+    assert_roundtrip("Test-string".to_string());
+    assert_roundtrip(42i32);
+    assert_roundtrip(SimpleStruct{x:42});
+}
+

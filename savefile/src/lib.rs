@@ -1576,6 +1576,11 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     }
 
     /// Serialize the bytes of the pointer itself
+    /// # Safety
+    /// This method does not actually have any safety invariants.
+    /// However, any realistic use case will involve a subsequent read_raw_ptr,
+    /// and for that to have any chance of being sound, this call must have used
+    /// a pointer to a valid T, or a null ptr.
     #[inline(always)]
     pub unsafe fn write_raw_ptr<T: ?Sized>(&mut self, data: *const T) -> Result<(), SavefileError> {
         let temp = &data as *const *const T;
@@ -1787,6 +1792,8 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
     }
 
     /// Reads the raw bit pattern of a pointer
+    /// # Safety
+    /// The stream must contain a valid pointer to T.
     pub unsafe fn read_raw_ptr<T: ?Sized>(&mut self) -> Result<*const T, SavefileError> {
         let mut temp = MaybeUninit::<*const T>::zeroed();
 
@@ -2500,10 +2507,11 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 }
 
 /// The actual layout in memory of a Vec-like datastructure.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy,Default)]
 #[repr(u8)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub enum VecOrStringLayout {
+    #[default]
     /// Nothing is known. We must assume that the memory layout could be anything
     Unknown,
     /// Data pointer, plus capacity and length usize
@@ -2522,12 +2530,6 @@ pub enum VecOrStringLayout {
     LengthData,
     /// Data, then length
     DataLength,
-}
-
-impl Default for VecOrStringLayout {
-    fn default() -> Self {
-        VecOrStringLayout::Unknown
-    }
 }
 
 impl ReprC for AbiMethodArgument {}
@@ -5076,6 +5078,7 @@ impl<T: Serialize + ReprC> Serialize for [T] {
             } else {
                 let l = self.len();
                 serializer.write_usize(l)?;
+                #[allow(clippy::manual_slice_size_calculation)] // I feel this way is clearer
                 serializer.write_buf(std::slice::from_raw_parts(
                     self.as_ptr() as *const u8,
                     std::mem::size_of::<T>() * l,

@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 savefile = { path = "../savefile", features = ["derive"], default-features = false }
-
+savefile-abi = { path = "../savefile-abi" }
+savefile-derive = {path = "../savefile-derive"}
 
