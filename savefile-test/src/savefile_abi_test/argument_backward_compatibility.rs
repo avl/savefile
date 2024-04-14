@@ -2,7 +2,7 @@ use savefile::{SavefileError};
 use savefile::prelude::AbiRemoved;
 use savefile_abi::{AbiConnection, AbiExportable, verify_compatiblity};
 use savefile_abi::RawAbiCallResult::AbiError;
-use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, Implementation1};
+use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
 use savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
 use savefile_derive::Savefile;
 
@@ -13,9 +13,17 @@ mod v1 {
         pub data1: u32,
         pub data2: u32,
     }
+
+    #[derive(Savefile)]
+    pub enum EnumArgument {
+        Variant1,
+        Variant2,
+    }
+
     #[savefile_abi_exportable(version=0)]
     pub trait ArgInterfaceV1 {
         fn sums(&self, a: Argument, b: Argument) -> u32;
+        fn enum_arg(&self, a: EnumArgument) -> String;
     }
     #[derive(Default)]
     pub struct Implementation1 {}
@@ -24,6 +32,12 @@ mod v1 {
     impl ArgInterfaceV1 for Implementation1 {
         fn sums(&self, a: Argument, b: Argument) -> u32 {
             a.data1+a.data2+b.data1+b.data2
+        }
+        fn enum_arg(&self, a: EnumArgument) -> String {
+            match a {
+                EnumArgument::Variant1 => "Variant1".into(),
+                EnumArgument::Variant2 => "Variant2".into(),
+            }
         }
     }
 }
@@ -41,9 +55,24 @@ mod v2 {
         #[savefile_versions="1.."]
         pub data3: u32,
     }
+    #[derive(Savefile)]
+    pub enum EnumArgument {
+        Variant1,
+        Variant2,
+        #[savefile_versions="1.."]
+        Variant3,
+    }
+
     #[savefile_abi_exportable(version=1)]
     pub trait ArgInterfaceV2 {
         fn sums(&self, a: ArgArgument, b: ArgArgument) -> u32;
+        fn enum_arg(&self, a: EnumArgument) -> String {
+            match a {
+                EnumArgument::Variant1 => "Variant1".into(),
+                EnumArgument::Variant2 => "Variant2".into(),
+                EnumArgument::Variant3 => "Variant3".into(),
+            }
+        }
     }
 
     #[derive(Default)]
@@ -92,6 +121,10 @@ pub fn test_caller_has_older_version() {
     );
     println!("Sum: {}", s);
     assert_eq!(s, 8); //Because implementation expects data2 and data3, but we're only sending data2.
+
+
+    assert_eq!(conn1.enum_arg(EnumArgument::Variant1), "Variant1".to_string());
+
 }
 
 #[test]
@@ -111,4 +144,15 @@ pub fn test_caller_has_newer_version() {
             data3: 4
         },
     ), 4); //Because implementation expects data1 and data2, but we're only sending data2.
+
+    assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant1), "Variant1".to_string());
+}
+
+#[test]
+#[should_panic(expected = "Enum EnumArgument, variant Variant3 is not present in version 0")]
+pub fn test_caller_has_newer_version_and_uses_enum_that_callee_doesnt_have() {
+    let iface1 : Box<dyn ArgInterfaceV1> = Box::new(Implementation1{});
+    let conn1 = unsafe { AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(<dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY, iface1 ) }.unwrap();
+
+    assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant3), "Variant3".to_string());
 }

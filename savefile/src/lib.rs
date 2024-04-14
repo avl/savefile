@@ -3388,7 +3388,7 @@ impl Arbitrary for SchemaPrimitive {
 impl Arbitrary for Field {
     fn arbitrary(g: &mut Gen) -> Self {
         Field {
-            name: <_ as Arbitrary>::arbitrary(g),
+            name: g.choose(&["","test"]).unwrap().to_string(),
             value: <_ as Arbitrary>::arbitrary(g),
             offset: <_ as Arbitrary>::arbitrary(g),
         }
@@ -3399,7 +3399,7 @@ impl Arbitrary for Field {
 impl Arbitrary for Variant {
     fn arbitrary(g: &mut Gen) -> Self {
         Variant {
-            name: <_ as Arbitrary>::arbitrary(g),
+            name: g.choose(&["","test"]).unwrap().to_string(),
             discriminant: <_ as Arbitrary>::arbitrary(g),
             fields: <_ as Arbitrary>::arbitrary(g),
         }
@@ -3410,8 +3410,8 @@ impl Arbitrary for Variant {
 impl Arbitrary for SchemaEnum {
     fn arbitrary(g: &mut Gen) -> Self {
         SchemaEnum {
-            dbg_name: <_ as Arbitrary>::arbitrary(g),
-            variants: <_ as Arbitrary>::arbitrary(g),
+            dbg_name: g.choose(&["","test"]).unwrap().to_string(),
+            variants: (0.. *g.choose(&[0usize, 1, 2, 3]).unwrap()).map(|_|<_ as Arbitrary>::arbitrary(g)).collect(),
             discriminant_size: *g.choose(&[1,2,4]).unwrap(),
         }
     }
@@ -3421,7 +3421,7 @@ impl Arbitrary for SchemaEnum {
 impl Arbitrary for SchemaStruct {
     fn arbitrary(g: &mut Gen) -> Self {
         SchemaStruct {
-            fields: <_ as Arbitrary>::arbitrary(g),
+            fields: (0.. *g.choose(&[0usize, 1, 2, 3]).unwrap()).map(|_|<_ as Arbitrary>::arbitrary(g)).collect(),
             dbg_name: <_ as Arbitrary>::arbitrary(g)
         }
     }
@@ -3445,8 +3445,8 @@ impl Arbitrary for Schema {
             QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
             return Schema::ZeroSize;
         }
-        let arg = u8::arbitrary(g);
-        let temp = match arg%9 {
+        let arg = g.choose(&[0,1,2,3,4,5,6,7]).unwrap_or(&8);
+        let temp = match arg {
             0 => Schema::Struct(<_ as Arbitrary>::arbitrary(g)),
             1 => Schema::Enum(<_ as Arbitrary>::arbitrary(g)),
             2 => Schema::Primitive(<_ as Arbitrary>::arbitrary(g)),
@@ -3455,7 +3455,7 @@ impl Arbitrary for Schema {
             5 => Schema::SchemaOption(<_ as Arbitrary>::arbitrary(g)),
             //Don't generate 'Undefined', since some of our tests assume not
             6 => Schema::ZeroSize,
-            7 => Schema::Custom(String::arbitrary(g)),
+            7 => Schema::Custom(g.choose(&["","test"]).unwrap().to_string()),
             _ => Schema::ZeroSize
         };
         _ = QUICKCHECKBOUND.fetch_sub(1, Ordering::Relaxed);
@@ -4734,7 +4734,10 @@ impl Introspect for bit_set::BitSet {
         for i in 0..self.len() {
             if self.contains(i) {
                 use std::fmt::Write;
-                write!(&mut ret, "{} ",i).unwrap();
+                if !ret.is_empty() {
+                    ret += " ";
+                }
+                write!(&mut ret, "{}",i).unwrap();
             }
         }
         ret

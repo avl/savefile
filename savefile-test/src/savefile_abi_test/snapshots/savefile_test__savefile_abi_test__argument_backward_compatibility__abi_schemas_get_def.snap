@@ -35,3 +35,21 @@ methods:
                     Primitive: schema_u32
                   offset: 0
           can_be_sent_as_ref: false
+  - name: enum_arg
+    info:
+      return_value:
+        Primitive:
+          schema_string: CapacityDataLength
+      arguments:
+        - schema:
+            Enum:
+              dbg_name: EnumArgument
+              variants:
+                - name: Variant1
+                  discriminant: 0
+                  fields: []
+                - name: Variant2
+                  discriminant: 1
+                  fields: []
+              discriminant_size: 1
+          can_be_sent_as_ref: false

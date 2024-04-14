@@ -781,10 +781,14 @@ pub fn test_bitset() {
     use bit_set::BitSet;
 
     let bs1 = BitSet::new();
+    assert_eq!(bs1.introspect_len(), 0);
+    assert_eq!(bs1.introspect_value(), "");
+    assert!(bs1.introspect_child(0).is_none());
     assert_roundtrip(bs1);
 
     let mut bs2 = BitSet::new();
     bs2.insert(0);
+    assert_eq!(bs2.introspect_value(), "0");
     assert_roundtrip(bs2);
     let mut bs3 = BitSet::new();
     bs3.insert(0);
@@ -1558,11 +1562,9 @@ fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
 
 
 
-#[ignore]
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_schema_roundtrip(a: Schema) -> bool {
-    println!("Schema: {}", format!("{:?}",a).len());
     assert_roundtrip_version(a, 1, false);
     true
 }
