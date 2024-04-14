@@ -1,4 +1,5 @@
-use savefile::{AbiRemoved, SavefileError};
+use savefile::{SavefileError};
+use savefile::prelude::AbiRemoved;
 use savefile_abi::{AbiConnection, AbiExportable, verify_compatiblity};
 use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, Implementation1};
@@ -32,7 +33,7 @@ mod v2 {
     use savefile_derive::{Savefile};
     use ::savefile::prelude::*;
 
-    #[derive(Savefile)]
+    #[derive(Savefile, Debug)]
     pub struct ArgArgument {
         #[savefile_versions="0..0"]
         pub data1: AbiRemoved<u32,>,
@@ -72,9 +73,14 @@ pub fn test_backward_compatibility() -> Result<(), SavefileError> {
 #[test]
 pub fn test_caller_has_older_version() {
     let iface2 : Box<dyn ArgInterfaceV2> = Box::new(Implementation2{});
+    assert_eq!(iface2.sums(
+        v2::ArgArgument{data2: 3, data3: 2, data1: AbiRemoved::new()},
+        v2::ArgArgument{data2: 3, data3: 2, data1: AbiRemoved::new()}
+    ), 10);
+
     let conn1 = unsafe { AbiConnection::<dyn ArgInterfaceV1>::from_boxed_trait_for_test(<dyn ArgInterfaceV2 as AbiExportable>::ABI_ENTRY, iface2 ) }.unwrap();
 
-    assert_eq!(conn1.sums(
+    let s = conn1.sums(
         v1::Argument {
             data1: 2,
             data2: 3,
@@ -83,7 +89,9 @@ pub fn test_caller_has_older_version() {
             data1: 4,
             data2: 5,
         },
-    ), 8); //Because implementation expects data2 and data3, but we're only sending data2.
+    );
+    println!("Sum: {}", s);
+    assert_eq!(s, 8); //Because implementation expects data2 and data3, but we're only sending data2.
 }
 
 #[test]
