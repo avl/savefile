@@ -264,8 +264,27 @@ enum ManyVariants {
     Variant258,
     Variant259,
 }
+#[repr(u32)]
+#[derive(Savefile,Debug,PartialEq)]
+enum U32Discriminant {
+    Variant0 = 0,
+    Variant1 = 1,
+    Variant4294967295 = 4294967295
+}
 
 #[test]
 fn test_enum_many_variants() {
+    assert_roundtrip(ManyVariants::Variant0);
+    assert_roundtrip(ManyVariants::Variant1);
+    assert_roundtrip(ManyVariants::Variant255);
+    assert_roundtrip(ManyVariants::Variant256);
     assert_roundtrip(ManyVariants::Variant259);
 }
+#[test]
+fn test_enum_u32_discriminant() {
+    assert_roundtrip(U32Discriminant::Variant0);
+    assert_roundtrip(U32Discriminant::Variant1);
+    assert_roundtrip(U32Discriminant::Variant4294967295);
+}
+
+

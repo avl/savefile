@@ -451,6 +451,9 @@ pub fn assert_roundtrip_to_new_version<
     roundtrip_result
 }
 
+
+mod enum_variant_versioning;
+
 #[test]
 pub fn test_array_string() {
     use arrayvec::ArrayString;

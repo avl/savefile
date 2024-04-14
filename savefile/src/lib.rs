@@ -2936,6 +2936,14 @@ fn diff_enum(a: &SchemaEnum, b: &SchemaEnum, path: String) -> Option<String> {
             b.variants.len()
         ));
     }
+    if a.discriminant_size != b.discriminant_size {
+        return Some(format!(
+            "At location [{}]: In memory enum has a representation with {} bytes for the discriminant, but disk format has {}.",
+            path,
+            a.discriminant_size,
+            b.discriminant_size
+        ));
+    }
     for i in 0..a.variants.len() {
         if a.variants[i].name != b.variants[i].name {
             return Some(format!(

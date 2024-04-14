@@ -81,9 +81,6 @@ fn check_is_remove(field_type: &syn::Type) -> RemovedType {
     RemovedType::NotRemoved
 }
 
-fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
-    parse_attr_tag2(attrs, false)
-}
 
 fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
     assert!(b.to >= b.from);
@@ -100,7 +97,7 @@ fn path_to_string(path: &syn::Path) -> String {
 
 
 
-fn parse_attr_tag2(attrs: &[syn::Attribute], _is_string_default_val: bool) -> AttrsResult {
+fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
     let mut field_from_version = None;
     let mut field_to_version = None;
     let mut default_fn = None;
@@ -619,6 +616,7 @@ fn get_extra_where_clauses(gen2: &Generics, where_clause: Option<&WhereClause>, 
 }
 fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let name = input.ident;
+    let name_str = name.to_string();
 
     let generics = input.generics;
 
@@ -659,6 +657,9 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                 let var_idx_u16:u16 = var_idx_usize as u16;
                 let var_idx_u32:u32 = var_idx_usize as u32;
 
+                let verinfo = parse_attr_tag(&variant.attrs);
+                let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
+
                 let variant_serializer = match enum_size.discriminant_size {
                     1 => quote! { serializer.write_u8(#var_idx_u8)? ; },
                     2 => quote! { serializer.write_u16(#var_idx_u16)? ; },
@@ -668,6 +669,7 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
 
                 let var_ident = (variant.ident).clone();
                 let variant_name = quote! { #name::#var_ident };
+                let variant_name_str = var_ident.to_string();
                 let variant_name_spanned = quote_spanned! { span => #variant_name};
                 match &variant.fields {
                     &syn::Fields::Named(ref fields_named) => {
@@ -683,8 +685,11 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                             })
                             .collect();
 
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false);
-                        output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => { 
+                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
+                        output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => {
+                                if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
+                                    panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
+                                }
                                 #variant_serializer
                                 #fields_serialized 
                             } ));
@@ -708,11 +713,23 @@ fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
                         let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
 
                         output.push(
-                            quote!( #variant_name_spanned(#(#fields_names,)*) => { #variant_serializer ; #fields_serialized  } ),
+                            quote!(
+
+                                #variant_name_spanned(#(#fields_names,)*) => {
+                                    if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
+                                        panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
+                                    }
+                                    #variant_serializer ; #fields_serialized
+                                }
+                            ),
                         );
                     }
                     &syn::Fields::Unit => {
-                        output.push(quote!( #variant_name_spanned => { #variant_serializer ; } ));
+                        output.push(quote!( #variant_name_spanned => {
+                            if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
+                                panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
+                            }
+                            #variant_serializer ; } ));
                     }
                 }
             }
@@ -2823,7 +2840,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             let need_determine_offsets =
                 (max_variant_fields == 0 && enum_size.explicit_size) || (enum_size.explicit_size && enum_size.repr_c);
 
-
             let mut variants = Vec::new();
             let mut variant_field_offset_extractors = vec![];
             for (var_idx, variant) in enum1.variants.iter().enumerate() {
@@ -2835,7 +2851,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 let variant_name = quote! { #var_ident };
                 let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
 
-                let verinfo = parse_attr_tag2(&variant.attrs, false);
+                let verinfo = parse_attr_tag(&variant.attrs);
                 let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
                 if field_to_version != std::u32::MAX {
