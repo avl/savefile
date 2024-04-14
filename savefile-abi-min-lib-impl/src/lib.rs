@@ -2,7 +2,7 @@ use savefile_abi_min_lib::{AdderCallback, AdderInterface, MyStuff};
 use savefile_derive::savefile_abi_export;
 
 pub struct AdderImplementation {
-    _name: String
+    _name: String,
 }
 
 impl Drop for AdderImplementation {
@@ -14,11 +14,10 @@ impl Drop for AdderImplementation {
 impl Default for AdderImplementation {
     fn default() -> Self {
         AdderImplementation {
-            _name: "Adderaren Kalle".to_string()
+            _name: "Adderaren Kalle".to_string(),
         }
     }
 }
-
 
 impl AdderInterface for AdderImplementation {
     fn add(&self, x: u32, y: &u32, z: &MyStuff) -> u32 {
@@ -33,9 +32,7 @@ impl AdderInterface for AdderImplementation {
     }
 
     fn add_simple(&self, x: u32, y: u32) -> u32 {
-        x+y
+        x + y
     }
 }
 savefile_abi_export!(AdderImplementation, AdderInterface);
-
-

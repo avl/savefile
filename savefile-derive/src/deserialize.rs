@@ -1,7 +1,7 @@
+use common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo, RemovedType};
+use get_enum_size;
 use proc_macro2::{Literal, TokenStream};
 use syn::DeriveInput;
-use ::{get_enum_size};
-use ::common::{RemovedType,get_extra_where_clauses, FieldInfo, parse_attr_tag, check_is_remove};
 
 fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
@@ -39,7 +39,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             match is_removed {
                 RemovedType::Removed => quote! { #removeddef::new() },
                 RemovedType::AbiRemoved => quote! { #abiremoveddef::new() },
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else if let Some(defval) = default_val {
             quote! { #defval }
@@ -61,12 +61,12 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 //TODO: Better message, tell user how to do this annotation
             };
             quote_spanned! { span =>
-            <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
-        }
+                <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
+            }
         } else if verinfo.ignore {
             quote_spanned! { span =>
-            #effective_default_val
-        }
+                #effective_default_val
+            }
         } else {
             if field_to_version < std::u32::MAX {
                 // A delete
@@ -97,13 +97,13 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             }
 
             quote_spanned! { span =>
-            #(#version_mappings)*
-            if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
-            } else {
-                #effective_default_val
+                #(#version_mappings)*
+                if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
+                    <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
+                } else {
+                    #effective_default_val
+                }
             }
-        }
         };
 
         if let Some(ref id) = field.ident {
@@ -124,25 +124,27 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize + _savefile::prelude::ReprC});
-
-
+    let extra_where = get_extra_where_clauses(
+        &generics,
+        where_clause,
+        quote! {_savefile::prelude::Deserialize + _savefile::prelude::ReprC},
+    );
 
     let deserialize = quote_spanned! {defspan=>
-    _savefile::prelude::Deserialize
-};
+        _savefile::prelude::Deserialize
+    };
 
     let uses = quote_spanned! { defspan =>
-    extern crate savefile as _savefile;
-};
+        extern crate savefile as _savefile;
+    };
 
     let deserializer = quote_spanned! {defspan=>
-    _savefile::prelude::Deserializer<impl std::io::Read>
-};
+        _savefile::prelude::Deserializer<impl std::io::Read>
+    };
 
     let saveerr = quote_spanned! {defspan=>
-    _savefile::prelude::SavefileError
-};
+        _savefile::prelude::SavefileError
+    };
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
@@ -150,7 +152,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
             //let variant_count = enum1.variants.len();
-            let enum_size = get_enum_size(&input.attrs,enum1.variants.len());
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
                 let var_idx = Literal::u32_unsuffixed(var_idx_usize as u32);
@@ -164,7 +166,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .named
                             .iter()
                             .enumerate()
-                            .map(|(field_index,field)| FieldInfo {
+                            .map(|(field_index, field)| FieldInfo {
                                 ident: Some(field.ident.clone().expect("Expected identifier [6]")),
                                 ty: &field.ty,
                                 index: field_index as u32,
@@ -181,7 +183,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .unnamed
                             .iter()
                             .enumerate()
-                            .map(|(field_index,field)| FieldInfo {
+                            .map(|(field_index, field)| FieldInfo {
                                 ident: None,
                                 ty: &field.ty,
                                 index: field_index as u32,
@@ -206,23 +208,23 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
             };
 
             quote! {
-            #[allow(non_upper_case_globals)]
-            #[allow(clippy::double_comparisons)]
-            #[allow(clippy::manual_range_contains)]
-            const #dummy_const: () = {
-                #uses
-                impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
-                    #[allow(unused_comparisons, unused_variables)]
-                    fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
+                #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
+                const #dummy_const: () = {
+                    #uses
+                    impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
 
-                        Ok(match #variant_deserializer {
-                            #(#output,)*
-                            _ => return Err(_savefile::prelude::SavefileError::GeneralError{msg:format!("Corrupt file - unknown enum variant detected.")})
-                        })
+                            Ok(match #variant_deserializer {
+                                #(#output,)*
+                                _ => return Err(_savefile::prelude::SavefileError::GeneralError{msg:format!("Corrupt file - unknown enum variant detected.")})
+                            })
+                        }
                     }
-                }
-            };
-        }
+                };
+            }
         }
         &syn::Data::Struct(ref struc) => {
             let output = match &struc.fields {
@@ -231,7 +233,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         .named
                         .iter()
                         .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
+                        .map(|(field_index, field)| FieldInfo {
                             ident: Some(field.ident.clone().expect("Expected identifier[7]")),
                             index: field_index as u32,
                             ty: &field.ty,
@@ -241,15 +243,15 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
                     let output1 = implement_deserialize(field_infos);
                     quote! {Ok(#name {
-                    #(#output1,)*
-                })}
+                        #(#output1,)*
+                    })}
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
                         .unnamed
                         .iter()
                         .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
+                        .map(|(field_index, field)| FieldInfo {
                             ident: None,
                             index: field_index as u32,
                             ty: &field.ty,
@@ -259,27 +261,27 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                     let output1 = implement_deserialize(field_infos);
 
                     quote! {Ok(#name (
-                    #(#output1,)*
-                ))}
+                        #(#output1,)*
+                    ))}
                 }
                 &syn::Fields::Unit => {
                     quote! {Ok(#name )}
                 } //_ => panic!("Only regular structs supported, not tuple structs."),
             };
             quote! {
-            #[allow(non_upper_case_globals)]
-            #[allow(clippy::double_comparisons)]
-            #[allow(clippy::manual_range_contains)]
-            const #dummy_const: () = {
-                    #uses
-                    impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
-                    #[allow(unused_comparisons, unused_variables)]
-                    fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                        #output
+                #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
+                const #dummy_const: () = {
+                        #uses
+                        impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
+                            #output
+                        }
                     }
-                }
-            };
-        }
+                };
+            }
         }
         _ => {
             panic!("Only regular structs are supported");

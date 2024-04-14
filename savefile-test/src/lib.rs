@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-#![cfg_attr(feature="nightly", feature(test))]
+#![cfg_attr(feature = "nightly", feature(test))]
 #![deny(warnings)]
 
 #[cfg(test)]
@@ -12,58 +12,56 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-#[cfg(feature="nightly")]
-extern crate test;
 extern crate savefile;
+#[cfg(feature = "nightly")]
+extern crate test;
 #[macro_use]
 extern crate savefile_derive;
 
-extern crate bit_vec;
 extern crate bit_set;
-extern crate smallvec;
+extern crate bit_vec;
 extern crate byteorder;
-extern crate rand;
 extern crate indexmap;
+extern crate rand;
 extern crate rustc_hash;
+extern crate smallvec;
 
-use std::fmt::Debug;
-use std::io::Write;
-use savefile::prelude::*;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
+use savefile::prelude::*;
+use std::fmt::Debug;
+use std::io::Write;
 extern crate arrayvec;
+extern crate bincode;
 extern crate parking_lot;
 extern crate savefile_abi;
-extern crate bincode;
 
-
-mod test_versioning;
 mod savefile_abi_test;
+mod test_arrayvec;
+mod test_enum_many_variants;
+mod test_generic;
 mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
-mod test_arrayvec;
-mod test_generic;
-mod test_enum_many_variants;
+mod test_versioning;
 
 #[cfg(feature = "external_benchmarks")]
 #[cfg(not(miri))]
 mod ext_benchmark;
-
 
 #[derive(Debug, Savefile, PartialEq)]
 struct NonCopy {
     ncfield: u8,
 }
 
-use std::io::Cursor;
 use std::io::BufWriter;
+use std::io::Cursor;
 
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0, true)
 }
 
-pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E,version:u32, schema: bool) {
+pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E, version: u32, schema: bool) {
     let mut f = Cursor::new(Vec::new());
     {
         let mut bufw = BufWriter::new(&mut f);
@@ -78,8 +76,7 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     }
     f.set_position(0);
     {
-        let roundtrip_result =
-        if schema {
+        let roundtrip_result = if schema {
             Deserializer::load::<E>(&mut f, version).unwrap()
         } else {
             Deserializer::load_noschema::<E>(&mut f, version).unwrap()
@@ -88,15 +85,13 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     }
 
     let f_internal_size = f.get_ref().len();
-    assert_eq!(f.position() as usize,f_internal_size);
+    assert_eq!(f.position() as usize, f_internal_size);
 }
 
 pub fn assert_roundtrip_debug<E: Serialize + Deserialize + Debug>(sample: E) {
     let sample_debug_string = format!("{:?}", sample);
     let round_tripped = roundtrip(sample);
-    assert_eq!(
-        sample_debug_string,
-        format!("{:?}", round_tripped));
+    assert_eq!(sample_debug_string, format!("{:?}", round_tripped));
 }
 
 pub fn roundtrip<E: Serialize + Deserialize>(sample: E) -> E {
@@ -118,7 +113,7 @@ pub fn roundtrip_version<E: Serialize + Deserialize>(sample: E, version: u32) ->
     }
 
     let f_internal_size = f.get_ref().len();
-    assert_eq!(f.position() as usize,f_internal_size);
+    assert_eq!(f.position() as usize, f_internal_size);
     roundtrip_result
 }
 #[derive(Debug, Savefile, PartialEq)]
@@ -166,7 +161,7 @@ pub struct TestStruct {
     x9: i64,
     x10: isize,
     x11: f32,
-    x12 : bool,
+    x12: bool,
     x13: u128,
     x14: i128,
 }
@@ -184,8 +179,8 @@ pub fn test_struct_reg() {
         x8: 8,
         x9: 9,
         x10: 10,
-        x11 : 11.5,
-        x12 : true,
+        x11: 11.5,
+        x12: true,
         x13: 13,
         x14: -14,
     });
@@ -199,18 +194,14 @@ pub fn test_vec() {
     assert_roundtrip(v);
 }
 
-
-#[derive(Savefile,Debug,PartialEq)]
-struct GenericWrapper<T:Serialize+Deserialize+WithSchema+Debug+PartialEq+Introspect> {
-    something : T
+#[derive(Savefile, Debug, PartialEq)]
+struct GenericWrapper<T: Serialize + Deserialize + WithSchema + Debug + PartialEq + Introspect> {
+    something: T,
 }
 
 #[test]
 pub fn test_generic() {
-
-    assert_roundtrip(GenericWrapper {
-        something:42u32
-    });
+    assert_roundtrip(GenericWrapper { something: 42u32 });
 }
 
 #[test]
@@ -219,11 +210,11 @@ pub fn test_bin_heap() {
     let mut v = BinaryHeap::new();
     v.push(43u8);
 
-    let vv:Vec<u8>=v.iter().map(|x|*x).collect();
-    let n=roundtrip(v);
-    let nv:Vec<u8>=n.iter().map(|x|*x).collect();
+    let vv: Vec<u8> = v.iter().map(|x| *x).collect();
+    let n = roundtrip(v);
+    let nv: Vec<u8> = n.iter().map(|x| *x).collect();
 
-    assert_eq!(nv,vv);
+    assert_eq!(nv, vv);
 }
 
 #[test]
@@ -250,143 +241,158 @@ pub fn test_string() {
     assert_roundtrip("test string".to_string());
 }
 
-
 #[derive(Clone, Copy, Debug, Savefile, PartialEq)]
 #[savefile_unsafe_and_fast]
 pub struct BenchStruct {
     x: usize,
     y: usize,
     z: u8,
-    pad1:u8,
-    pad2:u8,
-    pad3:u8,
-    pad4:u32,
+    pad1: u8,
+    pad2: u8,
+    pad3: u8,
+    pad4: u32,
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 #[cfg(not(miri))]
-use test::{Bencher, black_box};
+use test::{black_box, Bencher};
 
-#[derive(Savefile,PartialEq,Eq,Clone,Debug)]
-struct StructWithArrayString{
-    arraystr: ArrayString<30>
+#[derive(Savefile, PartialEq, Eq, Clone, Debug)]
+struct StructWithArrayString {
+    arraystr: ArrayString<30>,
 }
-
 
 #[test]
 pub fn test_struct_with_arraystring() {
     assert_roundtrip(StructWithArrayString {
-        arraystr: "hej".try_into().unwrap()
+        arraystr: "hej".try_into().unwrap(),
     });
 }
 
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 #[bench]
 #[cfg(not(miri))]
 fn bench_savefile_serialize(b: &mut Bencher) {
-
     let mut f = Cursor::new(Vec::with_capacity(100));
 
-    let mut test=Vec::new();
+    let mut test = Vec::new();
     for i in 0..1000 {
-    	test.push(BenchStruct {
-    		x:black_box(i),
-    		y:black_box(i),
-    		z:black_box(0),
-            pad1:0,
-            pad2:0,
-            pad3:0,
-            pad4:0,
-    	})
+        test.push(BenchStruct {
+            x: black_box(i),
+            y: black_box(i),
+            z: black_box(0),
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        })
     }
- 	b.iter(move || {
+    b.iter(move || {
         {
-            save_noschema(&mut f,0,&test).unwrap();
+            save_noschema(&mut f, 0, &test).unwrap();
         }
         black_box(&mut f);
 
         f.set_position(0);
         {
             let r = load_noschema::<Vec<BenchStruct>>(&mut f, 0).unwrap();
-            assert!(r.len()==1000);
+            assert!(r.len() == 1000);
         }
 
         f.set_position(0);
     });
 }
 
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 #[test]
 #[cfg(not(miri))]
 pub fn test_bench_struct() {
-    assert_roundtrip(
-        vec![
-            BenchStruct {
-                x:black_box(1),
-                y:black_box(2),
-                z:black_box(3),
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:black_box(4),
-                y:black_box(5),
-                z:black_box(6),
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:black_box(7),
-                y:black_box(8),
-                z:black_box(9),
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:black_box(1),
-                y:black_box(2),
-                z:black_box(3),
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            }
-        ]
-    );
+    assert_roundtrip(vec![
+        BenchStruct {
+            x: black_box(1),
+            y: black_box(2),
+            z: black_box(3),
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: black_box(4),
+            y: black_box(5),
+            z: black_box(6),
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: black_box(7),
+            y: black_box(8),
+            z: black_box(9),
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: black_box(1),
+            y: black_box(2),
+            z: black_box(3),
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+    ]);
 }
-
 
 #[test]
 pub fn test_bench_struct_miri_compat() {
-    assert_roundtrip(
-        vec![
-            BenchStruct {
-                x:1,
-                y:2,
-                z:3,
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:4,
-                y:5,
-                z:6,
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:7,
-                y:8,
-                z:9,
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            },
-            BenchStruct {
-                x:10,
-                y:11,
-                z:12,
-                pad1:0,pad2:0,pad3:0,pad4:0,
-            }
-        ]
-    );
+    assert_roundtrip(vec![
+        BenchStruct {
+            x: 1,
+            y: 2,
+            z: 3,
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: 4,
+            y: 5,
+            z: 6,
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: 7,
+            y: 8,
+            z: 9,
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+        BenchStruct {
+            x: 10,
+            y: 11,
+            z: 12,
+            pad1: 0,
+            pad2: 0,
+            pad3: 0,
+            pad4: 0,
+        },
+    ]);
 }
 #[test]
 pub fn test_u16_vec() {
     assert_roundtrip(Vec::<u16>::new());
-    assert_roundtrip(vec![0u16,42u16]);
-    assert_roundtrip(vec![0u16,1,2,3,4,5,6,7,8,9]);
+    assert_roundtrip(vec![0u16, 42u16]);
+    assert_roundtrip(vec![0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 }
 
 #[derive(Debug, PartialEq, Savefile)]
@@ -407,7 +413,7 @@ pub fn serialize_small_struct(input: NotSoSmallStruct, output: &mut Serializer<V
     let _ = input.serialize(output);
 }
 pub fn serialize_small_struct_manual(input: NotSoSmallStruct, output: &mut Vec<u8>) {
-    let slice: [u8;std::mem::size_of::<NotSoSmallStruct>()] = unsafe {std::mem::transmute(input)};
+    let slice: [u8; std::mem::size_of::<NotSoSmallStruct>()] = unsafe { std::mem::transmute(input) };
     output.extend(slice);
 }
 
@@ -431,7 +437,7 @@ struct SmallStruct2 {
 pub fn assert_roundtrip_to_new_version<
     E1: Serialize + Deserialize + Debug + PartialEq,
     E2: Serialize + Deserialize + Debug + PartialEq,
-> (
+>(
     sample_v1: E1,
     version_number1: u32,
     expected_v2: E2,
@@ -451,20 +457,19 @@ pub fn assert_roundtrip_to_new_version<
     roundtrip_result
 }
 
-
 mod enum_variant_versioning;
 
 #[test]
 pub fn test_array_string() {
     use arrayvec::ArrayString;
-    let arraystr:ArrayString<30>=ArrayString::from("Hello everyone").unwrap();
+    let arraystr: ArrayString<30> = ArrayString::from("Hello everyone").unwrap();
     assert_roundtrip(arraystr);
 }
 
 #[test]
 pub fn test_array_vec() {
     use arrayvec::ArrayVec;
-    let mut data:ArrayVec<u32, 30> = ArrayVec::new();
+    let mut data: ArrayVec<u32, 30> = ArrayVec::new();
     assert_roundtrip(data.clone());
     data.push(47);
     assert_roundtrip(data.clone());
@@ -477,7 +482,7 @@ pub fn test_array_vec() {
 #[test]
 pub fn test_array_vec_with_string() {
     use arrayvec::ArrayVec;
-    let mut data:ArrayVec<String, 30> = ArrayVec::new();
+    let mut data: ArrayVec<String, 30> = ArrayVec::new();
     assert_roundtrip(data.clone());
     data.push("hello".to_string());
     assert_roundtrip(data.clone());
@@ -489,21 +494,21 @@ pub fn test_array_vec_with_string() {
 
 #[test]
 pub fn test_smallvec0() {
-    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    let mut v = smallvec::SmallVec::<[u8; 2]>::new();
     v.push(1);
     assert_roundtrip(v);
 }
 
 #[test]
 pub fn test_smallvec1() {
-    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    let mut v = smallvec::SmallVec::<[u8; 2]>::new();
     v.push(1);
     assert_roundtrip(v);
 }
 
 #[test]
 pub fn test_smallvec2() {
-    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    let mut v = smallvec::SmallVec::<[u8; 2]>::new();
     v.push(1);
     v.push(2);
     assert_roundtrip(v);
@@ -511,72 +516,66 @@ pub fn test_smallvec2() {
 
 #[test]
 pub fn test_smallvec3() {
-    let mut v = smallvec::SmallVec::<[u8;2]>::new();
+    let mut v = smallvec::SmallVec::<[u8; 2]>::new();
     v.push(1);
     v.push(2);
     v.push(3);
     assert_roundtrip(v);
 }
 
-
-
-
 #[test]
 pub fn test_short_arrays() {
-    let empty:[u32;0]=[];
+    let empty: [u32; 0] = [];
     assert_roundtrip(empty);
     assert_roundtrip([1]);
-    assert_roundtrip([1,2]);
-    assert_roundtrip([1,2,3]);
+    assert_roundtrip([1, 2]);
+    assert_roundtrip([1, 2, 3]);
 }
-
 
 #[test]
 pub fn test_short_array_with_drop_contents() {
-    let empty:[String;0]=[];
+    let empty: [String; 0] = [];
     assert_roundtrip(empty);
-    assert_roundtrip(["Hej".to_string(),"Hello".to_string()]);
+    assert_roundtrip(["Hej".to_string(), "Hello".to_string()]);
 }
 
 #[test]
 pub fn test_short_array_with_drop_contents_leak_test() {
-    let mut i =0;
+    let mut i = 0;
     loop {
-        let test = [format!("Test {}",i),format!("Other {}",i)];
+        let test = [format!("Test {}", i), format!("Other {}", i)];
         assert_roundtrip(test);
-        i+=1;
-        if i>23 {
+        i += 1;
+        if i > 23 {
             break;
         }
     }
 }
 #[test]
 pub fn test_string_leak_test() {
-    let mut i =0;
+    let mut i = 0;
     loop {
-        let test = format!("Test {}",i);
+        let test = format!("Test {}", i);
         assert_roundtrip(test);
-        i+=1;
-        if i>23 {
+        i += 1;
+        if i > 23 {
             break;
         }
     }
 }
 
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 #[test]
 pub fn test_long_array() {
-    let arr=[47;32];
+    let arr = [47; 32];
     assert_roundtrip(arr);
 }
 
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 #[test]
 pub fn test_very_long_array() {
     #[derive(Savefile)]
-    struct LongArray([u32;1000]);
+    struct LongArray([u32; 1000]);
     impl Debug for LongArray {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "Long array")
@@ -593,8 +592,8 @@ pub fn test_very_long_array() {
         }
     }
 
-    let mut arr=LongArray([47;1000]);
-    arr.0[0]=0;
+    let mut arr = LongArray([47; 1000]);
+    arr.0[0] = 0;
     assert_roundtrip(arr);
 }
 
@@ -619,7 +618,7 @@ struct SmallStructRem1 {
     x2: i32,
     x3: String,
 }
-#[derive(Debug, PartialEq, Savefile )]
+#[derive(Debug, PartialEq, Savefile)]
 struct SmallStructRem2 {
     #[savefile_versions = "..0"]
     x1: Removed<u32>,
@@ -649,46 +648,43 @@ pub fn test_small_struct_remove() {
     );
 }
 
-
-
-#[derive(Debug, PartialEq, Savefile )]
+#[derive(Debug, PartialEq, Savefile)]
 struct TupleCarrier {
-    t0 : (),
-    t1 : (u32,),
-    t2 : (u32,u32),
-    t3 : (u32,u32,u32),
+    t0: (),
+    t1: (u32,),
+    t2: (u32, u32),
+    t3: (u32, u32, u32),
 }
 
 #[test]
 pub fn test_tuple() {
-     assert_roundtrip(TupleCarrier{
-        t0:(),
-        t1:(42u32,),
-        t2:(42u32,43u32),
-        t3:(42u32,43u32,44u32),
+    assert_roundtrip(TupleCarrier {
+        t0: (),
+        t1: (42u32,),
+        t2: (42u32, 43u32),
+        t3: (42u32, 43u32, 44u32),
     });
 }
 
-#[derive(Debug, PartialEq, Savefile )]
+#[derive(Debug, PartialEq, Savefile)]
 struct StructWithIgnored {
-    a:u32,
-    b:u32,
+    a: u32,
+    b: u32,
     #[savefile_ignore]
-    c:u32,
+    c: u32,
 }
 
 #[test]
 pub fn test_ignored() {
-    assert_roundtrip(StructWithIgnored{a:42,b:7,c:0});
+    assert_roundtrip(StructWithIgnored { a: 42, b: 7, c: 0 });
 }
-
 
 #[test]
 pub fn test_box() {
+    use std::cell::Cell;
+    use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
-    use std::cell::RefCell;
-    use std::cell::Cell;
     assert_roundtrip(Box::new(37));
     assert_roundtrip(Rc::new(38));
     assert_roundtrip(Arc::new(39));
@@ -698,19 +694,19 @@ pub fn test_box() {
 #[test]
 pub fn test_option() {
     assert_roundtrip(Some(32));
-    let x:Option<u32> = None;
+    let x: Option<u32> = None;
     assert_roundtrip(x);
 }
 
 #[test]
 pub fn test_result() {
-    let x:Result<u32,u32> = Ok(33);
+    let x: Result<u32, u32> = Ok(33);
     assert_roundtrip(x);
-    let x:Result<u32,u32> = Err(33);
+    let x: Result<u32, u32> = Err(33);
     assert_roundtrip(x);
 }
 
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 struct NewTypeSample(u32);
 
 #[test]
@@ -718,38 +714,32 @@ pub fn test_newtype() {
     assert_roundtrip(NewTypeSample(43));
 }
 
-#[derive(Savefile,Debug,PartialEq)]
-struct NewTypeSample2(u32,i8);
+#[derive(Savefile, Debug, PartialEq)]
+struct NewTypeSample2(u32, i8);
 
 #[test]
 pub fn test_newtype2() {
-
-    assert_roundtrip(NewTypeSample2(43,127));
-
+    assert_roundtrip(NewTypeSample2(43, 127));
 }
 
-#[derive(Savefile,Debug,PartialEq)]
-struct NoFields {
-}
+#[derive(Savefile, Debug, PartialEq)]
+struct NoFields {}
 
 #[test]
 pub fn test_struct_no_fields() {
-    assert_roundtrip(NoFields{});
+    assert_roundtrip(NoFields {});
 }
 
-
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 struct OnlyRemoved {
-    #[savefile_versions="0..0"]
-    rem : Removed<u32>,
+    #[savefile_versions = "0..0"]
+    rem: Removed<u32>,
 }
 
 #[test]
 pub fn test_struct_only_removed_fields() {
-    assert_roundtrip_version(OnlyRemoved{rem: Removed::new()},1, true);
+    assert_roundtrip_version(OnlyRemoved { rem: Removed::new() }, 1, true);
 }
-
-
 
 #[test]
 pub fn test_bitvec() {
@@ -763,11 +753,11 @@ pub fn test_bitvec() {
     bv3.push(false);
     let mut bv4 = BitVec::new();
     for i in 0..127 {
-        bv4.push(if i%2==0 {true} else {false});
+        bv4.push(if i % 2 == 0 { true } else { false });
     }
     let mut bv5 = BitVec::new();
     for i in 0..127 {
-        bv5.push(if i%3==0 {true} else {false});
+        bv5.push(if i % 3 == 0 { true } else { false });
     }
     assert_roundtrip(bv1);
     assert_roundtrip(bv2);
@@ -801,7 +791,6 @@ pub fn test_bitset() {
     bs4.insert(3);
     bs4.insert(200);
     assert_roundtrip(bs4);
-
 }
 #[repr(u8)]
 #[derive(Savefile, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -817,41 +806,38 @@ pub enum TerrainType {
 }
 
 #[repr(C)]
-#[derive(Savefile, Clone, Copy, Debug,PartialEq)]
+#[derive(Savefile, Clone, Copy, Debug, PartialEq)]
 #[savefile_unsafe_and_fast]
-pub struct TerrainTile
-{
+pub struct TerrainTile {
     pub curtype: TerrainType,
     pub resource: u8, //logarithmic scale, base resource abundance
     pub height: i16,
 }
 
-
 #[test]
 pub fn test_terrain() {
     assert_roundtrip(vec![TerrainTile {
-        curtype : TerrainType::Dirt,
-        resource:42,
-        height:2111
+        curtype: TerrainType::Dirt,
+        resource: 42,
+        height: 2111,
     }]);
 }
 
-
-#[cfg(test)]
-use std::sync::atomic::{AtomicU8,AtomicUsize,Ordering};
-use std::string::ToString;
-use savefile::{diff_schema, save_compressed, VecOrStringLayout};
-use std::sync::Arc;
-use std::path::PathBuf;
-use smallvec::alloc::collections::BTreeMap;
-use std::collections::HashSet;
-use std::borrow::Cow;
-use std::convert::TryInto;
-use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64};
-use std::time::Instant;
 use arrayvec::ArrayString;
 use quickcheck::{Arbitrary, Gen};
 use rustc_hash::{FxHashMap, FxHashSet};
+use savefile::{diff_schema, save_compressed, VecOrStringLayout};
+use smallvec::alloc::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::convert::TryInto;
+use std::path::PathBuf;
+use std::string::ToString;
+use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64};
+#[cfg(test)]
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
 #[test]
 pub fn test_atomic() {
@@ -866,7 +852,7 @@ pub fn test_atomic() {
     }
     f.set_position(0);
     {
-        let roundtrip_result : AtomicU8 = Deserializer::load(&mut f, 1).unwrap();
+        let roundtrip_result: AtomicU8 = Deserializer::load(&mut f, 1).unwrap();
         assert_eq!(atom.load(Ordering::SeqCst), roundtrip_result.load(Ordering::SeqCst));
     }
 }
@@ -885,65 +871,77 @@ pub fn test_all_atomics() {
     assert_roundtrip_debug(AtomicUsize::new(42));
 }
 
-
 #[test]
-pub fn test_schema1()  {
+pub fn test_schema1() {
     assert_roundtrip_version(
-        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)), VecOrStringLayout::CapacityDataLength),
-        1, false
+        Schema::Vector(
+            Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)),
+            VecOrStringLayout::CapacityDataLength,
+        ),
+        1,
+        false,
     );
     assert_roundtrip_version(
-        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::DataCapacityLength))), VecOrStringLayout::CapacityDataLength),
-        1, false
+        Schema::Vector(
+            Box::new(Schema::Primitive(SchemaPrimitive::schema_string(
+                VecOrStringLayout::DataCapacityLength,
+            ))),
+            VecOrStringLayout::CapacityDataLength,
+        ),
+        1,
+        false,
     );
 }
 #[test]
-pub fn test_schema2()  {
+pub fn test_schema2() {
     assert_roundtrip_version(
-        Schema::Vector(Box::new(Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::DataCapacityLength))), VecOrStringLayout::CapacityDataLength),
-        1, false
+        Schema::Vector(
+            Box::new(Schema::Primitive(SchemaPrimitive::schema_string(
+                VecOrStringLayout::DataCapacityLength,
+            ))),
+            VecOrStringLayout::CapacityDataLength,
+        ),
+        1,
+        false,
     );
 }
 
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 struct CanaryTest {
     canary1: Canary1,
-    some_field: i32
+    some_field: i32,
 }
 
 #[test]
 pub fn test_canary1() {
-    assert_roundtrip(CanaryTest{
+    assert_roundtrip(CanaryTest {
         canary1: Canary1::default(),
-        some_field : 43
+        some_field: 43,
     });
 }
-
-
-
 
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto1() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
         writer.write_u32::<LittleEndian>(0x01020304).unwrap();
         writer.flush().unwrap();
     }
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
 
     let end = reader.read_u32::<LittleEndian>().unwrap();
 
-    assert_eq!(end,0x01020304);
+    assert_eq!(end, 0x01020304);
 }
 
 #[test]
@@ -958,207 +956,193 @@ pub fn test_compressed_big() {
 
     assert!(buf.len() < 100);
 
-    let roundtripped :Vec<i32> = load(&mut Cursor::new(&buf), 0).unwrap();
+    let roundtripped: Vec<i32> = load(&mut Cursor::new(&buf), 0).unwrap();
 
-    assert_eq!(zeros,roundtripped);
-
+    assert_eq!(zeros, roundtripped);
 }
-
 
 #[test]
 #[cfg(not(miri))]
 pub fn test_compressed_small() {
-
     let input = 42u8;
     let mut buf = Vec::new();
     save_compressed(&mut buf, 0, &input).unwrap();
     let mut bufp = &buf[..];
-    let roundtripped :u8 = load(&mut bufp, 0).unwrap();
+    let roundtripped: u8 = load(&mut bufp, 0).unwrap();
 
-    assert_eq!(input,roundtripped);
+    assert_eq!(input, roundtripped);
 }
 #[test]
 #[cfg(not(miri))]
 pub fn test_compressed_smallish() {
-
     let input = 42u64;
     let mut buf = Vec::new();
     save_compressed(&mut buf, 0, &input).unwrap();
     let mut bufp = &buf[..];
-    let roundtripped :u64 = load(&mut bufp, 0).unwrap();
+    let roundtripped: u64 = load(&mut bufp, 0).unwrap();
 
-    assert_eq!(input,roundtripped);
+    assert_eq!(input, roundtripped);
 }
 
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto_big1() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
     let mut temp = Vec::new();
 
-    let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+    let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
     for i in 0..10000 {
         writer.write_u64::<LittleEndian>(i).unwrap();
     }
     writer.flush_final().unwrap();
 
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
 
     for i in 0..10000 {
-        assert_eq!(reader.read_u64::<LittleEndian>().unwrap(),i);
+        assert_eq!(reader.read_u64::<LittleEndian>().unwrap(), i);
     }
 }
-
-
 
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto_big2() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let zerokey = [0u8;32];
-    let mut kb = [0u8;1024];
+    let zerokey = [0u8; 32];
+    let mut kb = [0u8; 1024];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
         let kbl = kb.len();
         for i in 0..kbl {
-            kb[i] = (i/4) as u8;
+            kb[i] = (i / 4) as u8;
         }
         for _ in 0..1000 {
             writer.write(&kb).unwrap();
         }
         writer.flush().unwrap();
-
     }
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
 
     use std::io::Read;
-    let mut testkb= [0;1024];
+    let mut testkb = [0; 1024];
     for _ in 0..1000 {
         reader.read_exact(&mut testkb).unwrap();
         for j in 0..kb.len() {
-
-            assert_eq!(kb[j],testkb[j]);
+            assert_eq!(kb[j], testkb[j]);
         }
     }
 }
 
-
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto_big3() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let zerokey = [0u8;32];
-    let mut kb = [0u8;1024*128-17];
+    let zerokey = [0u8; 32];
+    let mut kb = [0u8; 1024 * 128 - 17];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
         let kbl = kb.len();
         for i in 0..kbl {
-            kb[i] = (i/4) as u8;
+            kb[i] = (i / 4) as u8;
         }
         for _ in 0..10 {
             writer.write(&kb).unwrap();
         }
         writer.flush().unwrap();
-
     }
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
 
     use std::io::Read;
-    let mut testkb= [0;1024*128-17];
+    let mut testkb = [0; 1024 * 128 - 17];
     for _ in 0..10 {
         reader.read_exact(&mut testkb).unwrap();
         for j in 0..kb.len() {
-
-            assert_eq!(kb[j],testkb[j]);
+            assert_eq!(kb[j], testkb[j]);
         }
     }
 }
 
-
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto_big4() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let zerokey = [0u8;32];
-    let mut kb = [0u8;10000];
+    let zerokey = [0u8; 32];
+    let mut kb = [0u8; 10000];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
         let kbl = kb.len();
         for i in 0..kbl {
-            kb[i] = (i/4) as u8;
+            kb[i] = (i / 4) as u8;
         }
         for _ in 0..1000 {
             writer.write(&kb).unwrap();
         }
         writer.flush().unwrap();
-
     }
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
     let mut reader = CryptoReader::new(&mut bufr, zerokey).unwrap();
 
     use std::io::Read;
-    let mut testkb= [0;10000];
+    let mut testkb = [0; 10000];
     for _ in 0..1000 {
         reader.read_exact(&mut testkb).unwrap();
         for j in 0..kb.len() {
-
-            assert_eq!(kb[j],testkb[j]);
+            assert_eq!(kb[j], testkb[j]);
         }
     }
 }
 #[test]
 #[cfg(not(miri))]
 pub fn test_crypto_big5() {
-    use byteorder::{LittleEndian};
-    use byteorder::WriteBytesExt;
+    use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
+    use byteorder::WriteBytesExt;
 
-    let mut kb = Box::new([0u8;1024*302]);
-    let mut testkb = Box::new([0;1024*302]);
+    let mut kb = Box::new([0u8; 1024 * 302]);
+    let mut testkb = Box::new([0; 1024 * 302]);
 
     for i in 0..kb.len() {
-        kb[i] = (i%257) as u8;
+        kb[i] = (i % 257) as u8;
     }
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
     let mut temp = Vec::new();
     {
-        let mut writer = CryptoWriter::new(&mut temp,zerokey).unwrap();
+        let mut writer = CryptoWriter::new(&mut temp, zerokey).unwrap();
         let _kbl = kb.len();
         let mut offset = 0;
         loop {
-            let mut delta:usize;
+            let mut delta: usize;
             if rng.gen_range(0..10) == 0 {
                 delta = rng.gen_range(0..300_000);
             } else {
@@ -1170,14 +1154,13 @@ pub fn test_crypto_big5() {
             if delta == 0 {
                 break;
             }
-            writer.write(&kb[offset..offset+delta]).unwrap();
+            writer.write(&kb[offset..offset + delta]).unwrap();
             offset += delta;
         }
 
         writer.flush().unwrap();
-
     }
-    let zerokey = [0u8;32];
+    let zerokey = [0u8; 32];
 
     let mut bufr = std::io::BufReader::new(&temp[..]);
 
@@ -1185,10 +1168,9 @@ pub fn test_crypto_big5() {
 
     use std::io::Read;
     {
-
         let mut offset = 0;
         loop {
-            let mut delta:usize;
+            let mut delta: usize;
             if rng.gen_range(0..10) == 0 {
                 delta = rng.gen_range(0..300_000);
             } else {
@@ -1200,9 +1182,9 @@ pub fn test_crypto_big5() {
             if delta == 0 {
                 break;
             }
-            reader.read_exact(&mut testkb[offset..offset+delta]).unwrap();
-            for i in offset..offset+delta {
-                assert_eq!(testkb[i],kb[i]);
+            reader.read_exact(&mut testkb[offset..offset + delta]).unwrap();
+            for i in offset..offset + delta {
+                assert_eq!(testkb[i], kb[i]);
             }
             offset += delta;
         }
@@ -1212,16 +1194,16 @@ pub fn test_crypto_big5() {
 #[test]
 #[cfg(not(miri))]
 pub fn test_encrypted_file1() {
-    save_encrypted_file("test.bin",1,&47usize,"mypassword").unwrap();
-    let result : usize = load_encrypted_file("test.bin",1,"mypassword").unwrap();
-    assert_eq!(result,47usize);
+    save_encrypted_file("test.bin", 1, &47usize, "mypassword").unwrap();
+    let result: usize = load_encrypted_file("test.bin", 1, "mypassword").unwrap();
+    assert_eq!(result, 47usize);
 }
 
 #[test]
 #[cfg(not(miri))]
 pub fn test_encrypted_file_bad_password() {
-    save_encrypted_file("test2.bin",1,&47usize,"mypassword").unwrap();
-    let result = load_encrypted_file::<usize,_>("test2.bin",1,"mypassword2");
+    save_encrypted_file("test2.bin", 1, &47usize, "mypassword").unwrap();
+    let result = load_encrypted_file::<usize, _>("test2.bin", 1, "mypassword2");
     assert!(result.is_err());
 }
 
@@ -1229,16 +1211,16 @@ pub fn test_encrypted_file_bad_password() {
 #[cfg(not(miri))]
 pub fn test_decrypt_junk_file() {
     {
-        use std::fs::File;
         use byteorder::WriteBytesExt;
         use rand::Rng;
+        use std::fs::File;
         let mut f = File::create("test3.bin").unwrap();
         let mut rng = rand::thread_rng();
         for _ in 0..1000 {
             f.write_u8(rng.gen()).unwrap();
         }
     }
-    let result = load_encrypted_file::<usize,_>("test3.bin",1,"mypassword2");
+    let result = load_encrypted_file::<usize, _>("test3.bin", 1, "mypassword2");
     assert!(result.is_err());
 }
 
@@ -1250,20 +1232,19 @@ struct MySimpleFuzz1 {
 
 #[test]
 pub fn fuzz_regression1() {
-    let mut data:&[u8] = &[0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 8, 3, 0, 3, 0, 64, 0, 0, 0];
-    let _t:Result<MySimpleFuzz1,_> = load_noschema(&mut data,0);
+    let mut data: &[u8] = &[0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 8, 3, 0, 3, 0, 64, 0, 0, 0];
+    let _t: Result<MySimpleFuzz1, _> = load_noschema(&mut data, 0);
 }
 
 #[test]
 pub fn fuzz_regression2() {
-    let mut data:&[u8] = &[0, 0, 0, 0, 3, 11, 0, 254, 2, 1, 252, 255, 254];
-    let _t:Result<MySimpleFuzz1,_> = load_noschema(&mut data,0);
+    let mut data: &[u8] = &[0, 0, 0, 0, 3, 11, 0, 254, 2, 1, 252, 255, 254];
+    let _t: Result<MySimpleFuzz1, _> = load_noschema(&mut data, 0);
 }
-
 
 #[test]
 pub fn test_roundtrip_arc_slice() {
-    let a1: Arc<[u32]> = vec![1,2,3,4].into();
+    let a1: Arc<[u32]> = vec![1, 2, 3, 4].into();
     assert_roundtrip(a1);
     let a2: Arc<[String]> = vec!["Hello".to_string()].into();
     assert_roundtrip(a2);
@@ -1271,7 +1252,7 @@ pub fn test_roundtrip_arc_slice() {
 
 #[test]
 pub fn test_roundtrip_boxed_slice() {
-    let a1: Box<[u32]> = vec![1,2,3,4].into_boxed_slice();
+    let a1: Box<[u32]> = vec![1, 2, 3, 4].into_boxed_slice();
     assert_roundtrip(a1);
     let a2: Box<[String]> = vec!["Hello".to_string()].into_boxed_slice();
     assert_roundtrip(a2);
@@ -1280,7 +1261,7 @@ pub fn test_roundtrip_boxed_slice() {
 #[test]
 pub fn test_serialize_btreemap() {
     let mut bm = BTreeMap::new();
-    bm.insert(45,32u16);
+    bm.insert(45, 32u16);
     assert_roundtrip(bm);
 }
 
@@ -1296,13 +1277,10 @@ pub fn test_serialize_hashset() {
     hs.insert("san".to_string());
     hs.insert("kompis".to_string());
     assert_roundtrip(hs);
-
-
 }
 
 #[test]
 pub fn test_roundtrip_char() {
-
     assert_roundtrip('\r');
     assert_roundtrip('\n');
     assert_roundtrip('H');
@@ -1315,60 +1293,57 @@ pub fn test_roundtrip_char() {
 pub fn test_pathbuf() {
     let x: PathBuf = "/c/hello.txt".into();
     assert_roundtrip(x);
-
 }
 
 #[test]
 pub fn test_arc_str() {
-    let x:Arc<str> = "hej".into();
+    let x: Arc<str> = "hej".into();
     assert_roundtrip(x);
 }
 #[test]
 pub fn test_arc_str_dedup() {
-    let x:Arc<str> = "hej".into();
-    let y:Arc<str> = "hejsan".into();
-    let z:Arc<str> = "hej".into();
+    let x: Arc<str> = "hej".into();
+    let y: Arc<str> = "hejsan".into();
+    let z: Arc<str> = "hej".into();
 
-    let (nx,ny,nz) = roundtrip((x.clone(),y.clone(),z.clone()));
+    let (nx, ny, nz) = roundtrip((x.clone(), y.clone(), z.clone()));
     assert_ne!(nx.as_ptr(), x.as_ptr());
     assert_ne!(ny.as_ptr(), y.as_ptr());
     assert_ne!(nz.as_ptr(), z.as_ptr());
-    assert_eq!(nx,nz);
-    assert_ne!(nx,ny);
-    assert_ne!(ny,nz);
-
-
+    assert_eq!(nx, nz);
+    assert_ne!(nx, ny);
+    assert_ne!(ny, nz);
 }
 
 #[test]
 pub fn test_cow_owned() {
-    let x:Cow<String> = Cow::Owned("hej".to_string());
+    let x: Cow<String> = Cow::Owned("hej".to_string());
     assert_roundtrip(x);
 }
 
 #[test]
 pub fn test_cow_borrowed() {
     let borrow = "world".to_string();
-    let x:Cow<String> = Cow::Borrowed(&borrow);
+    let x: Cow<String> = Cow::Borrowed(&borrow);
     assert_roundtrip(x);
 }
 
 #[derive(Savefile, Debug, PartialEq)]
 struct SomethingWithPathbufIn {
-    my_pathbuf: PathBuf
+    my_pathbuf: PathBuf,
 }
 
 #[test]
 pub fn test_pathbuf2() {
-    let x  = SomethingWithPathbufIn {
-        my_pathbuf: "/d/something.txt".into()
+    let x = SomethingWithPathbufIn {
+        my_pathbuf: "/d/something.txt".into(),
     };
     assert_roundtrip(x);
 }
 
-#[derive(SavefileNoIntrospect,Debug,PartialEq)]
+#[derive(SavefileNoIntrospect, Debug, PartialEq)]
 struct ExampleWithoutAutomaticIntrospect {
-    x: u32
+    x: u32,
 }
 impl Introspect for ExampleWithoutAutomaticIntrospect {
     fn introspect_value(&self) -> String {
@@ -1381,18 +1356,20 @@ impl Introspect for ExampleWithoutAutomaticIntrospect {
 }
 
 #[cfg(test)]
-fn speed(len:usize, time: std::time::Duration) -> String {
+fn speed(len: usize, time: std::time::Duration) -> String {
     let total_seconds = time.as_micros() as f64 * 1e-6;
-    format!("{} bytes in {:.2}s = {} GB/sec",
-        len, total_seconds,
-            (len as f64/total_seconds)/1e9
+    format!(
+        "{} bytes in {:.2}s = {} GB/sec",
+        len,
+        total_seconds,
+        (len as f64 / total_seconds) / 1e9
     )
 }
 
 #[test]
 #[ignore] //A bit expensive to run in CI
 pub fn test_many_strings() {
-    let mut outer:Vec<Vec<String>> = Vec::new();
+    let mut outer: Vec<Vec<String>> = Vec::new();
     for _ in 0..100 {
         let mut inner = vec![];
         for _ in 0..1000_000 {
@@ -1404,22 +1381,25 @@ pub fn test_many_strings() {
     {
         let t = Instant::now();
         Serializer::save_noschema(&mut f, 1, &outer).unwrap();
-        println!("Save-Time: {}", speed(f.get_ref().len(),t.elapsed()));
+        println!("Save-Time: {}", speed(f.get_ref().len(), t.elapsed()));
     }
     {
         let t = Instant::now();
         f.set_position(0);
-        let deserialized : Vec<Vec<String>> = Deserializer::load_noschema(&mut f, 1).unwrap();
-        println!("Load-Time: {} (last value: {})",speed(f.get_ref().len(),t.elapsed()), deserialized.last().unwrap().last().unwrap());
+        let deserialized: Vec<Vec<String>> = Deserializer::load_noschema(&mut f, 1).unwrap();
+        println!(
+            "Load-Time: {} (last value: {})",
+            speed(f.get_ref().len(), t.elapsed()),
+            deserialized.last().unwrap().last().unwrap()
+        );
     }
     println!("Size: {}", f.get_ref().len() as f64 / 1e9f64);
 }
 
-
 #[test]
 #[ignore] //A bit expensive to run in CI
 pub fn test_many_arraystrings() {
-    let mut outer:Vec<Vec<ArrayString<20>>> = Vec::new();
+    let mut outer: Vec<Vec<ArrayString<20>>> = Vec::new();
     for _ in 0..100 {
         let mut inner = vec![];
         for _ in 0..1000_000 {
@@ -1431,25 +1411,28 @@ pub fn test_many_arraystrings() {
     {
         let t = Instant::now();
         Serializer::save_noschema(&mut f, 1, &outer).unwrap();
-        println!("Save-Time: {}", speed(f.get_ref().len(),t.elapsed()));
+        println!("Save-Time: {}", speed(f.get_ref().len(), t.elapsed()));
     }
     {
         let t = Instant::now();
         f.set_position(0);
-        let deserialized : Vec<Vec<ArrayString<20>>> = Deserializer::load_noschema(&mut f, 1).unwrap();
-        println!("Load-Time: {} (last value: {})",  speed(f.get_ref().len(),t.elapsed()), deserialized.last().unwrap().last().unwrap());
+        let deserialized: Vec<Vec<ArrayString<20>>> = Deserializer::load_noschema(&mut f, 1).unwrap();
+        println!(
+            "Load-Time: {} (last value: {})",
+            speed(f.get_ref().len(), t.elapsed()),
+            deserialized.last().unwrap().last().unwrap()
+        );
     }
 
     println!("Size: {}", f.get_ref().len() as f64 / 1e9f64);
 }
 
-
 #[test]
 pub fn test_fx_hashmap() {
     let mut h = FxHashMap::default();
-    h.insert(43u32,43u64);
+    h.insert(43u32, 43u64);
     assert_roundtrip(h);
-    assert_roundtrip(FxHashMap::<u32,u32>::default());
+    assert_roundtrip(FxHashMap::<u32, u32>::default());
 }
 #[test]
 pub fn test_fx_hashset() {
@@ -1459,7 +1442,7 @@ pub fn test_fx_hashset() {
     assert_roundtrip(FxHashSet::<u32>::default());
 }
 
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 struct MyUnitStruct;
 
 #[test]
@@ -1482,20 +1465,19 @@ pub fn test_zero_size_vec_items() {
     assert_roundtrip(test);
 }
 
-
-#[derive(Savefile,PartialEq,Debug)]
+#[derive(Savefile, PartialEq, Debug)]
 struct TestIgnoreExample {
     a: f64,
     b: f64,
     #[savefile_ignore]
-    cached_product: f64
+    cached_product: f64,
 }
 
 #[test]
 pub fn test_struct_with_ignored_member() {
-    assert_roundtrip(TestIgnoreExample{
-        a:42.0,
-        b:43.0,
+    assert_roundtrip(TestIgnoreExample {
+        a: 42.0,
+        b: 43.0,
         cached_product: 0.0,
     });
 }
@@ -1504,24 +1486,23 @@ pub fn test_struct_with_ignored_member() {
 pub fn test_indexmap() {
     let mut imap = IndexMap::new();
     assert_roundtrip(imap.clone());
-    imap.insert(43u32,"hej".to_string());
+    imap.insert(43u32, "hej".to_string());
     assert_roundtrip(imap.clone());
 
-    imap.insert(44,"hej".to_string());
-    imap.insert(45,"hej".to_string());
+    imap.insert(44, "hej".to_string());
+    imap.insert(45, "hej".to_string());
     assert_roundtrip(imap.clone());
 }
-
 
 #[test]
 pub fn test_indexset() {
     let mut iset = IndexSet::new();
     assert_roundtrip(iset.clone());
-    iset.insert((43u32,44u32));
+    iset.insert((43u32, 44u32));
     assert_roundtrip(iset.clone());
 
-    iset.insert((43,43));
-    iset.insert((44,44));
+    iset.insert((43, 43));
+    iset.insert((44, 44));
     assert_roundtrip(iset.clone());
 }
 
@@ -1538,12 +1519,10 @@ pub fn test_raw_write_region() {
         writer: &mut data,
         file_version: 0,
     };
-    let r = RawStruct {
-        a: 0, b:0, c: 42
-    };
+    let r = RawStruct { a: 0, b: 0, c: 42 };
     let _ = r.c;
-    unsafe{
-        ser.raw_write_region(&r,&r.a, &r.b, 0).unwrap();
+    unsafe {
+        ser.raw_write_region(&r, &r.a, &r.b, 0).unwrap();
     }
 }
 
@@ -1558,9 +1537,6 @@ fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
     println!("Yeah: {:?}", xs);
     xs == roundtrip(xs.clone())
 }
-
-
-
 
 #[quickcheck]
 #[cfg(not(miri))]

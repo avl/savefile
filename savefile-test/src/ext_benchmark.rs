@@ -1,74 +1,66 @@
-
-
-
 mod savefile_test_bad_schema {
     use savefile::prelude::*;
 
-
     #[derive(Savefile, PartialEq, Debug)]
     struct Original {
-        some_number : usize,
-        a_few_strings: Vec<String>
+        some_number: usize,
+        a_few_strings: Vec<String>,
     }
-
 
     #[derive(Savefile, PartialEq, Debug)]
     struct NewVersion {
         a_few_strings: Vec<String>,
-        some_number : usize,
+        some_number: usize,
     }
 
     #[test]
-    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: IncompatibleSchema { message: \"Saved schema differs from in-memory schema for version 0. Error: At location [./Original/some_number]: In memory schema: vector, file schema: primitive\" }")]
+    #[should_panic(
+        expected = "called `Result::unwrap()` on an `Err` value: IncompatibleSchema { message: \"Saved schema differs from in-memory schema for version 0. Error: At location [./Original/some_number]: In memory schema: vector, file schema: primitive\" }"
+    )]
     fn test_schema_mismatch_savefile() {
-
         let original = Original {
             some_number: 0,
-            a_few_strings: vec!["hello".to_string()]
+            a_few_strings: vec!["hello".to_string()],
         };
 
         let encoded: Vec<u8> = save_to_mem(0, &original).unwrap();
         let decoded: NewVersion = load_from_mem(&encoded[..], 0).unwrap();
-        println!("Savefile decoded: {:?}",decoded);
+        println!("Savefile decoded: {:?}", decoded);
     }
 }
 
-
 mod bincode_test_bad_schema {
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Original {
-        some_number : usize,
-        a_few_strings: Vec<String>
+        some_number: usize,
+        a_few_strings: Vec<String>,
     }
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct NewVersion {
         a_few_strings: Vec<String>,
-        some_number : usize
+        some_number: usize,
     }
 
     #[test]
     fn test_schema_mismatch_bincode() {
-
         let original = Original {
             some_number: 0,
-            a_few_strings: vec!["hello".to_string()]
+            a_few_strings: vec!["hello".to_string()],
         };
 
         let encoded: Vec<u8> = bincode::serialize(&original).unwrap();
         let decoded: NewVersion = bincode::deserialize(&encoded[..]).unwrap();
-        println!("Bincode decoded: {:?}",decoded);
-
+        println!("Bincode decoded: {:?}", decoded);
     }
 }
 
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 mod bincode_benchmark {
-    use test::{Bencher, black_box};
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
+    use test::{black_box, Bencher};
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Entity {
@@ -79,10 +71,9 @@ mod bincode_benchmark {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
-    #[cfg(feature="nightly")]
+    #[cfg(feature = "nightly")]
     #[bench]
     fn bench_ext_bincode(b: &mut Bencher) {
-
         let mut entities = Vec::new();
         for _ in 0..100_000 {
             entities.push(Entity { x: 0.0, y: 4.0 });
@@ -103,12 +94,10 @@ mod bincode_benchmark {
     }
 }
 
-
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 mod savefile_benchmark {
-    use test::{Bencher, black_box};
     use savefile::prelude::*;
+    use test::{black_box, Bencher};
 
     #[derive(Savefile, PartialEq, Debug, Clone, Copy)]
     #[savefile_unsafe_and_fast]
@@ -121,10 +110,9 @@ mod savefile_benchmark {
     #[derive(Savefile, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
-    #[cfg(feature="nightly")]
+    #[cfg(feature = "nightly")]
     #[bench]
     fn bench_ext_savefile_with_reprc(b: &mut Bencher) {
-
         let mut entities = Vec::new();
         for _ in 0..100_000 {
             entities.push(Entity { x: 0.0, y: 4.0 });
@@ -134,22 +122,21 @@ mod savefile_benchmark {
 
         b.iter(move || {
             let mut encoded = Vec::new();
-            savefile::save( &mut encoded, 0, &world).unwrap();
+            savefile::save(&mut encoded, 0, &world).unwrap();
 
             let mut encoded_slice = &encoded[..];
-            let decoded: World = savefile::load::<World>(&mut encoded_slice, 0 ).unwrap();
+            let decoded: World = savefile::load::<World>(&mut encoded_slice, 0).unwrap();
 
-            assert!((decoded.0.last().unwrap().x - 10.0).abs()<1e-9);
+            assert!((decoded.0.last().unwrap().x - 10.0).abs() < 1e-9);
             decoded
         })
     }
 }
 
-
-#[cfg(feature="nightly")]
+#[cfg(feature = "nightly")]
 mod savefile_benchmark_no_reprc {
-    use test::{Bencher, black_box};
     use savefile::prelude::*;
+    use test::{black_box, Bencher};
 
     #[derive(Savefile, PartialEq, Debug, Clone, Copy)]
     struct Entity {
@@ -160,10 +147,9 @@ mod savefile_benchmark_no_reprc {
     #[derive(Savefile, PartialEq, Debug)]
     struct World(Vec<Entity>);
 
-    #[cfg(feature="nightly")]
+    #[cfg(feature = "nightly")]
     #[bench]
     fn bench_ext_savefile_no_reprc(b: &mut Bencher) {
-
         let mut entities = Vec::new();
         for _ in 0..100_000 {
             entities.push(Entity { x: 0.0, y: 4.0 });
@@ -173,14 +159,13 @@ mod savefile_benchmark_no_reprc {
 
         b.iter(move || {
             let mut encoded = Vec::new();
-            savefile::save( &mut encoded, 0, &world).unwrap();
+            savefile::save(&mut encoded, 0, &world).unwrap();
 
             let mut encoded_slice = &encoded[..];
-            let decoded: World = savefile::load::<World>(&mut encoded_slice, 0 ).unwrap();
+            let decoded: World = savefile::load::<World>(&mut encoded_slice, 0).unwrap();
 
-            assert!((decoded.0.last().unwrap().x - 10.0).abs()<1e-9);
+            assert!((decoded.0.last().unwrap().x - 10.0).abs() < 1e-9);
             decoded
         })
     }
 }
-

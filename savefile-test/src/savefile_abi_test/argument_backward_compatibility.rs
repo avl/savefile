@@ -1,11 +1,10 @@
-use savefile::{SavefileError};
 use savefile::prelude::AbiRemoved;
-use savefile_abi::{AbiConnection, AbiExportable, verify_compatiblity};
+use savefile::SavefileError;
 use savefile_abi::RawAbiCallResult::AbiError;
+use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
 use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
 use savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
 use savefile_derive::Savefile;
-
 
 mod v1 {
     #[derive(Savefile)]
@@ -20,7 +19,7 @@ mod v1 {
         Variant2,
     }
 
-    #[savefile_abi_exportable(version=0)]
+    #[savefile_abi_exportable(version = 0)]
     pub trait ArgInterfaceV1 {
         fn sums(&self, a: Argument, b: Argument) -> u32;
         fn enum_arg(&self, a: EnumArgument) -> String;
@@ -28,10 +27,9 @@ mod v1 {
     #[derive(Default)]
     pub struct Implementation1 {}
 
-
     impl ArgInterfaceV1 for Implementation1 {
         fn sums(&self, a: Argument, b: Argument) -> u32 {
-            a.data1+a.data2+b.data1+b.data2
+            a.data1 + a.data2 + b.data1 + b.data2
         }
         fn enum_arg(&self, a: EnumArgument) -> String {
             match a {
@@ -43,27 +41,27 @@ mod v1 {
 }
 
 mod v2 {
+    use savefile::prelude::*;
     use savefile::AbiRemoved;
-    use savefile_derive::{Savefile};
-    use ::savefile::prelude::*;
+    use savefile_derive::Savefile;
 
     #[derive(Savefile, Debug)]
     pub struct ArgArgument {
-        #[savefile_versions="0..0"]
-        pub data1: AbiRemoved<u32,>,
+        #[savefile_versions = "0..0"]
+        pub data1: AbiRemoved<u32>,
         pub data2: u32,
-        #[savefile_versions="1.."]
+        #[savefile_versions = "1.."]
         pub data3: u32,
     }
     #[derive(Savefile)]
     pub enum EnumArgument {
         Variant1,
         Variant2,
-        #[savefile_versions="1.."]
+        #[savefile_versions = "1.."]
         Variant3,
     }
 
-    #[savefile_abi_exportable(version=1)]
+    #[savefile_abi_exportable(version = 1)]
     pub trait ArgInterfaceV2 {
         fn sums(&self, a: ArgArgument, b: ArgArgument) -> u32;
         fn enum_arg(&self, a: EnumArgument) -> String {
@@ -79,12 +77,10 @@ mod v2 {
     pub struct Implementation2 {}
     impl ArgInterfaceV2 for Implementation2 {
         fn sums(&self, a: ArgArgument, b: ArgArgument) -> u32 {
-            a.data3+a.data2+b.data2+b.data3
+            a.data3 + a.data2 + b.data2 + b.data3
         }
     }
 }
-
-
 
 #[test]
 #[cfg(not(miri))]
@@ -101,49 +97,64 @@ pub fn test_backward_compatibility() -> Result<(), SavefileError> {
 
 #[test]
 pub fn test_caller_has_older_version() {
-    let iface2 : Box<dyn ArgInterfaceV2> = Box::new(Implementation2{});
-    assert_eq!(iface2.sums(
-        v2::ArgArgument{data2: 3, data3: 2, data1: AbiRemoved::new()},
-        v2::ArgArgument{data2: 3, data3: 2, data1: AbiRemoved::new()}
-    ), 10);
-
-    let conn1 = unsafe { AbiConnection::<dyn ArgInterfaceV1>::from_boxed_trait_for_test(<dyn ArgInterfaceV2 as AbiExportable>::ABI_ENTRY, iface2 ) }.unwrap();
-
-    let s = conn1.sums(
-        v1::Argument {
-            data1: 2,
-            data2: 3,
-        },
-        v1::Argument {
-            data1: 4,
-            data2: 5,
-        },
+    let iface2: Box<dyn ArgInterfaceV2> = Box::new(Implementation2 {});
+    assert_eq!(
+        iface2.sums(
+            v2::ArgArgument {
+                data2: 3,
+                data3: 2,
+                data1: AbiRemoved::new()
+            },
+            v2::ArgArgument {
+                data2: 3,
+                data3: 2,
+                data1: AbiRemoved::new()
+            }
+        ),
+        10
     );
+
+    let conn1 = unsafe {
+        AbiConnection::<dyn ArgInterfaceV1>::from_boxed_trait_for_test(
+            <dyn ArgInterfaceV2 as AbiExportable>::ABI_ENTRY,
+            iface2,
+        )
+    }
+    .unwrap();
+
+    let s = conn1.sums(v1::Argument { data1: 2, data2: 3 }, v1::Argument { data1: 4, data2: 5 });
     println!("Sum: {}", s);
     assert_eq!(s, 8); //Because implementation expects data2 and data3, but we're only sending data2.
 
-
     assert_eq!(conn1.enum_arg(EnumArgument::Variant1), "Variant1".to_string());
-
 }
 
 #[test]
 pub fn test_caller_has_newer_version() {
-    let iface1 : Box<dyn ArgInterfaceV1> = Box::new(Implementation1{});
-    let conn1 = unsafe { AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(<dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY, iface1 ) }.unwrap();
+    let iface1: Box<dyn ArgInterfaceV1> = Box::new(Implementation1 {});
+    let conn1 = unsafe {
+        AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(
+            <dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY,
+            iface1,
+        )
+    }
+    .unwrap();
 
-    assert_eq!(conn1.sums(
-        v2::ArgArgument {
-            data1: AbiRemoved::new(),
-            data2: 1,
-            data3: 2
-        },
-        v2::ArgArgument {
-            data1: AbiRemoved::new(),
-            data2: 3,
-            data3: 4
-        },
-    ), 4); //Because implementation expects data1 and data2, but we're only sending data2.
+    assert_eq!(
+        conn1.sums(
+            v2::ArgArgument {
+                data1: AbiRemoved::new(),
+                data2: 1,
+                data3: 2
+            },
+            v2::ArgArgument {
+                data1: AbiRemoved::new(),
+                data2: 3,
+                data3: 4
+            },
+        ),
+        4
+    ); //Because implementation expects data1 and data2, but we're only sending data2.
 
     assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant1), "Variant1".to_string());
 }
@@ -151,8 +162,14 @@ pub fn test_caller_has_newer_version() {
 #[test]
 #[should_panic(expected = "Enum EnumArgument, variant Variant3 is not present in version 0")]
 pub fn test_caller_has_newer_version_and_uses_enum_that_callee_doesnt_have() {
-    let iface1 : Box<dyn ArgInterfaceV1> = Box::new(Implementation1{});
-    let conn1 = unsafe { AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(<dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY, iface1 ) }.unwrap();
+    let iface1: Box<dyn ArgInterfaceV1> = Box::new(Implementation1 {});
+    let conn1 = unsafe {
+        AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(
+            <dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY,
+            iface1,
+        )
+    }
+    .unwrap();
 
     assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant3), "Variant3".to_string());
 }

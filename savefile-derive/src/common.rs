@@ -2,7 +2,11 @@ use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{Expr, GenericParam, Generics, Lit, Type, WhereClause};
 
-pub(crate) fn get_extra_where_clauses(gen2: &Generics, where_clause: Option<&WhereClause>, the_trait: TokenStream) -> TokenStream {
+pub(crate) fn get_extra_where_clauses(
+    gen2: &Generics,
+    where_clause: Option<&WhereClause>,
+    the_trait: TokenStream,
+) -> TokenStream {
     let extra_where_separator;
     if where_clause.is_some() {
         extra_where_separator = quote!(,);
@@ -13,17 +17,15 @@ pub(crate) fn get_extra_where_clauses(gen2: &Generics, where_clause: Option<&Whe
     for param in gen2.params.iter() {
         if let GenericParam::Type(t) = param {
             let t_name = &t.ident;
-            let clause = quote!{#t_name : #the_trait};
+            let clause = quote! {#t_name : #the_trait};
             where_clauses.push(clause);
         }
     }
-    let extra_where = quote!{
-    #extra_where_separator #(#where_clauses),*
-};
+    let extra_where = quote! {
+        #extra_where_separator #(#where_clauses),*
+    };
     extra_where
 }
-
-
 
 #[derive(Debug)]
 pub(crate) struct VersionRange {
@@ -48,19 +50,18 @@ pub(crate) struct AttrsResult {
 pub(crate) enum RemovedType {
     NotRemoved,
     Removed,
-    AbiRemoved
+    AbiRemoved,
 }
 impl RemovedType {
     pub(crate) fn is_removed(&self) -> bool {
         match self {
-            RemovedType::NotRemoved => {false}
-            RemovedType::Removed => {true}
-            RemovedType::AbiRemoved => {true}
+            RemovedType::NotRemoved => false,
+            RemovedType::Removed => true,
+            RemovedType::AbiRemoved => true,
         }
     }
 }
 pub(crate) fn check_is_remove(field_type: &syn::Type) -> RemovedType {
-
     let mut tokens = TokenStream::new();
     field_type.to_tokens(&mut tokens);
     for tok in tokens.into_iter() {
@@ -76,7 +77,6 @@ pub(crate) fn check_is_remove(field_type: &syn::Type) -> RemovedType {
     RemovedType::NotRemoved
 }
 
-
 pub(crate) fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
     assert!(b.to >= b.from);
     move |a: &'a VersionRange| {
@@ -87,10 +87,12 @@ pub(crate) fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> b
 }
 
 pub(crate) fn path_to_string(path: &syn::Path) -> String {
-    path.segments.last().expect("Expected at least one segment").ident.to_string()
+    path.segments
+        .last()
+        .expect("Expected at least one segment")
+        .ident
+        .to_string()
 }
-
-
 
 pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
     let mut field_from_version = None;
@@ -103,155 +105,154 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
     let mut deser_types = Vec::new();
     for attr in attrs.iter() {
         match attr.parse_meta() {
-            Ok(ref meta) => {
-                match meta {
-                    syn::Meta::Path(x) => {
-                        let x = path_to_string(x);
-                        if x == "savefile_ignore" {
-                            ignore = true;
-                        }
-                        if x == "savefile_introspect_key" {
-                            introspect_key = true;
-                        }
-                        if x == "savefile_introspect_ignore" {
-                            introspect_ignore = true;
+            Ok(ref meta) => match meta {
+                syn::Meta::Path(x) => {
+                    let x = path_to_string(x);
+                    if x == "savefile_ignore" {
+                        ignore = true;
+                    }
+                    if x == "savefile_introspect_key" {
+                        introspect_key = true;
+                    }
+                    if x == "savefile_introspect_ignore" {
+                        introspect_ignore = true;
+                    }
+                }
+                &syn::Meta::List(ref _x) => {}
+                &syn::Meta::NameValue(ref x) => {
+                    let path = path_to_string(&x.path);
+                    if path == "savefile_default_val" {
+                        match &x.lit {
+                            &syn::Lit::Str(ref litstr) => {
+                                default_val =
+                                    Some(quote! { str::parse(#litstr).expect("Expected valid literal string") })
+                            }
+                            _ => {
+                                let lv = &x.lit;
+                                default_val = Some(quote! {#lv});
+                            }
+                        };
+                    };
+                    if path == "savefile_default_fn" {
+                        let default_fn_str_lit = match &x.lit {
+                            &syn::Lit::Str(ref litstr) => litstr,
+                            _ => {
+                                panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
+                            }
+                        };
+                        default_fn = Some(syn::Ident::new(
+                            &default_fn_str_lit.value(),
+                            proc_macro2::Span::call_site(),
+                        ));
+                    };
+
+                    if path == "savefile_ignore" {
+                        ignore = true;
+                    };
+                    if path == "savefile_introspect_ignore" {
+                        introspect_ignore = true;
+                    };
+                    if path == "savefile_versions_as" {
+                        match &x.lit {
+                            &syn::Lit::Str(ref litstr2) => {
+                                let output2: Vec<String> =
+                                    litstr2.value().splitn(3, ':').map(|x| x.to_string()).collect();
+                                if output2.len() != 3 && output2.len() != 2 {
+                                    panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
+                                }
+                                let litstr = &output2[0];
+
+                                let convert_fun: String;
+                                let version_type: String;
+
+                                if output2.len() == 2 {
+                                    convert_fun = "".to_string();
+                                    version_type = output2[1].to_string();
+                                } else {
+                                    convert_fun = output2[1].to_string();
+                                    version_type = output2[2].to_string();
+                                }
+
+                                let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
+                                if output.len() != 2 {
+                                    panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
+                                }
+                                let (a, b) = (output[0].to_string(), output[1].to_string());
+
+                                let from_ver = if a.trim() == "" {
+                                    0
+                                } else if let Ok(a_u32) = a.parse::<u32>() {
+                                    a_u32
+                                } else {
+                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                };
+
+                                let to_ver = if b.trim() == "" {
+                                    std::u32::MAX
+                                } else if let Ok(b_u32) = b.parse::<u32>() {
+                                    b_u32
+                                } else {
+                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                };
+                                if to_ver < from_ver {
+                                    panic!("Version ranges must specify lower number first.");
+                                }
+
+                                let item = VersionRange {
+                                    from: from_ver,
+                                    to: to_ver,
+                                    convert_fun: convert_fun.to_string(),
+                                    serialized_type: version_type.to_string(),
+                                };
+                                if deser_types.iter().any(overlap(&item)) {
+                                    panic!("#savefile_versions_as attributes may not specify overlapping ranges");
+                                }
+                                deser_types.push(item);
+                            }
+                            _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
                         }
                     }
-                    &syn::Meta::List(ref _x) => {
-                    }
-                    &syn::Meta::NameValue(ref x) => {
-                        let path = path_to_string(&x.path);
-                        if path == "savefile_default_val" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr) => {
-                                    default_val = Some(quote! { str::parse(#litstr).expect("Expected valid literal string") })
-                                },
-                                _ => {
-                                    let lv = &x.lit;
-                                    default_val = Some(quote!{#lv});
+
+                    if path == "savefile_versions" {
+                        match &x.lit {
+                            &syn::Lit::Str(ref litstr) => {
+                                let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
+                                if output.len() != 2 {
+                                    panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
                                 }
-                            };
+                                let (a, b) = (output[0].to_string(), output[1].to_string());
 
-                        };
-                        if path == "savefile_default_fn" {
-                            let default_fn_str_lit = match &x.lit {
-                                &syn::Lit::Str(ref litstr) => litstr,
-                                _ => {
-                                    panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
+                                if field_from_version.is_some() || field_to_version.is_some() {
+                                    panic!("There can only be one savefile_versions attribute on each field.")
                                 }
-                            };
-                            default_fn = Some(syn::Ident::new(
-                                &default_fn_str_lit.value(),
-                                proc_macro2::Span::call_site(),
-                            ));
-                        };
-
-                        if path == "savefile_ignore" {
-                            ignore = true;
-                        };
-                        if path == "savefile_introspect_ignore" {
-                            introspect_ignore = true;
-                        };
-                        if path == "savefile_versions_as" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr2) => {
-                                    let output2: Vec<String> =
-                                        litstr2.value().splitn(3, ':').map(|x| x.to_string()).collect();
-                                    if output2.len() != 3 && output2.len() != 2 {
-                                        panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
-                                    }
-                                    let litstr = &output2[0];
-
-                                    let convert_fun: String;
-                                    let version_type: String;
-
-                                    if output2.len() == 2 {
-                                        convert_fun = "".to_string();
-                                        version_type = output2[1].to_string();
-                                    } else {
-                                        convert_fun = output2[1].to_string();
-                                        version_type = output2[2].to_string();
-                                    }
-
-                                    let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
-                                    if output.len() != 2 {
-                                        panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
-                                    }
-                                    let (a, b) = (output[0].to_string(), output[1].to_string());
-
-                                    let from_ver = if a.trim() == "" {
-                                        0
-                                    } else if let Ok(a_u32) = a.parse::<u32>() {
-                                        a_u32
-                                    } else {
-                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                    };
-
-                                    let to_ver = if b.trim() == "" {
-                                        std::u32::MAX
-                                    } else if let Ok(b_u32) = b.parse::<u32>() {
-                                        b_u32
-                                    } else {
-                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                    };
-                                    if to_ver < from_ver {
-                                        panic!("Version ranges must specify lower number first.");
-                                    }
-
-                                    let item = VersionRange {
-                                        from: from_ver,
-                                        to: to_ver,
-                                        convert_fun: convert_fun.to_string(),
-                                        serialized_type: version_type.to_string(),
-                                    };
-                                    if deser_types.iter().any(overlap(&item)) {
-                                        panic!("#savefile_versions_as attributes may not specify overlapping ranges");
-                                    }
-                                    deser_types.push(item);
+                                if a.trim() == "" {
+                                    field_from_version = Some(0);
+                                } else if let Ok(a_u32) = a.parse::<u32>() {
+                                    field_from_version = Some(a_u32);
+                                } else {
+                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
                                 }
-                                _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
+
+                                if b.trim() == "" {
+                                    field_to_version = Some(std::u32::MAX);
+                                } else if let Ok(b_u32) = b.parse::<u32>() {
+                                    field_to_version = Some(b_u32);
+                                } else {
+                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                }
+                                if field_to_version.expect("Expected field_to_version")
+                                    < field_from_version.expect("expected field_from_version")
+                                {
+                                    panic!("savefile_versions ranges must specify lower number first.");
+                                }
                             }
-                        }
-
-                        if path == "savefile_versions" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr) => {
-                                    let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
-                                    if output.len() != 2 {
-                                        panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
-                                    }
-                                    let (a, b) = (output[0].to_string(), output[1].to_string());
-
-                                    if field_from_version.is_some() || field_to_version.is_some() {
-                                        panic!("There can only be one savefile_versions attribute on each field.")
-                                    }
-                                    if a.trim() == "" {
-                                        field_from_version = Some(0);
-                                    } else if let Ok(a_u32) = a.parse::<u32>() {
-                                        field_from_version = Some(a_u32);
-                                    } else {
-                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
-                                    }
-
-                                    if b.trim() == "" {
-                                        field_to_version = Some(std::u32::MAX);
-                                    } else if let Ok(b_u32) = b.parse::<u32>() {
-                                        field_to_version = Some(b_u32);
-                                    } else {
-                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
-                                    }
-                                    if field_to_version.expect("Expected field_to_version") < field_from_version.expect("expected field_from_version") {
-                                        panic!("savefile_versions ranges must specify lower number first.");
-                                    }
-                                }
-                                _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
-                            }
+                            _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
                         }
                     }
                 }
-            }
+            },
             Err(e) => {
-                panic!("Unparsable attribute: {:?} ({:?})",e, attr.tokens);
+                panic!("Unparsable attribute: {:?} ({:?})", e, attr.tokens);
             }
         }
     }
@@ -297,29 +298,27 @@ impl<'a> FieldInfo<'a> {
                 let index = syn::Index::from(self.index as usize);
                 index.to_token_stream()
             }
-            Some(id) => {
-                id.to_token_stream()
-            }
+            Some(id) => id.to_token_stream(),
         }
     }
 }
-pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*alignment*/)> {
+pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize /*size*/, usize /*alignment*/)> {
     match typ {
         Type::Path(p) => {
             if let Some(ident) = p.path.get_ident() {
                 match ident.to_string().as_str() {
-                    "u8" => Some((1,1)),
-                    "i8" => Some((1,1)),
-                    "u16" => Some((2,2)),
-                    "i16" => Some((2,2)),
-                    "u32" => Some((4,4)),
-                    "i32" => Some((4,4)),
-                    "u64" => Some((8,8)),
-                    "i64" => Some((8,8)),
-                    "char" => Some((4,4)),
-                    "bool" => Some((1,1)),
-                    "f32" => Some((4,4)),
-                    "f64" => Some((8,8)),
+                    "u8" => Some((1, 1)),
+                    "i8" => Some((1, 1)),
+                    "u16" => Some((2, 2)),
+                    "i16" => Some((2, 2)),
+                    "u32" => Some((4, 4)),
+                    "i32" => Some((4, 4)),
+                    "u64" => Some((8, 8)),
+                    "i64" => Some((8, 8)),
+                    "char" => Some((4, 4)),
+                    "bool" => Some((1, 1)),
+                    "f32" => Some((4, 4)),
+                    "f64" => Some((8, 8)),
                     _ => None,
                 }
             } else {
@@ -329,18 +328,19 @@ pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*ali
         Type::Tuple(t) => {
             let mut itemsize_align = None;
             let mut result_size = 0;
-            if t.elems.iter().next().is_none() { //Empty tuple
-                return Some((0,1));
+            if t.elems.iter().next().is_none() {
+                //Empty tuple
+                return Some((0, 1));
             }
             for item in t.elems.iter() {
-                let (cursize,curalign) = compile_time_size(item)?;
+                let (cursize, curalign) = compile_time_size(item)?;
                 if let Some(itemsize_align) = itemsize_align {
-                    if itemsize_align != (cursize,curalign) {
+                    if itemsize_align != (cursize, curalign) {
                         // All items not the same size and have same alignment. Otherwise: Might be padding issues.
                         return None; //It could conceivably still be reprC, safe, but we're conservative here.
                     }
                 } else {
-                    itemsize_align = Some((cursize,curalign));
+                    itemsize_align = Some((cursize, curalign));
                 }
                 result_size += cursize;
             }
@@ -353,23 +353,20 @@ pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*ali
         Type::Array(a) => {
             let (itemsize, itemalign) = compile_time_size(&a.elem)?;
             match &a.len {
-                Expr::Lit(l) => {
-                    match &l.lit {
-                        Lit::Int(t) => {
-                            let size : usize = t.base10_parse().ok()?;
-                            Some((size*itemsize, itemalign))
-                        }
-                        _ => None
+                Expr::Lit(l) => match &l.lit {
+                    Lit::Int(t) => {
+                        let size: usize = t.base10_parse().ok()?;
+                        Some((size * itemsize, itemalign))
                     }
-                }
-                _ => None
+                    _ => None,
+                },
+                _ => None,
             }
         }
-        _ => None
+        _ => None,
     }
 }
 pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
-
     match typ {
         Type::Path(p) => {
             if let Some(name) = p.path.get_ident() {
@@ -393,17 +390,18 @@ pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
                 false
             }
         }
-        Type::Array(x) => {
-            compile_time_check_reprc(&x.elem)
-        }
+        Type::Array(x) => compile_time_check_reprc(&x.elem),
         Type::Tuple(t) => {
             let mut size = None;
             for x in &t.elems {
-                if !compile_time_check_reprc(x)
-                {
+                if !compile_time_check_reprc(x) {
                     return false;
                 }
-                let xsize = if let Some(s) = compile_time_size(x) {s} else {return false};
+                let xsize = if let Some(s) = compile_time_size(x) {
+                    s
+                } else {
+                    return false;
+                };
                 if let Some(size) = size {
                     if xsize != size {
                         return false;
@@ -414,6 +412,6 @@ pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
             }
             true
         }
-        _ => false
+        _ => false,
     }
 }

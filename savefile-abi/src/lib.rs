@@ -296,25 +296,24 @@ called by value are always serialized.
 
 extern crate savefile;
 extern crate savefile_derive;
+use savefile::{
+    diff_schema, load_file_noschema, load_noschema, save_file_noschema, AbiMethodInfo, AbiTraitDefinition, Deserialize,
+    Deserializer, LittleEndian, SavefileError, Schema, Serializer, CURRENT_SAVEFILE_LIB_VERSION,
+};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::io::{Cursor, Read, Write};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::panic::catch_unwind;
-use std::ptr::{null};
-use std::{ptr, slice};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::hash::Hash;
 use std::path::Path;
+use std::ptr::null;
 use std::sync::{Mutex, MutexGuard};
-use savefile::{AbiMethodInfo, AbiTraitDefinition, CURRENT_SAVEFILE_LIB_VERSION, Deserialize, Deserializer, diff_schema, LittleEndian, load_file_noschema, load_noschema, save_file_noschema, SavefileError, Schema, Serializer};
+use std::{ptr, slice};
 
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
-
-
-
-
 
 /// This trait is meant to be exported for a 'dyn SomeTrait'.
 /// It can be automatically implemented by using the
@@ -333,9 +332,8 @@ use libloading::{Library, Symbol};
 ///    that is truthful.
 ///  * Implement 'call' correctly
 pub unsafe trait AbiExportable {
-
     /// A function which implements the savefile-abi contract.
-    const ABI_ENTRY: extern "C" fn (AbiProtocol);
+    const ABI_ENTRY: extern "C" fn(AbiProtocol);
     /// Must return a truthful description about all the methods in the
     /// `dyn trait` that AbiExportable is implemented for (i.e, `Self`).
     fn get_definition(version: u32) -> AbiTraitDefinition;
@@ -349,7 +347,18 @@ pub unsafe trait AbiExportable {
     /// `receiver` must be given 'abi_result' as its 'result_receiver' parameter, so that
     /// the receiver may set the result. The receiver executes at the caller-side of the ABI-divide,
     /// but it receives as first argument an RawAbiCallResult that has been created by the callee.
-    fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/* actual type: Result<T,SaveFileError>>*/)) -> Result<(),SavefileError>;
+    fn call(
+        trait_object: TraitObject,
+        method_number: u16,
+        effective_version: u32,
+        compatibility_mask: u64,
+        data: &[u8],
+        abi_result: *mut (),
+        receiver: extern "C" fn(
+            outcome: *const RawAbiCallResult,
+            result_receiver: *mut (), /* actual type: Result<T,SaveFileError>>*/
+        ),
+    ) -> Result<(), SavefileError>;
 }
 
 /// Trait that is to be implemented for the implementation of a trait whose `dyn trait` type
@@ -367,9 +376,9 @@ pub unsafe trait AbiExportable {
 ///
 pub unsafe trait AbiExportableImplementation {
     /// An entry point which implements the AbiProtocol protocol
-    const ABI_ENTRY: extern "C" fn (AbiProtocol);
+    const ABI_ENTRY: extern "C" fn(AbiProtocol);
     /// The type 'dyn SomeTrait'.
-    type AbiInterface : ?Sized + AbiExportable;
+    type AbiInterface: ?Sized + AbiExportable;
     /// A method which must be able to return a default-implementation of `dyn SomeTrait`.
     /// I.e, the returned box is a boxed dyn trait, not 'Self' (the actual implementation type).
     fn new() -> Box<Self::AbiInterface>;
@@ -381,9 +390,13 @@ pub unsafe trait AbiExportableImplementation {
 /// `dyn MyTrait`.
 /// # Safety
 /// The given `trait_object` must be a boxed trait object.
-unsafe fn destroy_trait_obj<T:AbiExportable+?Sized>(trait_object: TraitObject) {
-    let mut raw_ptr : MaybeUninit<*mut T> = MaybeUninit::uninit();
-    ptr::copy(&trait_object as *const TraitObject as *const MaybeUninit<*mut T>, &mut raw_ptr as *mut MaybeUninit<*mut T>, 1);
+unsafe fn destroy_trait_obj<T: AbiExportable + ?Sized>(trait_object: TraitObject) {
+    let mut raw_ptr: MaybeUninit<*mut T> = MaybeUninit::uninit();
+    ptr::copy(
+        &trait_object as *const TraitObject as *const MaybeUninit<*mut T>,
+        &mut raw_ptr as *mut MaybeUninit<*mut T>,
+        1,
+    );
 
     let _ = Box::from_raw(raw_ptr.assume_init());
 }
@@ -403,10 +416,28 @@ unsafe fn destroy_trait_obj<T:AbiExportable+?Sized>(trait_object: TraitObject) {
 /// # Safety
 /// Every detail of all the arguments must be correct. Any little error is overwhelmingly likely to cause
 /// a segfault or worse.
-unsafe fn call_trait_obj<T:AbiExportable+?Sized>(trait_object : TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8],  abi_result: *mut (), receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
-    <T>::call(trait_object, method_number, effective_version, compatibility_mask, data, abi_result, receiver)
+unsafe fn call_trait_obj<T: AbiExportable + ?Sized>(
+    trait_object: TraitObject,
+    method_number: u16,
+    effective_version: u32,
+    compatibility_mask: u64,
+    data: &[u8],
+    abi_result: *mut (),
+    receiver: extern "C" fn(
+        outcome: *const RawAbiCallResult,
+        result_receiver: *mut (), /*Result<T,SaveFileError>>*/
+    ),
+) -> Result<(), SavefileError> {
+    <T>::call(
+        trait_object,
+        method_number,
+        effective_version,
+        compatibility_mask,
+        data,
+        abi_result,
+        receiver,
+    )
 }
-
 
 /// Describes a method in a trait
 #[derive(Debug)]
@@ -425,7 +456,6 @@ pub struct AbiConnectionMethod {
     pub compatibility_mask: u64,
 }
 
-
 /// Type erased carrier of a dyn trait fat pointer
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -440,62 +470,97 @@ impl TraitObject {
     pub fn zero() -> TraitObject {
         TraitObject {
             ptr: null(),
-            vtable: null()
+            vtable: null(),
         }
     }
 
     /// Interpret this TraitObject as *mut T.
     /// *mut T *MUST* be a fat pointer of the same type as was used to create this TraitObject
     /// instance.
-    pub fn as_mut_ptr<T:?Sized>(self) -> *mut T {
-        assert_eq!(std::mem::size_of::<*mut T>(), 16, "TraitObject must only be used with dyn trait, not any other kind of trait");
+    pub fn as_mut_ptr<T: ?Sized>(self) -> *mut T {
+        assert_eq!(
+            std::mem::size_of::<*mut T>(),
+            16,
+            "TraitObject must only be used with dyn trait, not any other kind of trait"
+        );
 
-        let mut target : MaybeUninit<*mut T> = MaybeUninit::zeroed();
+        let mut target: MaybeUninit<*mut T> = MaybeUninit::zeroed();
         unsafe {
-            ptr::copy(&self as *const TraitObject as *const MaybeUninit<*mut T>, &mut target as *mut MaybeUninit<*mut T>, 1);
+            ptr::copy(
+                &self as *const TraitObject as *const MaybeUninit<*mut T>,
+                &mut target as *mut MaybeUninit<*mut T>,
+                1,
+            );
             target.assume_init()
         }
     }
     /// Interpret this TraitObject as *const T.
     /// *const T *MUST* be a fat pointer of the same type as was used to create this TraitObject
     /// instance.
-    pub fn as_const_ptr<T:?Sized>(self) -> *const T {
-        assert_eq!(std::mem::size_of::<*const T>(), 16, "TraitObject must only be used with dyn trait, not any other kind of trait");
+    pub fn as_const_ptr<T: ?Sized>(self) -> *const T {
+        assert_eq!(
+            std::mem::size_of::<*const T>(),
+            16,
+            "TraitObject must only be used with dyn trait, not any other kind of trait"
+        );
 
-        let mut target : MaybeUninit<*const T> = MaybeUninit::zeroed();
+        let mut target: MaybeUninit<*const T> = MaybeUninit::zeroed();
         unsafe {
-            ptr::copy(&self as *const TraitObject as *const MaybeUninit<*const T>, &mut target as *mut MaybeUninit<*const T>, 1);
+            ptr::copy(
+                &self as *const TraitObject as *const MaybeUninit<*const T>,
+                &mut target as *mut MaybeUninit<*const T>,
+                1,
+            );
             target.assume_init()
         }
     }
     /// Convert the given fat pointer to a TraitObject instance.
-    pub fn new_from_ptr<T:?Sized>(raw: *const T) -> TraitObject {
-        assert_eq!(std::mem::size_of::<*const T>(), 16, "TraitObject::new_from_ptr() must only be used with dyn trait, not any other kind of trait");
+    pub fn new_from_ptr<T: ?Sized>(raw: *const T) -> TraitObject {
+        assert_eq!(
+            std::mem::size_of::<*const T>(),
+            16,
+            "TraitObject::new_from_ptr() must only be used with dyn trait, not any other kind of trait"
+        );
         assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
         let mut trait_object = TraitObject::zero();
 
-        unsafe { ptr::copy(&raw as *const *const T, &mut trait_object as *mut TraitObject as *mut *const T, 1) };
+        unsafe {
+            ptr::copy(
+                &raw as *const *const T,
+                &mut trait_object as *mut TraitObject as *mut *const T,
+                1,
+            )
+        };
         trait_object
     }
     /// Note: This only works for boxed dyn Trait.
     /// T must be `dyn SomeTrait`.
-    pub fn new<T:?Sized>(input: Box<T>) -> TraitObject {
+    pub fn new<T: ?Sized>(input: Box<T>) -> TraitObject {
         let raw = Box::into_raw(input);
-        assert_eq!(std::mem::size_of::<*mut T>(), 16, "TraitObject::new() must only be used with Boxed dyn trait, not any other kind of Box");
+        assert_eq!(
+            std::mem::size_of::<*mut T>(),
+            16,
+            "TraitObject::new() must only be used with Boxed dyn trait, not any other kind of Box"
+        );
         assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
         let mut trait_object = TraitObject::zero();
 
-        unsafe { ptr::copy(&raw as *const *mut T, &mut trait_object as *mut TraitObject as *mut *mut T, 1) };
+        unsafe {
+            ptr::copy(
+                &raw as *const *mut T,
+                &mut trait_object as *mut TraitObject as *mut *mut T,
+                1,
+            )
+        };
         trait_object
     }
-
 }
 
 /// Information about an entry point and the trait
 /// it corresponds to.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct AbiConnectionTemplate {
     /// The negotiated effective serialization version.
@@ -509,8 +574,7 @@ pub struct AbiConnectionTemplate {
     /// this entry point points into a different shared object/dll compared to
     /// the caller.
     #[doc(hidden)]
-    pub entry: extern "C" fn (flag: AbiProtocol),
-
+    pub entry: extern "C" fn(flag: AbiProtocol),
 }
 
 /// Information about an ABI-connection. I.e,
@@ -525,7 +589,7 @@ pub struct AbiConnectionTemplate {
 /// so they are marked as doc(hidden).
 #[repr(C)]
 #[derive(Debug)]
-pub struct AbiConnection<T:?Sized> {
+pub struct AbiConnection<T: ?Sized> {
     /// Cachable information about the interface
     #[doc(hidden)]
     pub template: AbiConnectionTemplate,
@@ -540,7 +604,7 @@ pub struct AbiConnection<T:?Sized> {
     pub trait_object: TraitObject,
     /// Phantom, to make this valid rust (since we don't otherwise carry a T).
     #[doc(hidden)]
-    pub phantom: PhantomData<*const T>
+    pub phantom: PhantomData<*const T>,
 }
 
 /// A trait object together with its entry point
@@ -550,20 +614,17 @@ pub struct PackagedTraitObject {
     /// Type erased trait object for an ABI-exported trait
     pub trait_object: TraitObject,
     /// The low level entry point
-    pub entry: extern "C" fn (flag: AbiProtocol),
+    pub entry: extern "C" fn(flag: AbiProtocol),
 }
 
 impl PackagedTraitObject {
     /// Create a PackagedTraitObject from a `Box<T>`    . T must be a trait object.
     /// T must implement AbiExportable, which means it has an ::ABI_ENTRY associated
     /// type that gives the entry point.
-    pub fn new<T:AbiExportable+?Sized>(boxed: Box<T>) -> PackagedTraitObject {
+    pub fn new<T: AbiExportable + ?Sized>(boxed: Box<T>) -> PackagedTraitObject {
         let trait_object = TraitObject::new(boxed);
         let entry = T::ABI_ENTRY;
-        PackagedTraitObject {
-            trait_object,
-            entry
-        }
+        PackagedTraitObject { trait_object, entry }
     }
 
     /// Create a PackagedTraitObject from a &T. T must be a trait object.
@@ -573,17 +634,14 @@ impl PackagedTraitObject {
     /// since it's never used, it's just cast to other stuff and then finally
     /// back to the right type.
     pub fn new_from_ptr<T>(r: *const T) -> PackagedTraitObject
-        where T: AbiExportable+?Sized
+    where
+        T: AbiExportable + ?Sized,
     {
         assert_eq!(std::mem::size_of::<*const T>(), 16);
         let trait_object = TraitObject::new_from_ptr(r);
         let entry = T::ABI_ENTRY;
-        PackagedTraitObject {
-            trait_object,
-            entry
-        }
+        PackagedTraitObject { trait_object, entry }
     }
-
 
     /// 'Serialize' this object. I.e, write it to a binary buffer, so that we can send it
     /// to a foreign library.
@@ -600,20 +658,22 @@ impl PackagedTraitObject {
     /// # Safety
     /// The data available to read from Deserializer must be correct, and contain
     /// a valid serialized PackagedTraitObject.
-    pub unsafe fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<PackagedTraitObject, SavefileError> {
+    pub unsafe fn deserialize(
+        deserializer: &mut Deserializer<impl Read>,
+    ) -> Result<PackagedTraitObject, SavefileError> {
         let mut trait_object = TraitObject::zero();
         trait_object.ptr = deserializer.read_ptr()? as *mut ();
         trait_object.vtable = deserializer.read_ptr()? as *mut ();
         let entry = deserializer.read_ptr()? as *mut ();
-        assert_eq!(std::mem::size_of::<extern "C" fn (flag: AbiProtocol)>(), 8);
+        assert_eq!(std::mem::size_of::<extern "C" fn(flag: AbiProtocol)>(), 8);
         Ok(PackagedTraitObject {
             trait_object,
-            entry: unsafe {std::mem::transmute(entry)}
+            entry: unsafe { std::mem::transmute(entry) },
         })
     }
 }
 
-impl<T:?Sized> Drop for AbiConnection<T> {
+impl<T: ?Sized> Drop for AbiConnection<T> {
     fn drop(&mut self) {
         match &self.owning {
             Owning::Owned => {
@@ -634,7 +694,7 @@ pub struct AbiErrorMsg {
     /// Pointer to utf8 error message
     pub error_msg_utf8: *const u8,
     /// The length of the message, in bytes
-    pub len: usize
+    pub len: usize,
 }
 impl AbiErrorMsg {
     /// Attempt to convert the given data to a String.
@@ -648,16 +708,15 @@ impl AbiErrorMsg {
     }
 }
 
-
 /// The result of calling a method in a foreign library.
-#[repr(C,u8)]
+#[repr(C, u8)]
 pub enum RawAbiCallResult {
     /// Successful operation
-    Success{
+    Success {
         /// A pointer to the return value, serialized
         data: *const u8,
         /// The size of the serialized return value, in bytes
-        len: usize
+        len: usize,
     },
     /// The method that was called, panicked. Since the way panic unwinding in Rust
     /// could change between rust-versions, we can't allow any panics to unwind
@@ -666,9 +725,8 @@ pub enum RawAbiCallResult {
     /// There was an error in the ABI-framework. This will happen if code tries
     /// to call a method that is not actually available on the target, or if method
     /// signatures change in non ABI-compatible ways.
-    AbiError(AbiErrorMsg)
+    AbiError(AbiErrorMsg),
 }
-
 
 /// This struct carries all information between different libraries.
 /// I.e, it is the sole carrier of information accross an FFI-boundary.
@@ -690,7 +748,8 @@ pub enum AbiProtocol {
         abi_result: *mut (),
         /// Callback which will be called by callee in order to supply the return value
         /// (without having to allocate heap-memory)
-        receiver: extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/),
+        receiver:
+            extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut () /*Result<T,SaveFileError>>*/),
         /// The negotiated protocol version
         effective_version: u32,
         /// The method to call. This is the method number using the
@@ -721,16 +780,17 @@ pub enum AbiProtocol {
         result_receiver: *mut AbiTraitDefinition,
         /// Called by callee to convey information back to caller.
         /// `receiver` is place the caller will want to write the result.
-        callback: extern "C" fn (receiver: *mut AbiTraitDefinition, callee_schema_version: u16, data: *const u8, len: usize)
+        callback:
+            extern "C" fn(receiver: *mut AbiTraitDefinition, callee_schema_version: u16, data: *const u8, len: usize),
     },
     /// Create a new trait object.
     CreateInstance {
         /// Pointer which will receive the fat pointer to the dyn trait object, allocated on heap using Box.
         trait_object_receiver: *mut TraitObject,
         /// Opaque pointer to callers representation of error (String)
-        error_receiver: *mut ()/*String*/,
+        error_receiver: *mut (), /*String*/
         /// Called by callee if instance creation fails (by panic)
-        error_callback: extern "C" fn (error_receiver: *mut (), error: *const AbiErrorMsg)
+        error_callback: extern "C" fn(error_receiver: *mut (), error: *const AbiErrorMsg),
     },
     /// Drop a trait object.
     DropInstance {
@@ -741,92 +801,89 @@ pub enum AbiProtocol {
 
 /// Parse an RawAbiCallResult instance into a Result<T, SavefileError> .
 /// This is used on the caller side, and the type T will always be statically known.
-pub fn parse_return_value<T:Deserialize>(outcome: &RawAbiCallResult) -> Result<T, SavefileError> {
+pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<T, SavefileError> {
     match outcome {
         RawAbiCallResult::Success { data, len } => {
-
             let data = unsafe { std::slice::from_raw_parts(*data, *len) };
             let mut reader = Cursor::new(data);
             let file_version = reader.read_u32::<LittleEndian>()?;
             Deserializer::bare_deserialize::<T>(&mut reader, file_version)
-
         }
-        RawAbiCallResult::Panic(AbiErrorMsg{ error_msg_utf8, len }) => {
+        RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
             let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
             Err(SavefileError::CalleePanic {
-                msg:String::from_utf8_lossy(errdata).into()
+                msg: String::from_utf8_lossy(errdata).into(),
             })
         }
-        RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8, len }) => {
+        RawAbiCallResult::AbiError(AbiErrorMsg { error_msg_utf8, len }) => {
             let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
             Err(SavefileError::GeneralError {
-                msg:String::from_utf8_lossy(errdata).into()
+                msg: String::from_utf8_lossy(errdata).into(),
             })
         }
     }
 }
 
-
-
 /// We never unload libraries which have been dynamically loaded, because of all the problems with
 /// doing so.
-static LIBRARY_CACHE: Mutex<Option<HashMap<String/*filename*/, Library>>> = Mutex::new(None);
-static ENTRY_CACHE: Mutex<Option<HashMap<(String/*filename*/,String/*trait name*/), extern "C" fn (flag: AbiProtocol)>>> = Mutex::new(None);
+static LIBRARY_CACHE: Mutex<Option<HashMap<String /*filename*/, Library>>> = Mutex::new(None);
+static ENTRY_CACHE: Mutex<
+    Option<HashMap<(String /*filename*/, String /*trait name*/), extern "C" fn(flag: AbiProtocol)>>,
+> = Mutex::new(None);
 
-static ABI_CONNECTION_TEMPLATES: Mutex<Option<HashMap<extern "C" fn (flag: AbiProtocol), AbiConnectionTemplate>>> = Mutex::new(None);
+static ABI_CONNECTION_TEMPLATES: Mutex<Option<HashMap<extern "C" fn(flag: AbiProtocol), AbiConnectionTemplate>>> =
+    Mutex::new(None);
 
-struct Guard<'a,K:Hash+Eq,V> {
-    guard: MutexGuard<'a, Option<HashMap<K, V>>>
+struct Guard<'a, K: Hash + Eq, V> {
+    guard: MutexGuard<'a, Option<HashMap<K, V>>>,
 }
 
-impl<K:Hash+Eq,V> std::ops::Deref for Guard<'_, K, V> {
-    type Target = HashMap<K,V>;
-    fn deref(&self) -> &HashMap<K,V> {
+impl<K: Hash + Eq, V> std::ops::Deref for Guard<'_, K, V> {
+    type Target = HashMap<K, V>;
+    fn deref(&self) -> &HashMap<K, V> {
         self.guard.as_ref().unwrap()
     }
 }
 
-impl<K:Hash+Eq,V> std::ops::DerefMut for Guard<'_, K, V> {
-    fn deref_mut(&mut self) -> &mut HashMap<K,V> {
+impl<K: Hash + Eq, V> std::ops::DerefMut for Guard<'_, K, V> {
+    fn deref_mut(&mut self) -> &mut HashMap<K, V> {
         &mut *self.guard.as_mut().unwrap()
     }
 }
 
 // Avoid taking a dependency on OnceCell or lazy_static or something, just for this little thing
-impl<'a, K:Hash+Eq,V> Guard<'a,K,V> {
-    pub fn lock(map: &'a Mutex<Option<HashMap<K/*filename*/, V>>>) -> Guard<'a, K, V> {
+impl<'a, K: Hash + Eq, V> Guard<'a, K, V> {
+    pub fn lock(map: &'a Mutex<Option<HashMap<K /*filename*/, V>>>) -> Guard<'a, K, V> {
         let mut guard = map.lock().unwrap();
         if guard.is_none() {
             *guard = Some(HashMap::new());
         }
-        Guard {
-            guard
-        }
+        Guard { guard }
     }
 }
 
 /// Helper to determine if something is owned, or not
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Owning {
     /// The object is owned
     Owned,
     /// The object is not owned
-    NotOwned
+    NotOwned,
 }
 
-const FLEX_BUFFER_SIZE : usize = 64;
+const FLEX_BUFFER_SIZE: usize = 64;
 /// Stack allocated buffer that overflows on heap if needed
 pub enum FlexBuffer {
     /// Allocated on stack>
-    Stack{
+    Stack {
         /// The current write position. This is the same as
         /// the logical size of the buffer, since we can only write at the end.
         position: usize,
         /// The data backing this buffer, on the stack
-        data: MaybeUninit<[u8;FLEX_BUFFER_SIZE]>
+        data: MaybeUninit<[u8; FLEX_BUFFER_SIZE]>,
     },
     /// Allocated on heap
-    Spill(Vec<u8>)
+    Spill(Vec<u8>),
 }
 impl Write for FlexBuffer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -837,7 +894,7 @@ impl Write for FlexBuffer {
                     unsafe { ptr::copy(buf.as_ptr(), rawdata.offset(*position as isize), buf.len()) };
                     *position += buf.len();
                 } else {
-                    let mut spill = Vec::with_capacity(2*FLEX_BUFFER_SIZE+buf.len());
+                    let mut spill = Vec::with_capacity(2 * FLEX_BUFFER_SIZE + buf.len());
                     let rawdata = data as *mut MaybeUninit<_> as *mut u8;
                     let dataslice = unsafe { slice::from_raw_parts(rawdata, *position) };
                     spill.extend(dataslice);
@@ -845,9 +902,7 @@ impl Write for FlexBuffer {
                     *self = FlexBuffer::Spill(spill);
                 }
             }
-            FlexBuffer::Spill(v) => {
-                v.extend(buf)
-            }
+            FlexBuffer::Spill(v) => v.extend(buf),
         }
         Ok(buf.len())
     }
@@ -857,15 +912,13 @@ impl Write for FlexBuffer {
     }
 }
 
-
 /// Entry point for raw FFI-calls from other shared libraries
 #[doc(hidden)]
-pub extern "C" fn abi_result_receiver<T:Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
+pub extern "C" fn abi_result_receiver<T: Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
     result_receiver.write(parse_return_value::<T>(outcome));
 }
-
 
 impl FlexBuffer {
     /// Create a new buffer instance, allocated from the stack
@@ -878,15 +931,15 @@ impl FlexBuffer {
     /// Get a pointer to the buffer contents
     pub fn as_ptr(&self) -> *const u8 {
         match self {
-            FlexBuffer::Stack {data, .. } => {data as *const MaybeUninit<_> as *const u8}
-            FlexBuffer::Spill(v) => {v.as_ptr()}
+            FlexBuffer::Stack { data, .. } => data as *const MaybeUninit<_> as *const u8,
+            FlexBuffer::Spill(v) => v.as_ptr(),
         }
     }
     /// Get the number of bytes in the buffer
     pub fn len(&self) -> usize {
         match self {
-            FlexBuffer::Stack { position, .. } => {*position}
-            FlexBuffer::Spill(v) => {v.len()}
+            FlexBuffer::Stack { position, .. } => *position,
+            FlexBuffer::Spill(v) => v.len(),
         }
     }
 }
@@ -895,49 +948,64 @@ impl FlexBuffer {
 /// or if they are traits and the effective version of the traits are compatible.
 /// For traits, the actual fat pointer is always compatible, so can always be used.
 /// The trait-objects themselves can never be serialized, so they can only be used as references.
-fn arg_layout_compatible(a_native: &Schema, b_native: &Schema, a_effective: &Schema, b_effective: &Schema, effective_version: u32) -> bool {
+fn arg_layout_compatible(
+    a_native: &Schema,
+    b_native: &Schema,
+    a_effective: &Schema,
+    b_effective: &Schema,
+    effective_version: u32,
+) -> bool {
     match (a_native, b_native) {
         (Schema::FnClosure(a1, _a2), Schema::FnClosure(b1, _b2)) => {
+            let (Schema::FnClosure(effective_a1, effective_a2), Schema::FnClosure(effective_b1, effective_b2)) =
+                (a_effective, b_effective)
+            else {
+                return false;
+            };
 
-            let (Schema::FnClosure(effective_a1, effective_a2),
-                 Schema::FnClosure(effective_b1, effective_b2))
-                = (a_effective, b_effective) else {return false;};
-
-            a1 == b1 && a1 == effective_a1 && a1 == effective_b1 &&
-                effective_a2.verify_backward_compatible(effective_version, effective_b2).is_ok()
+            a1 == b1
+                && a1 == effective_a1
+                && a1 == effective_b1
+                && effective_a2
+                    .verify_backward_compatible(effective_version, effective_b2)
+                    .is_ok()
         }
         (Schema::BoxedTrait(_), Schema::BoxedTrait(_)) => {
+            let (Schema::BoxedTrait(effective_a2), Schema::BoxedTrait(effective_b2)) = (a_effective, b_effective)
+            else {
+                return false;
+            };
 
-            let (Schema::BoxedTrait(effective_a2),
-                Schema::BoxedTrait(effective_b2))
-                = (a_effective, b_effective) else {return false;};
-
-            effective_a2.verify_backward_compatible(effective_version, effective_b2).is_ok()
+            effective_a2
+                .verify_backward_compatible(effective_version, effective_b2)
+                .is_ok()
         }
-        (a,b) => a.layout_compatible(b)
+        (a, b) => a.layout_compatible(b),
     }
 }
 
-impl<T:AbiExportable+?Sized> AbiConnection<T> {
-
+impl<T: AbiExportable + ?Sized> AbiConnection<T> {
     /// Analyse the difference in definitions between the two sides,
     /// and create an AbiConnection
     #[allow(clippy::too_many_arguments)]
     fn analyze_and_create(
         trait_name: &str,
-        remote_entry: extern "C" fn (flag: AbiProtocol),
+        remote_entry: extern "C" fn(flag: AbiProtocol),
         effective_version: u32,
         caller_effective_definition: AbiTraitDefinition,
         callee_effective_definition: AbiTraitDefinition,
         caller_native_definition: AbiTraitDefinition,
         callee_native_definition: AbiTraitDefinition,
     ) -> Result<AbiConnectionTemplate, SavefileError> {
-
         let mut methods = Vec::with_capacity(caller_native_definition.methods.len());
         for caller_native_method in caller_native_definition.methods.into_iter() {
-            let Some((callee_native_method_number, callee_native_method)) = callee_native_definition.methods.iter().enumerate().find(|x|x.1.name == caller_native_method.name) else {
-
-                methods.push(AbiConnectionMethod{
+            let Some((callee_native_method_number, callee_native_method)) = callee_native_definition
+                .methods
+                .iter()
+                .enumerate()
+                .find(|x| x.1.name == caller_native_method.name)
+            else {
+                methods.push(AbiConnectionMethod {
                     method_name: caller_native_method.name,
                     caller_info: caller_native_method.info,
                     callee_method_number: None,
@@ -946,11 +1014,19 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
                 continue;
             };
 
-            let Some(callee_effective_method) = callee_effective_definition.methods.iter().find(|x|x.name == caller_native_method.name) else {
+            let Some(callee_effective_method) = callee_effective_definition
+                .methods
+                .iter()
+                .find(|x| x.name == caller_native_method.name)
+            else {
                 return Err(SavefileError::GeneralError {msg: format!("Internal error - missing method definition {} in signature when calculating serializable version of call (1).", caller_native_method.name)});
             };
 
-            let Some(caller_effective_method) = caller_effective_definition.methods.iter().find(|x|x.name == caller_native_method.name) else {
+            let Some(caller_effective_method) = caller_effective_definition
+                .methods
+                .iter()
+                .find(|x| x.name == caller_native_method.name)
+            else {
                 return Err(SavefileError::GeneralError {msg: format!("Internal error - missing method definition {} in signature when calculating serializable version of call (2).", caller_native_method.name)});
             };
 
@@ -959,11 +1035,25 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             }
 
             if caller_native_method.info.arguments.len() != caller_effective_method.info.arguments.len() {
-                return Err(SavefileError::GeneralError {msg: format!("Internal error - number of arguments for method {} has differs between {} to {} (1).", caller_native_method.name, caller_native_method.info.arguments.len(), caller_effective_method.info.arguments.len())});
+                return Err(SavefileError::GeneralError {
+                    msg: format!(
+                        "Internal error - number of arguments for method {} has differs between {} to {} (1).",
+                        caller_native_method.name,
+                        caller_native_method.info.arguments.len(),
+                        caller_effective_method.info.arguments.len()
+                    ),
+                });
             }
 
             if caller_native_method.info.arguments.len() != callee_effective_method.info.arguments.len() {
-                return Err(SavefileError::GeneralError {msg: format!("Internal error - number of arguments for method {} has differs between {} to {} (2).", caller_native_method.name, caller_native_method.info.arguments.len(), callee_effective_method.info.arguments.len())});
+                return Err(SavefileError::GeneralError {
+                    msg: format!(
+                        "Internal error - number of arguments for method {} has differs between {} to {} (2).",
+                        caller_native_method.name,
+                        caller_native_method.info.arguments.len(),
+                        callee_effective_method.info.arguments.len()
+                    ),
+                });
             }
 
             if caller_native_method.info.arguments.len() > 63 {
@@ -973,45 +1063,51 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             let retval_effective_schema_diff = diff_schema(
                 &caller_effective_method.info.return_value,
                 &callee_effective_method.info.return_value,
-                "".to_string());
+                "".to_string(),
+            );
             if let Some(diff) = retval_effective_schema_diff {
-                return Err(SavefileError::IncompatibleSchema{
-                    message: format!("Incompatible ABI detected. Trait: {}, method: {}, return value error: {}",
-                                     trait_name, &caller_native_method.name, diff
-                    )
+                return Err(SavefileError::IncompatibleSchema {
+                    message: format!(
+                        "Incompatible ABI detected. Trait: {}, method: {}, return value error: {}",
+                        trait_name, &caller_native_method.name, diff
+                    ),
                 });
             }
 
             let mut mask = 0;
-            for index in 0..caller_native_method.info.arguments.len()
-            {
+            for index in 0..caller_native_method.info.arguments.len() {
                 let effective_schema_diff = diff_schema(
                     &caller_effective_method.info.arguments[index].schema,
-                    &callee_effective_method.info.arguments[index].schema,"".to_string());
+                    &callee_effective_method.info.arguments[index].schema,
+                    "".to_string(),
+                );
                 if let Some(diff) = effective_schema_diff {
-                    return Err(SavefileError::IncompatibleSchema{
-                        message: format!("Incompatible ABI detected. Trait: {}, method: {}, argument: #{}, error: {}",
+                    return Err(SavefileError::IncompatibleSchema {
+                        message: format!(
+                            "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}, error: {}",
                             trait_name, &caller_native_method.name, index, diff
-                        )
+                        ),
                     });
                 }
 
                 let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
                 let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                if caller_isref && callee_isref &&
-                    arg_layout_compatible(
+                if caller_isref
+                    && callee_isref
+                    && arg_layout_compatible(
                         &caller_native_method.info.arguments[index].schema,
                         &callee_native_method.info.arguments[index].schema,
                         &caller_effective_method.info.arguments[index].schema,
                         &callee_effective_method.info.arguments[index].schema,
-                        effective_version
-                    ) {
-                    mask |= 1<<index;
+                        effective_version,
+                    )
+                {
+                    mask |= 1 << index;
                 }
             }
 
-            methods.push(AbiConnectionMethod{
+            methods.push(AbiConnectionMethod {
                 method_name: caller_native_method.name,
                 caller_info: caller_native_method.info,
                 callee_method_number: Some(callee_native_method_number as u16),
@@ -1028,12 +1124,14 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
 
     /// Gets the function pointer for the entry point of the given interface, in the given
     /// shared library.
-    fn get_symbol_for(shared_library_path: &str, trait_name: &str) -> Result<extern "C" fn (flag: AbiProtocol), SavefileError> {
+    fn get_symbol_for(
+        shared_library_path: &str,
+        trait_name: &str,
+    ) -> Result<extern "C" fn(flag: AbiProtocol), SavefileError> {
         let mut entry_guard = Guard::lock(&ENTRY_CACHE);
         let mut lib_guard = Guard::lock(&LIBRARY_CACHE);
 
-        if let Some(item) = entry_guard.get(&(shared_library_path.to_string(), trait_name.to_string()))
-        {
+        if let Some(item) = entry_guard.get(&(shared_library_path.to_string(), trait_name.to_string())) {
             return Ok(*item);
         }
 
@@ -1044,14 +1142,12 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             Entry::Occupied(item) => {
                 library = item.into_mut();
             }
-            Entry::Vacant(vacant) => {
-                unsafe {
-                    library = vacant.insert(Library::new(&filename).map_err(|x|SavefileError::LoadLibraryFailed {
-                        libname: filename.to_string(),
-                        msg: x.to_string()
-                    })?);
-                }
-            }
+            Entry::Vacant(vacant) => unsafe {
+                library = vacant.insert(Library::new(&filename).map_err(|x| SavefileError::LoadLibraryFailed {
+                    libname: filename.to_string(),
+                    msg: x.to_string(),
+                })?);
+            },
         }
 
         match entry_guard.entry((filename.clone(), trait_name.clone())) {
@@ -1060,14 +1156,17 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             }
             Entry::Vacant(vacant) => {
                 let symbol_name = format!("abi_entry_{}\0", trait_name);
-                let symbol: Symbol<extern "C" fn (flag: AbiProtocol)> = unsafe { library.get(symbol_name.as_bytes()).map_err(|x|{
-                    SavefileError::LoadSymbolFailed {
-                        libname: filename.to_string(),
-                        symbol: symbol_name,
-                        msg: x.to_string()
-                    }
-                })? };
-                let func : extern "C" fn (flag: AbiProtocol) = unsafe { std::mem::transmute(symbol.into_raw().into_raw()) };
+                let symbol: Symbol<extern "C" fn(flag: AbiProtocol)> = unsafe {
+                    library
+                        .get(symbol_name.as_bytes())
+                        .map_err(|x| SavefileError::LoadSymbolFailed {
+                            libname: filename.to_string(),
+                            symbol: symbol_name,
+                            msg: x.to_string(),
+                        })?
+                };
+                let func: extern "C" fn(flag: AbiProtocol) =
+                    unsafe { std::mem::transmute(symbol.into_raw().into_raw()) };
                 vacant.insert(func);
                 Ok(func)
             }
@@ -1089,12 +1188,10 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     /// and must contain an ABI-exported implementation of T, which must be a dyn trait.
     /// However, this kind of guarantee is really needed for all execution of any rust code,
     /// so we don't mark this as unsafe. Symbols are unlikely to match by mistake.
-    pub fn load_shared_library(filename: &str) -> Result<AbiConnection<T>, SavefileError>
-    {
+    pub fn load_shared_library(filename: &str) -> Result<AbiConnection<T>, SavefileError> {
         let remote_entry = Self::get_symbol_for(filename, Self::trait_name())?;
         Self::new_internal(remote_entry, None, Owning::Owned)
     }
-
 
     /// Creates an AbiConnection from a PackagedTraitObject
     /// This is the way the derive macro crates AbiConnection instances.
@@ -1104,8 +1201,10 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     /// * trait_object of `packed` must be a type erased trait object reference
     /// * owning must be correct
     #[doc(hidden)]
-    pub unsafe fn from_raw_packaged(packed: PackagedTraitObject, owning: Owning) -> Result<AbiConnection<T>, SavefileError>
-    {
+    pub unsafe fn from_raw_packaged(
+        packed: PackagedTraitObject,
+        owning: Owning,
+    ) -> Result<AbiConnection<T>, SavefileError> {
         Self::from_raw(packed.entry, packed.trait_object, owning)
     }
 
@@ -1120,8 +1219,11 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     /// * trait_object must be a type erased trait object reference
     /// * owning must be correct
     #[doc(hidden)]
-    pub unsafe fn from_raw(entry_point: extern "C" fn(AbiProtocol), trait_object: TraitObject, owning: Owning) -> Result<AbiConnection<T>, SavefileError>
-    {
+    pub unsafe fn from_raw(
+        entry_point: extern "C" fn(AbiProtocol),
+        trait_object: TraitObject,
+        owning: Owning,
+    ) -> Result<AbiConnection<T>, SavefileError> {
         Self::new_internal(entry_point, Some(trait_object), owning)
     }
 
@@ -1136,12 +1238,10 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     ///  * The entry point must contain a correct implementation matching the type T.
     ///  * T must be a dyn trait object
     #[doc(hidden)]
-    pub fn from_boxed_trait(trait_object: Box<T>) -> Result<AbiConnection<T>, SavefileError>
-    {
+    pub fn from_boxed_trait(trait_object: Box<T>) -> Result<AbiConnection<T>, SavefileError> {
         let trait_object = TraitObject::new(trait_object);
         Self::new_internal(T::ABI_ENTRY, Some(trait_object), Owning::Owned)
     }
-
 
     /// Crate a AbiConnection from an entry point and a boxed trait object.
     /// This allows using a different interface trait for the backing implementation, for
@@ -1151,8 +1251,10 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
     ///  * The entry point must contain a correct implementation matching the type T.
     ///  * T must be a dyn trait object
     #[doc(hidden)]
-    pub unsafe fn from_boxed_trait_for_test<O:AbiExportable + ?Sized>(entry_point: extern "C" fn(AbiProtocol), trait_object: Box<O>) -> Result<AbiConnection<T>, SavefileError>
-    {
+    pub unsafe fn from_boxed_trait_for_test<O: AbiExportable + ?Sized>(
+        entry_point: extern "C" fn(AbiProtocol),
+        trait_object: Box<O>,
+    ) -> Result<AbiConnection<T>, SavefileError> {
         let trait_object = TraitObject::new(trait_object);
         Self::new_internal(entry_point, Some(trait_object), Owning::Owned)
     }
@@ -1161,22 +1263,18 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
         remote_entry: extern "C" fn(AbiProtocol),
         trait_object: Option<TraitObject>,
         owning: Owning,
-    ) -> Result<AbiConnection<T>, SavefileError>
-    {
-
+    ) -> Result<AbiConnection<T>, SavefileError> {
         let mut templates = Guard::lock(&ABI_CONNECTION_TEMPLATES);
 
         let template = match templates.entry(remote_entry) {
-            Entry::Occupied(template) => {
-                template.get().clone()
-            }
+            Entry::Occupied(template) => template.get().clone(),
             Entry::Vacant(vacant) => {
                 let own_version = T::get_latest_version();
                 let own_native_definition = T::get_definition(own_version);
 
                 let mut callee_abi_version = 0u32;
                 let mut callee_schema_version = 0u16;
-                (remote_entry)(AbiProtocol::InterrogateVersion{
+                (remote_entry)(AbiProtocol::InterrogateVersion {
                     schema_version_receiver: &mut callee_schema_version as *mut _,
                     abi_version_receiver: &mut callee_abi_version as *mut _,
                 });
@@ -1195,31 +1293,33 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
                     name: "".to_string(),
                     methods: vec![],
                 };
-                extern "C" fn definition_receiver(receiver: *mut AbiTraitDefinition, schema_version: u16, data: *const u8, len: usize) {
+                extern "C" fn definition_receiver(
+                    receiver: *mut AbiTraitDefinition,
+                    schema_version: u16,
+                    data: *const u8,
+                    len: usize,
+                ) {
                     let receiver = unsafe { &mut *receiver };
                     let slice = unsafe { slice::from_raw_parts(data, len) };
                     let mut cursor = Cursor::new(slice);
-
 
                     let schema = load_noschema(&mut cursor, schema_version.into());
                     *receiver = schema.unwrap_or(Default::default());
                 }
 
-
                 (remote_entry)(AbiProtocol::InterrogateMethods {
                     schema_version_required: callee_schema_version,
                     callee_schema_version_interrogated: callee_abi_version,
                     result_receiver: &mut callee_abi_native_definition as *mut _,
-                    callback: definition_receiver
+                    callback: definition_receiver,
                 });
 
                 (remote_entry)(AbiProtocol::InterrogateMethods {
                     schema_version_required: callee_schema_version,
                     callee_schema_version_interrogated: effective_version,
                     result_receiver: &mut callee_abi_effective_definition as *mut _,
-                    callback: definition_receiver
+                    callback: definition_receiver,
                 });
-
 
                 let own_effective_definition = T::get_definition(effective_version);
                 let trait_name = Self::trait_name();
@@ -1236,26 +1336,23 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
             }
         };
 
-
         let trait_object = if let Some(obj) = trait_object {
             obj
-        }
-        else
-        {
+        } else {
             let mut trait_object = TraitObject::zero();
-            let mut error_msg:String = Default::default();
+            let mut error_msg: String = Default::default();
             extern "C" fn error_callback(error_receiver: *mut (), error: *const AbiErrorMsg) {
-                let error_msg = unsafe{&mut *(error_receiver as *mut String)};
-                *error_msg = unsafe{&*error}.convert_to_string();
+                let error_msg = unsafe { &mut *(error_receiver as *mut String) };
+                *error_msg = unsafe { &*error }.convert_to_string();
             }
-            (remote_entry)(AbiProtocol::CreateInstance{
+            (remote_entry)(AbiProtocol::CreateInstance {
                 trait_object_receiver: &mut trait_object as *mut _,
                 error_receiver: &mut error_msg as *mut String as *mut _,
                 error_callback,
             });
 
             if error_msg.len() > 0 {
-                return Err(SavefileError::CalleePanic {msg: error_msg});
+                return Err(SavefileError::CalleePanic { msg: error_msg });
             }
             trait_object
         };
@@ -1278,34 +1375,59 @@ impl<T:AbiExportable+?Sized> AbiConnection<T> {
 ///
 /// # Safety
 /// The 'AbiProtocol' protocol must only contain valid data.
-pub unsafe fn abi_entry_light<T:AbiExportable+?Sized>(flag: AbiProtocol) {
+pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
     match flag {
-        AbiProtocol::RegularCall { trait_object, method_number, effective_version, compatibility_mask, data, data_length, abi_result, receiver } => {
-
-            let result = catch_unwind(||{
+        AbiProtocol::RegularCall {
+            trait_object,
+            method_number,
+            effective_version,
+            compatibility_mask,
+            data,
+            data_length,
+            abi_result,
+            receiver,
+        } => {
+            let result = catch_unwind(|| {
                 let data = unsafe { slice::from_raw_parts(data, data_length) };
 
-                match unsafe { call_trait_obj::<T>(trait_object, method_number, effective_version, compatibility_mask, data, abi_result, receiver) } {
+                match unsafe {
+                    call_trait_obj::<T>(
+                        trait_object,
+                        method_number,
+                        effective_version,
+                        compatibility_mask,
+                        data,
+                        abi_result,
+                        receiver,
+                    )
+                } {
                     Ok(_) => {}
                     Err(err) => {
                         let msg = format!("{:?}", err);
-                        let err = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: msg.as_ptr(), len: msg.len() });
+                        let err = RawAbiCallResult::AbiError(AbiErrorMsg {
+                            error_msg_utf8: msg.as_ptr(),
+                            len: msg.len(),
+                        });
                         receiver(&err, abi_result)
                     }
                 }
             });
             match result {
-                Ok(()) => {
-                }
+                Ok(()) => {}
                 Err(err) => {
                     let msg = format!("{:?}", err);
-                    let err = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: msg.as_ptr(), len: msg.len() });
+                    let err = RawAbiCallResult::AbiError(AbiErrorMsg {
+                        error_msg_utf8: msg.as_ptr(),
+                        len: msg.len(),
+                    });
                     receiver(&err, abi_result)
                 }
             }
-
         }
-        AbiProtocol::InterrogateVersion { schema_version_receiver, abi_version_receiver} => {
+        AbiProtocol::InterrogateVersion {
+            schema_version_receiver,
+            abi_version_receiver,
+        } => {
             // # SAFETY
             // The pointers come from another savefile-implementation, and are known to be valid
             unsafe {
@@ -1313,7 +1435,12 @@ pub unsafe fn abi_entry_light<T:AbiExportable+?Sized>(flag: AbiProtocol) {
                 *abi_version_receiver = <T as AbiExportable>::get_latest_version();
             }
         }
-        AbiProtocol::InterrogateMethods { schema_version_required, callee_schema_version_interrogated, result_receiver, callback } => {
+        AbiProtocol::InterrogateMethods {
+            schema_version_required,
+            callee_schema_version_interrogated,
+            result_receiver,
+            callback,
+        } => {
             // Note! Any conforming implementation must send a 'schema_version_required' number that is
             // within the ability of the receiving implementation. It can interrogate this using 'AbiProtocol::InterrogateVersion'.
             let abi = <T as AbiExportable>::get_definition(callee_schema_version_interrogated);
@@ -1323,14 +1450,21 @@ pub unsafe fn abi_entry_light<T:AbiExportable+?Sized>(flag: AbiProtocol) {
             };
             callback(result_receiver, schema_version_required, temp.as_ptr(), temp.len());
         }
-        AbiProtocol::CreateInstance { trait_object_receiver:_, error_receiver, error_callback } => {
+        AbiProtocol::CreateInstance {
+            trait_object_receiver: _,
+            error_receiver,
+            error_callback,
+        } => {
             let msg = format!("Internal error - attempt to create an instance of {} using the interface crate, not an implementation crate", std::any::type_name::<T>());
-            let err = AbiErrorMsg{error_msg_utf8: msg.as_ptr(), len: msg.len() };
+            let err = AbiErrorMsg {
+                error_msg_utf8: msg.as_ptr(),
+                len: msg.len(),
+            };
             error_callback(error_receiver, &err as *const _)
         }
-        AbiProtocol::DropInstance { trait_object } => {
-            unsafe { destroy_trait_obj::<T>(trait_object); }
-        }
+        AbiProtocol::DropInstance { trait_object } => unsafe {
+            destroy_trait_obj::<T>(trait_object);
+        },
     }
 }
 /// Helper implementation of ABI entry point.
@@ -1342,27 +1476,41 @@ pub unsafe fn abi_entry_light<T:AbiExportable+?Sized>(flag: AbiProtocol) {
 ///
 /// # Safety
 /// The 'AbiProtocol' protocol must only contain valid data.
-pub unsafe fn abi_entry<T:AbiExportableImplementation>(flag: AbiProtocol) {
+pub unsafe fn abi_entry<T: AbiExportableImplementation>(flag: AbiProtocol) {
     match flag {
-        AbiProtocol::CreateInstance { trait_object_receiver, error_receiver, error_callback } => {
-            let result = catch_unwind(||{
-
-                let obj : Box<T::AbiInterface> = T::new();
+        AbiProtocol::CreateInstance {
+            trait_object_receiver,
+            error_receiver,
+            error_callback,
+        } => {
+            let result = catch_unwind(|| {
+                let obj: Box<T::AbiInterface> = T::new();
                 let raw = Box::into_raw(obj);
                 assert_eq!(std::mem::size_of::<*mut T::AbiInterface>(), 16);
                 assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
                 let mut trait_object = TraitObject::zero();
 
-                unsafe { ptr::copy(&raw as *const *mut T::AbiInterface, &mut trait_object as *mut TraitObject as *mut *mut T::AbiInterface, 1) };
+                unsafe {
+                    ptr::copy(
+                        &raw as *const *mut T::AbiInterface,
+                        &mut trait_object as *mut TraitObject as *mut *mut T::AbiInterface,
+                        1,
+                    )
+                };
 
-                unsafe { *trait_object_receiver = trait_object; }
+                unsafe {
+                    *trait_object_receiver = trait_object;
+                }
             });
             match result {
                 Ok(_) => {}
                 Err(err) => {
                     let msg = format!("{:?}", err);
-                    let err = AbiErrorMsg{error_msg_utf8: msg.as_ptr(), len: msg.len() };
+                    let err = AbiErrorMsg {
+                        error_msg_utf8: msg.as_ptr(),
+                        len: msg.len(),
+                    };
                     error_callback(error_receiver, &err as *const _)
                 }
             }
@@ -1382,13 +1530,12 @@ pub unsafe fn abi_entry<T:AbiExportableImplementation>(flag: AbiProtocol) {
 ///
 /// 'path' is a path where files defining the Abi schema are stored. These files
 /// should be checked in to version control.
-pub fn verify_compatiblity<T:AbiExportable+?Sized>(path: &str) -> Result<(),SavefileError> {
+pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), SavefileError> {
     std::fs::create_dir_all(path)?;
     for version in 0..=T::get_latest_version() {
         let def = T::get_definition(version);
         let schema_file_name = Path::join(Path::new(path), format!("savefile_{}_{}.schema", def.name, version));
         if std::fs::metadata(&schema_file_name).is_ok() {
-
             let previous_schema = load_file_noschema(&schema_file_name, 1)?;
 
             def.verify_backward_compatible(version, &previous_schema)?;

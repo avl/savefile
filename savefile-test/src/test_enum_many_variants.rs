@@ -1,7 +1,7 @@
 use assert_roundtrip;
 
 #[repr(u16)]
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 enum ManyVariants {
     Variant0,
     Variant1,
@@ -265,11 +265,11 @@ enum ManyVariants {
     Variant259,
 }
 #[repr(u32)]
-#[derive(Savefile,Debug,PartialEq)]
+#[derive(Savefile, Debug, PartialEq)]
 enum U32Discriminant {
     Variant0 = 0,
     Variant1 = 1,
-    Variant4294967295 = 4294967295
+    Variant4294967295 = 4294967295,
 }
 
 #[test]
@@ -286,5 +286,3 @@ fn test_enum_u32_discriminant() {
     assert_roundtrip(U32Discriminant::Variant1);
     assert_roundtrip(U32Discriminant::Variant4294967295);
 }
-
-

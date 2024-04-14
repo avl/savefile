@@ -1,10 +1,9 @@
 use proc_macro2::{Span, TokenStream};
 use syn::DeriveInput;
 
-use ::{get_enum_size};
-use ::{implement_fields_serialize};
-use ::common::{get_extra_where_clauses, FieldInfo, parse_attr_tag};
-
+use common::{get_extra_where_clauses, parse_attr_tag, FieldInfo};
+use get_enum_size;
+use implement_fields_serialize;
 
 pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let name = input.ident;
@@ -16,22 +15,25 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
     let defspan = proc_macro2::Span::call_site();
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Serialize + _savefile::prelude::ReprC});
-
+    let extra_where = get_extra_where_clauses(
+        &generics,
+        where_clause,
+        quote! {_savefile::prelude::Serialize + _savefile::prelude::ReprC},
+    );
 
     let uses = quote_spanned! { defspan =>
-    extern crate savefile as _savefile;
-};
+        extern crate savefile as _savefile;
+    };
 
     let serialize = quote_spanned! {defspan=>
-    _savefile::prelude::Serialize
-};
+        _savefile::prelude::Serialize
+    };
     let serializer = quote_spanned! {defspan=>
-    _savefile::prelude::Serializer<impl std::io::Write>
-};
+        _savefile::prelude::Serializer<impl std::io::Write>
+    };
     let saveerr = quote_spanned! {defspan=>
-    Result<(),_savefile::prelude::SavefileError>
-};
+        Result<(),_savefile::prelude::SavefileError>
+    };
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
@@ -40,8 +42,8 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
             let mut output = Vec::new();
             //let variant_count = enum1.variants.len();
             /*if variant_count >= 256 {
-            panic!("This library is not capable of serializing enums with 256 variants or more. Our deepest apologies, we thought no-one would ever create such an enum!");
-        }*/
+                panic!("This library is not capable of serializing enums with 256 variants or more. Our deepest apologies, we thought no-one would ever create such an enum!");
+            }*/
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
@@ -77,7 +79,8 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             })
                             .collect();
 
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
+                        let (fields_serialized, fields_names) =
+                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
                         output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => {
                             if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
                                 panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
@@ -92,9 +95,10 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             .iter()
                             .enumerate()
                             .map(|(idx, field)| FieldInfo {
-                                ident: Some(syn::Ident::new( // We bind the tuple field to a real name, like x0, x1 etc.
-                                                             &("x".to_string() + &idx.to_string()),
-                                                             Span::call_site(),
+                                ident: Some(syn::Ident::new(
+                                    // We bind the tuple field to a real name, like x0, x1 etc.
+                                    &("x".to_string() + &idx.to_string()),
+                                    Span::call_site(),
                                 )),
                                 index: idx as u32,
                                 ty: &field.ty,
@@ -102,7 +106,8 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             })
                             .collect();
 
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
+                        let (fields_serialized, fields_names) =
+                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
 
                         output.push(
                             quote!(
@@ -126,24 +131,24 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                 }
             }
             quote! {
-            #[allow(non_upper_case_globals)]
-            #[allow(clippy::double_comparisons)]
-            #[allow(clippy::manual_range_contains)]
-            const #dummy_const: () = {
-                #uses
+                #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
+                const #dummy_const: () = {
+                    #uses
 
-                impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
 
-                    #[allow(unused_comparisons, unused_variables)]
-                    fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
-                        match self {
-                            #(#output,)*
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
+                            match self {
+                                #(#output,)*
+                            }
+                            Ok(())
                         }
-                        Ok(())
                     }
-                }
-            };
-        }
+                };
+            }
         }
         &syn::Data::Struct(ref struc) => {
             let fields_serialize: TokenStream;
@@ -189,21 +194,21 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                 }
             }
             quote! {
-            #[allow(non_upper_case_globals)]
-            #[allow(clippy::double_comparisons)]
-            #[allow(clippy::manual_range_contains)]
-            const #dummy_const: () = {
-                #uses
+                #[allow(non_upper_case_globals)]
+                #[allow(clippy::double_comparisons)]
+                #[allow(clippy::manual_range_contains)]
+                const #dummy_const: () = {
+                    #uses
 
-                impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
-                    #[allow(unused_comparisons, unused_variables)]
-                    fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                        #fields_serialize
-                        Ok(())
+                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
+                        #[allow(unused_comparisons, unused_variables)]
+                        fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
+                            #fields_serialize
+                            Ok(())
+                        }
                     }
-                }
-            };
-        }
+                };
+            }
         }
         _ => {
             panic!("Unsupported data type");
