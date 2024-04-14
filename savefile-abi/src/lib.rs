@@ -11,11 +11,6 @@ Savefile-abi is a crate that is primarily meant to help building binary plugins 
 
 Note! This is a work-in-progress.
 
-Remaining todo:
-
- * Support tuples as parameters to trait methods!
-
-
 # Example
 
 Let's say we have a crate that defines this trait for adding u32s:
