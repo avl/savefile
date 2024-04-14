@@ -20,408 +20,17 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 
-use proc_macro2::{Literal, Span};
+use proc_macro2::{Span};
 use proc_macro2::TokenStream;
-    #[allow(unused_imports)]
+#[allow(unused_imports)]
 use std::iter::IntoIterator;
 use quote::ToTokens;
-use syn::{DeriveInput, Expr, FnArg, GenericArgument, GenericParam, Generics, Ident, Index, ItemTrait, Lit, ParenthesizedGenericArguments, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WhereClause};
+use syn::{DeriveInput, FnArg, Ident, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeTuple};
 use syn::__private::bool;
 use syn::token::{Paren};
 use syn::Type::Tuple;
+use ::common::{path_to_string,get_extra_where_clauses, FieldInfo, parse_attr_tag, check_is_remove, compile_time_size,compile_time_check_reprc};
 
-#[derive(Debug)]
-struct VersionRange {
-    from: u32,
-    to: u32,
-    convert_fun: String,
-    serialized_type: String,
-}
-
-#[derive(Debug)]
-struct AttrsResult {
-    version_from: u32,
-    version_to: u32,
-    ignore: bool,
-    default_fn: Option<syn::Ident>,
-    default_val: Option<TokenStream>,
-    deserialize_types: Vec<VersionRange>,
-    introspect_key: bool,
-    introspect_ignore: bool,
-}
-
-enum RemovedType {
-    NotRemoved,
-    Removed,
-    AbiRemoved
-}
-impl RemovedType {
-    fn is_removed(&self) -> bool {
-        match self {
-            RemovedType::NotRemoved => {false}
-            RemovedType::Removed => {true}
-            RemovedType::AbiRemoved => {true}
-        }
-    }
-}
-fn check_is_remove(field_type: &syn::Type) -> RemovedType {
-
-    let mut tokens = TokenStream::new();
-    field_type.to_tokens(&mut tokens);
-    for tok in tokens.into_iter() {
-        if tok.to_string() == "Removed" {
-            return RemovedType::Removed;
-            //TODO: This is not robust, since it's based on text matching
-        }
-        if tok.to_string() == "AbiRemoved" {
-            return RemovedType::AbiRemoved;
-            //TODO: This is not robust, since it's based on text matching
-        }
-    }
-    RemovedType::NotRemoved
-}
-
-
-fn overlap<'a>(b: &'a VersionRange) -> impl Fn(&'a VersionRange) -> bool {
-    assert!(b.to >= b.from);
-    move |a: &'a VersionRange| {
-        assert!(a.to >= a.from);
-        let no_overlap = a.to < b.from || a.from > b.to;
-        !no_overlap
-    }
-}
-
-fn path_to_string(path: &syn::Path) -> String {
-    path.segments.last().expect("Expected at least one segment").ident.to_string()
-}
-
-
-
-fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
-    let mut field_from_version = None;
-    let mut field_to_version = None;
-    let mut default_fn = None;
-    let mut default_val = None;
-    let mut ignore = false;
-    let mut introspect_ignore = false;
-    let mut introspect_key = false;
-    let mut deser_types = Vec::new();
-    for attr in attrs.iter() {
-        match attr.parse_meta() {
-            Ok(ref meta) => {
-                match meta {
-                    syn::Meta::Path(x) => {
-                        let x = path_to_string(x);
-                        if x == "savefile_ignore" {
-                            ignore = true;
-                        }
-                        if x == "savefile_introspect_key" {
-                            introspect_key = true;
-                        }
-                        if x == "savefile_introspect_ignore" {
-                            introspect_ignore = true;
-                        }
-                    }
-                    &syn::Meta::List(ref _x) => {
-                    }
-                    &syn::Meta::NameValue(ref x) => {
-                        let path = path_to_string(&x.path);
-                        if path == "savefile_default_val" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr) => {
-                                    default_val = Some(quote! { str::parse(#litstr).expect("Expected valid literal string") })
-                                },
-                                _ => {
-                                    let lv = &x.lit;
-                                    default_val = Some(quote!{#lv});
-                                }
-                            };
-
-                        };
-                        if path == "savefile_default_fn" {
-                            let default_fn_str_lit = match &x.lit {
-                                &syn::Lit::Str(ref litstr) => litstr,
-                                _ => {
-                                    panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
-                                }
-                            };
-                            default_fn = Some(syn::Ident::new(
-                                &default_fn_str_lit.value(),
-                                proc_macro2::Span::call_site(),
-                            ));
-                        };
-
-                        if path == "savefile_ignore" {
-                            ignore = true;
-                        };
-                        if path == "savefile_introspect_ignore" {
-                            introspect_ignore = true;
-                        };
-                        if path == "savefile_versions_as" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr2) => {
-                                    let output2: Vec<String> =
-                                        litstr2.value().splitn(3, ':').map(|x| x.to_string()).collect();
-                                    if output2.len() != 3 && output2.len() != 2 {
-                                        panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
-                                    }
-                                    let litstr = &output2[0];
-
-                                    let convert_fun: String;
-                                    let version_type: String;
-
-                                    if output2.len() == 2 {
-                                        convert_fun = "".to_string();
-                                        version_type = output2[1].to_string();
-                                    } else {
-                                        convert_fun = output2[1].to_string();
-                                        version_type = output2[2].to_string();
-                                    }
-
-                                    let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
-                                    if output.len() != 2 {
-                                        panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
-                                    }
-                                    let (a, b) = (output[0].to_string(), output[1].to_string());
-
-                                    let from_ver = if a.trim() == "" {
-                                        0
-                                    } else if let Ok(a_u32) = a.parse::<u32>() {
-                                        a_u32
-                                    } else {
-                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                    };
-
-                                    let to_ver = if b.trim() == "" {
-                                        std::u32::MAX
-                                    } else if let Ok(b_u32) = b.parse::<u32>() {
-                                        b_u32
-                                    } else {
-                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
-                                    };
-                                    if to_ver < from_ver {
-                                        panic!("Version ranges must specify lower number first.");
-                                    }
-
-                                    let item = VersionRange {
-                                        from: from_ver,
-                                        to: to_ver,
-                                        convert_fun: convert_fun.to_string(),
-                                        serialized_type: version_type.to_string(),
-                                    };
-                                    if deser_types.iter().any(overlap(&item)) {
-                                        panic!("#savefile_versions_as attributes may not specify overlapping ranges");
-                                    }
-                                    deser_types.push(item);
-                                }
-                                _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
-                            }
-                        }
-
-                        if path == "savefile_versions" {
-                            match &x.lit {
-                                &syn::Lit::Str(ref litstr) => {
-                                    let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
-                                    if output.len() != 2 {
-                                        panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
-                                    }
-                                    let (a, b) = (output[0].to_string(), output[1].to_string());
-
-                                    if field_from_version.is_some() || field_to_version.is_some() {
-                                        panic!("There can only be one savefile_versions attribute on each field.")
-                                    }
-                                    if a.trim() == "" {
-                                        field_from_version = Some(0);
-                                    } else if let Ok(a_u32) = a.parse::<u32>() {
-                                        field_from_version = Some(a_u32);
-                                    } else {
-                                        panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
-                                    }
-
-                                    if b.trim() == "" {
-                                        field_to_version = Some(std::u32::MAX);
-                                    } else if let Ok(b_u32) = b.parse::<u32>() {
-                                        field_to_version = Some(b_u32);
-                                    } else {
-                                        panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
-                                    }
-                                    if field_to_version.expect("Expected field_to_version") < field_from_version.expect("expected field_from_version") {
-                                        panic!("savefile_versions ranges must specify lower number first.");
-                                    }
-                                }
-                                _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                panic!("Unparsable attribute: {:?} ({:?})",e, attr.tokens);
-            }
-        }
-    }
-
-    let versions_tag_range = VersionRange {
-        from: field_from_version.unwrap_or(0),
-        to: field_to_version.unwrap_or(std::u32::MAX),
-        convert_fun: "dummy".to_string(),
-        serialized_type: "dummy".to_string(),
-    };
-    if deser_types.iter().any(overlap(&versions_tag_range)) {
-        panic!("The version ranges of #version_as attributes may not overlap those of #savefile_versions");
-    }
-    for dt in deser_types.iter() {
-        if dt.to >= field_from_version.unwrap_or(0) {
-            panic!("The version ranges of #version_as attributes must be lower than those of the #savefile_versions attribute.");
-        }
-    }
-
-    AttrsResult {
-        version_from: field_from_version.unwrap_or(0),
-        version_to: field_to_version.unwrap_or(std::u32::MAX),
-        default_fn,
-        default_val,
-        ignore,
-        deserialize_types: deser_types,
-        introspect_key,
-        introspect_ignore,
-    }
-}
-
-struct FieldInfo<'a> {
-    ident: Option<syn::Ident>,
-    index: u32,
-    ty: &'a syn::Type,
-    attrs: &'a Vec<syn::Attribute>,
-}
-impl<'a> FieldInfo<'a> {
-    /// field name for named fields, .1 or .2 for tuple fields.
-    pub fn get_accessor(&self) -> TokenStream {
-        match &self.ident {
-            None => {
-                let index = syn::Index::from(self.index as usize);
-                index.to_token_stream()
-            }
-            Some(id) => {
-                id.to_token_stream()
-            }
-        }
-    }
-}
-fn compile_time_size(typ: &Type) -> Option<(usize/*size*/, usize/*alignment*/)> {
-    match typ {
-        Type::Path(p) => {
-            if let Some(ident) = p.path.get_ident() {
-                match ident.to_string().as_str() {
-                    "u8" => Some((1,1)),
-                    "i8" => Some((1,1)),
-                    "u16" => Some((2,2)),
-                    "i16" => Some((2,2)),
-                    "u32" => Some((4,4)),
-                    "i32" => Some((4,4)),
-                    "u64" => Some((8,8)),
-                    "i64" => Some((8,8)),
-                    "char" => Some((4,4)),
-                    "bool" => Some((1,1)),
-                    "f32" => Some((4,4)),
-                    "f64" => Some((8,8)),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        }
-        Type::Tuple(t) => {
-            let mut itemsize_align = None;
-            let mut result_size = 0;
-            if t.elems.iter().next().is_none() { //Empty tuple
-                return Some((0,1));
-            }
-            for item in t.elems.iter() {
-                let (cursize,curalign) = compile_time_size(item)?;
-                if let Some(itemsize_align) = itemsize_align {
-                    if itemsize_align != (cursize,curalign) {
-                        // All items not the same size and have same alignment. Otherwise: Might be padding issues.
-                        return None; //It could conceivably still be reprC, safe, but we're conservative here.
-                    }
-                } else {
-                    itemsize_align = Some((cursize,curalign));
-                }
-                result_size += cursize;
-            }
-            if let Some((_itemsize, itemalign)) = itemsize_align {
-                Some((result_size, itemalign))
-            } else {
-                None
-            }
-        }
-        Type::Array(a) => {
-            let (itemsize, itemalign) = compile_time_size(&a.elem)?;
-            match &a.len {
-                Expr::Lit(l) => {
-                    match &l.lit {
-                        Lit::Int(t) => {
-                            let size : usize = t.base10_parse().ok()?;
-                            Some((size*itemsize, itemalign))
-                        }
-                        _ => None
-                    }
-                }
-                _ => None
-            }
-        }
-        _ => None
-    }
-}
-fn compile_time_check_reprc(typ: &Type) -> bool {
-
-    match typ {
-        Type::Path(p) => {
-            if let Some(name) = p.path.get_ident() {
-                let name = name.to_string();
-                match name.as_str() {
-                    "u8" => true,
-                    "i8" => true,
-                    "u16" => true,
-                    "i16" => true,
-                    "u32" => true,
-                    "i32" => true,
-                    "u64" => true,
-                    "i64" => true,
-                    "char" => true,
-                    "bool" => true,
-                    "f32" => true,
-                    "f64" => true,
-                    _ => false,
-                }
-            } else {
-                false
-            }
-        }
-        Type::Array(x) => {
-            compile_time_check_reprc(&x.elem)
-        }
-        Type::Tuple(t) => {
-            let mut size = None;
-            for x in &t.elems {
-                if !compile_time_check_reprc(x)
-                {
-                    return false;
-                }
-                let xsize = if let Some(s) = compile_time_size(x) {s} else {return false};
-                if let Some(size) = size {
-                    if xsize != size {
-                        return false;
-                    }
-                } else {
-                    size = Some(xsize);
-                }
-            }
-            true
-        }
-        _ => false
-    }
-}
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -594,974 +203,13 @@ fn implement_fields_serialize(
     (serialize2, fields_names)
 }
 
-fn get_extra_where_clauses(gen2: &Generics, where_clause: Option<&WhereClause>, the_trait: TokenStream) -> TokenStream {
-    let extra_where_separator;
-    if where_clause.is_some() {
-        extra_where_separator = quote!(,);
-    } else {
-        extra_where_separator = quote!(where);
-    }
-    let mut where_clauses = vec![];
-    for param in gen2.params.iter() {
-        if let GenericParam::Type(t) = param {
-            let t_name = &t.ident;
-            let clause = quote!{#t_name : #the_trait};
-            where_clauses.push(clause);
-        }
-    }
-    let extra_where = quote!{
-        #extra_where_separator #(#where_clauses),*
-    };
-    extra_where
-}
-fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
-    let name = input.ident;
-    let name_str = name.to_string();
+pub(crate) mod common;
 
-    let generics = input.generics;
+mod serialize;
 
-    let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::call_site();
+mod deserialize;
 
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Serialize + _savefile::prelude::ReprC});
-
-
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile as _savefile;
-    };
-
-    let serialize = quote_spanned! {defspan=>
-        _savefile::prelude::Serialize
-    };
-    let serializer = quote_spanned! {defspan=>
-        _savefile::prelude::Serializer<impl std::io::Write>
-    };
-    let saveerr = quote_spanned! {defspan=>
-        Result<(),_savefile::prelude::SavefileError>
-    };
-
-    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
-
-    let expanded = match &input.data {
-        &syn::Data::Enum(ref enum1) => {
-            let mut output = Vec::new();
-            //let variant_count = enum1.variants.len();
-            /*if variant_count >= 256 {
-                panic!("This library is not capable of serializing enums with 256 variants or more. Our deepest apologies, we thought no-one would ever create such an enum!");
-            }*/
-            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
-
-            for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
-                let var_idx_u8:u8 = var_idx_usize as u8;
-                let var_idx_u16:u16 = var_idx_usize as u16;
-                let var_idx_u32:u32 = var_idx_usize as u32;
-
-                let verinfo = parse_attr_tag(&variant.attrs);
-                let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
-
-                let variant_serializer = match enum_size.discriminant_size {
-                    1 => quote! { serializer.write_u8(#var_idx_u8)? ; },
-                    2 => quote! { serializer.write_u16(#var_idx_u16)? ; },
-                    4 => quote! { serializer.write_u32(#var_idx_u32)? ; },
-                    _ => unreachable!(),
-                };
-
-                let var_ident = (variant.ident).clone();
-                let variant_name = quote! { #name::#var_ident };
-                let variant_name_str = var_ident.to_string();
-                let variant_name_spanned = quote_spanned! { span => #variant_name};
-                match &variant.fields {
-                    &syn::Fields::Named(ref fields_named) => {
-                        let field_infos: Vec<FieldInfo> = fields_named
-                            .named
-                            .iter()
-                            .enumerate()
-                            .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().expect("Expected identifier[4]")),
-                                index: field_index as u32,
-                                ty: &field.ty,
-                                attrs: &field.attrs,
-                            })
-                            .collect();
-
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
-                        output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => {
-                                if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
-                                    panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
-                                }
-                                #variant_serializer
-                                #fields_serialized 
-                            } ));
-                    }
-                    &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        let field_infos: Vec<FieldInfo> = fields_unnamed
-                            .unnamed
-                            .iter()
-                            .enumerate()
-                            .map(|(idx, field)| FieldInfo {
-                                ident: Some(syn::Ident::new( // We bind the tuple field to a real name, like x0, x1 etc.
-                                    &("x".to_string() + &idx.to_string()),
-                                    Span::call_site(),
-                                )),
-                                index: idx as u32,
-                                ty: &field.ty,
-                                attrs: &field.attrs,
-                            })
-                            .collect();
-
-                        let (fields_serialized, fields_names) = implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
-
-                        output.push(
-                            quote!(
-
-                                #variant_name_spanned(#(#fields_names,)*) => {
-                                    if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
-                                        panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
-                                    }
-                                    #variant_serializer ; #fields_serialized
-                                }
-                            ),
-                        );
-                    }
-                    &syn::Fields::Unit => {
-                        output.push(quote!( #variant_name_spanned => {
-                            if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
-                                panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
-                            }
-                            #variant_serializer ; } ));
-                    }
-                }
-            }
-            quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                    #uses
-
-                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
-
-                        #[allow(unused_comparisons, unused_variables)]
-                        fn serialize(&self, serializer: &mut #serializer) -> #saveerr {
-                            match self {
-                                #(#output,)*
-                            }
-                            Ok(())
-                        }
-                    }
-                };
-            }
-        }
-        &syn::Data::Struct(ref struc) => {
-            let fields_serialize: TokenStream;
-            let _field_names: Vec<TokenStream>;
-            match &struc.fields {
-                &syn::Fields::Named(ref namedfields) => {
-                    let field_infos: Vec<FieldInfo> = namedfields
-                        .named
-                        .iter()
-                        .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().expect("Identifier[5]")),
-                            ty: &field.ty,
-                            index: field_index as u32,
-                            attrs: &field.attrs,
-                        })
-                        .collect();
-
-                    let t = implement_fields_serialize(field_infos, true, false);
-                    fields_serialize = t.0;
-                    _field_names = t.1;
-                }
-                &syn::Fields::Unnamed(ref fields_unnamed) => {
-                    let field_infos: Vec<FieldInfo> = fields_unnamed
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
-                            ident: None,
-                            ty: &field.ty,
-                            index: field_index as u32,
-                            attrs: &field.attrs,
-                        })
-                        .collect();
-
-                    let t = implement_fields_serialize(field_infos, true, true);
-                    fields_serialize = t.0;
-                    _field_names = t.1;
-                }
-                &syn::Fields::Unit => {
-                    _field_names = Vec::new();
-                    fields_serialize = quote! { {} };
-                }
-            }
-            quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                    #uses
-
-                    impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
-                        #[allow(unused_comparisons, unused_variables)]
-                        fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {
-                            #fields_serialize
-                            Ok(())
-                        }
-                    }
-                };
-            }
-        }
-        _ => {
-            panic!("Unsupported data type");
-        }
-    };
-
-    expanded
-}
-
-fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
-    let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::call_site();
-    let removeddef = quote_spanned! { defspan => _savefile::prelude::Removed };
-    let abiremoveddef = quote_spanned! { defspan => _savefile::prelude::AbiRemoved };
-    let local_deserializer = quote_spanned! { defspan => deserializer};
-
-    let mut output = Vec::new();
-    let mut min_safe_version = 0;
-    for field in &field_infos {
-        let field_type = &field.ty;
-
-        let is_removed = check_is_remove(field_type);
-
-        let verinfo = parse_attr_tag(field.attrs);
-        let (field_from_version, field_to_version, default_fn, default_val) = (
-            verinfo.version_from,
-            verinfo.version_to,
-            verinfo.default_fn,
-            verinfo.default_val,
-        );
-        let mut exists_version_which_needs_default_value = false;
-        if verinfo.ignore {
-            exists_version_which_needs_default_value = true;
-        } else {
-            for ver in 0..verinfo.version_from {
-                if !verinfo.deserialize_types.iter().any(|x| ver >= x.from && ver <= x.to) {
-                    exists_version_which_needs_default_value = true;
-                }
-            }
-        }
-
-        let effective_default_val = if is_removed.is_removed() {
-            match is_removed {
-                RemovedType::Removed => quote! { #removeddef::new() },
-                RemovedType::AbiRemoved => quote! { #abiremoveddef::new() },
-                _ => unreachable!()
-            }
-
-        } else if let Some(defval) = default_val {
-            quote! { #defval }
-        } else if let Some(default_fn) = default_fn {
-            quote_spanned! { span => #default_fn() }
-        } else if !exists_version_which_needs_default_value {
-            quote! { panic!("Unexpected unsupported file version: {}",#local_deserializer.file_version) }
-        //Should be impossible
-        } else {
-            quote_spanned! { span => Default::default() }
-        };
-        if field_from_version > field_to_version {
-            panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
-        }
-
-        let src = if field_from_version == 0 && field_to_version == std::u32::MAX && !verinfo.ignore {
-            if is_removed.is_removed() {
-                panic!("The Removed type may only be used for fields which have an old version.");
-                //TODO: Better message, tell user how to do this annotation
-            };
-            quote_spanned! { span =>
-                <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
-            }
-        } else if verinfo.ignore {
-            quote_spanned! { span =>
-                #effective_default_val
-            }
-        } else {
-            if field_to_version < std::u32::MAX {
-                // A delete
-                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-            }
-            if field_from_version < std::u32::MAX {
-                // An addition
-                min_safe_version = min_safe_version.max(field_from_version);
-            }
-            let mut version_mappings = Vec::new();
-            for dt in verinfo.deserialize_types.iter() {
-                let dt_from = dt.from;
-                let dt_to = dt.to;
-                let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
-                let dt_convert_fun = if dt.convert_fun.len() > 0 {
-                    let dt_conv_fun = syn::Ident::new(&dt.convert_fun, span);
-                    quote! { #dt_conv_fun }
-                } else {
-                    quote! { <#field_type>::from }
-                };
-
-                version_mappings.push(quote!{
-                    if #local_deserializer.file_version >= #dt_from && #local_deserializer.file_version <= #dt_to {
-                        let temp : #dt_field_type = <#dt_field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?;
-                        #dt_convert_fun(temp)
-                    } else 
-                });
-            }
-
-            quote_spanned! { span =>
-                #(#version_mappings)*
-                if #local_deserializer.file_version >= #field_from_version && #local_deserializer.file_version <= #field_to_version {
-                    <#field_type as _savefile::prelude::Deserialize>::deserialize(#local_deserializer)?
-                } else {
-                    #effective_default_val
-                }
-            }
-        };
-
-        if let Some(ref id) = field.ident {
-            let id_spanned = quote_spanned! { span => #id};
-            output.push(quote!(#id_spanned : #src ));
-        } else {
-            output.push(quote!( #src ));
-        }
-    }
-    output
-}
-
-fn emit_closure_helpers(
-    version: u32,
-    temp_trait_name: Ident, args: &ParenthesizedGenericArguments,
-    ismut: bool,
-    extra_definitions: &mut Vec<TokenStream>,
-    fnkind: Ident
-) {
-
-
-    let temp_trait_name_wrapper = Ident::new(
-        &format!("{}_wrapper", temp_trait_name), Span::call_site()
-    );
-
-    let mut formal_parameter_declarations = vec![];
-    let mut parameter_types = vec![];
-    let mut arg_names = vec![];
-
-    for (arg_index,arg) in args.inputs.iter().enumerate() {
-        let arg_name = Ident::new(&format!("x{}", arg_index), Span::call_site());
-        formal_parameter_declarations.push(quote!{#arg_name : #arg});
-        parameter_types.push(arg.to_token_stream());
-        arg_names.push(arg_name.to_token_stream());
-    }
-
-    let ret_type;
-    let ret_type_decl;
-
-    if let ReturnType::Type(_, rettype) = &args.output {
-        let typ = rettype.to_token_stream();
-        ret_type = quote!{#typ};
-        ret_type_decl = quote!{ -> #typ };
-    } else {
-        ret_type = quote!{ () };
-        ret_type_decl = quote!{};
-    }
-
-    let version = Literal::u32_unsuffixed(version);
-
-    let mutsymbol;
-    let mutorconst;
-    if ismut {
-        mutsymbol = quote!{mut};
-        mutorconst = quote!{mut};
-    } else {
-        mutsymbol = quote!{};
-        mutorconst = quote!{const};
-    }
-
-
-    let expanded = quote! {
-
-        #[savefile_abi_exportable(version=#version)]
-        pub trait #temp_trait_name {
-            fn docall(& #mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type;
-        }
-
-        struct #temp_trait_name_wrapper<'a> {
-            func: *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)
-        }
-        impl<'a> #temp_trait_name for #temp_trait_name_wrapper<'a> {
-            fn docall(&#mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type {
-                unsafe { (&#mutsymbol *self.func)( #(#arg_names,)* )}
-            }
-        }
-
-    };
-    extra_definitions.push(expanded);
-}
-
-#[proc_macro]
-pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = item.to_string();
-    let symbols: Vec<_> = input.split(',').map(|x|x.trim()).collect();
-    if symbols.len() != 2 {
-        panic!("savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
-    }
-    let defspan = Span::call_site();
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile_abi;
-        use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry};
-    };
-
-    let implementing_type = Ident::new(symbols[0], Span::call_site());
-    let trait_type = Ident::new(symbols[1], Span::call_site());
-    let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
-
-    let expanded = quote! {
-        #[allow(clippy::double_comparisons)]
-        const _:() = {
-            #uses
-            unsafe impl AbiExportableImplementation for #implementing_type {
-                const ABI_ENTRY: extern "C" fn (AbiProtocol) = #abi_entry;
-                type AbiInterface = dyn #trait_type;
-
-                fn new() -> Box<Self::AbiInterface> {
-                    Box::new(#implementing_type::default())
-                }
-            }
-            #[no_mangle]
-            pub extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
-                unsafe { abi_entry::<#implementing_type>(flag); }
-            }
-        };
-    };
-
-    expanded.into()
-}
-
-enum ArgType {
-    PlainData(TokenStream),
-    Reference(TokenStream),
-    SliceReference(TokenStream),
-    TraitReference(Ident, bool/*ismut*/),
-    BoxedTrait(Ident),
-    Fn(
-        Ident,/*Name of temporary trait generated to be able to handle Fn* as dyn TemporaryTrait. */
-        TokenStream,/*full closure definition (e.g "Fn(u32)->u16")*/
-        Vec<Type>,/*arg types*/
-        bool/*ismut*/
-    ),
-}
-
-struct MethodDefinitionComponents {
-    method_metadata: TokenStream,
-    callee_method_trampoline: TokenStream,
-    caller_method_trampoline: TokenStream,
-}
-
-fn parse_type(version: u32, arg_name: &Ident, typ: &Type, method_name: &Ident, name_generator: &mut impl FnMut() -> String,extra_definitions: &mut Vec<TokenStream>, is_reference: bool, is_mut_ref: bool) -> ArgType {
-    let rawtype;
-    match typ {
-        Type::Tuple(tup) if tup.elems.is_empty() => {
-            rawtype = typ.to_token_stream();
-            //argtype = ArgType::PlainData(typ.to_token_stream());
-        }
-        Type::Reference(typref) => {
-            if typref.lifetime.is_some() {
-                panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
-            }
-            if is_reference {
-                panic!("Method {}, argument {}: Method arguments cannot be reference to reference in Savefile-abi. Try removing a '&' from the type: {}", method_name, arg_name, typ.to_token_stream());
-            }
-            return parse_type(version, arg_name, &*typref.elem, method_name, &mut *name_generator, extra_definitions, true, typref.mutability.is_some());
-        }
-        Type::Tuple(tuple) => {
-            if tuple.elems.len() > 3 {
-                panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
-            }
-            rawtype = tuple.to_token_stream();
-        }
-        Type::Slice(slice) => {
-            if !is_reference {
-                panic!("Method {}, argument {}: Slices must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
-            }
-            if is_mut_ref {
-                panic!("Method {}, argument {}: Mutable refernces are not supported by Savefile-abi, except for FnMut-trait objects. {}", method_name, arg_name, typ.to_token_stream());
-            }
-            return ArgType::SliceReference(slice.elem.to_token_stream());
-        }
-        Type::TraitObject(trait_obj) => {
-            if !is_reference {
-                panic!("Method {}, argument {}: Trait objects must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
-            }
-            if trait_obj.dyn_token.is_some() {
-                let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
-                    match x {
-                        TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().expect("Missing bounds of Box trait object"))}
-                        TypeParamBound::Lifetime(_) => {
-                            panic!("Method {}, argument {}: Specifying lifetimes is not supported.", method_name, arg_name);
-                        }
-                    }
-                }).collect();
-                if type_bounds.len() == 0 {
-                    panic!("Method {}, argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
-                }
-                if type_bounds.len() > 1 {
-                    panic!("Method {}, argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
-                }
-                let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
-
-                if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
-                    if bound.ident == "FnOnce" {
-                        panic!("Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?", method_name, arg_name);
-                    }
-
-                    if bound.ident == "FnMut" && !is_mut_ref {
-                        panic!("Method {}, argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
-                    }
-                    let fn_decl = bound.to_token_stream();
-                    match &bound.arguments {
-                        PathArguments::Parenthesized(pararg) => {
-                            //pararg.inputs
-                            let temp_name = Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
-                            emit_closure_helpers(version, temp_name.clone(), pararg, is_mut_ref, extra_definitions, bound.ident.clone());
-                            return ArgType::Fn(temp_name, fn_decl, pararg.inputs.iter().map(|x|x.clone()).collect(), is_mut_ref);
-                        }
-                        _ => {
-                            panic!("Fn/FnMut arguments must be enclosed in parenthesis")
-                        }
-                    }
-                } else {
-                    return ArgType::TraitReference(bound.ident.clone(), is_mut_ref);
-                }
-            } else {
-                panic!("Method {}, argument {}, reference to trait objects without 'dyn' are not supported.", method_name, arg_name);
-            }
-
-        }
-        Type::Path(path) => {
-            let first_seg = path.path.segments.iter().next().expect("Missing path segments");
-            if first_seg.ident == "Box" {
-                match &first_seg.arguments {
-                    PathArguments::AngleBracketed(ang) => {
-                        let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
-                        if ang.args.len() != 1 {
-                            panic!("Method {}, argument {}. Savefile requires Box arguments to have exactly one generic argument, a requirement not satisfied by type: {:?}", method_name, arg_name, typ);
-                        }
-                        match first_gen_arg {
-                            GenericArgument::Type(angargs) => {
-                                match angargs {
-                                    Type::TraitObject(trait_obj) => {
-                                        if is_reference {
-                                            panic!("Method {}, argument {}: Reference to boxed trait object is not supported by savefile. Try using a regular reference to the box content instead.", method_name, arg_name);
-                                        }
-                                        let type_bounds:Vec<_> = trait_obj.bounds.iter().filter_map(|x|{
-                                            match x {
-                                                TypeParamBound::Trait(t) => {Some(t.path.segments.iter().last().cloned().expect("Missing bounds of Box trait object").ident.clone())}
-                                                TypeParamBound::Lifetime(_) => {None}
-                                            }
-                                        }).collect();
-                                        if type_bounds.len() == 0 {
-                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered zero traits in Box.", method_name, arg_name);
-                                        }
-                                        if type_bounds.len() > 1 {
-                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported. Encountered multiple traits in Box: {:?}", method_name, arg_name, trait_obj);
-                                        }
-                                        if trait_obj.dyn_token.is_none() {
-                                            panic!("Method {}, argument {}, unsupported Box-type. Only Box<dyn Trait> is supported.", method_name, arg_name)
-                                        }
-                                        let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
-                                        return ArgType::BoxedTrait(bound);
-                                    }
-                                    _ =>
-                                    {
-                                        match parse_type(version, arg_name, angargs, method_name, &mut *name_generator, extra_definitions, is_reference, is_mut_ref) {
-                                            ArgType::PlainData(_plain) => {
-                                                rawtype = path.to_token_stream();
-                                            }
-                                            _ => { panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ); }
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {
-                                panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ);
-                            }
-                        }
-                    }
-                    _ => {
-                        panic!("Method {}, argument {}, unsupported Box-type: {:?}", method_name, arg_name, typ);
-                    }
-                }
-
-            } else {
-                rawtype = path.to_token_stream();
-            }
-        }
-        _ => {
-            panic!("Method {}, argument {}, unsupported type: {:?}", method_name, arg_name, typ);
-        }
-    }
-    if !is_reference {
-        ArgType::PlainData(rawtype)
-    } else {
-        if is_mut_ref {
-            panic!("Method {}, argument {}: Mutable references are not supported by Savefile-abi (except for FnMut-trait objects): {}", method_name, arg_name, typ.to_token_stream());
-        }
-        ArgType::Reference(rawtype)
-    }
-}
-
-fn generate_method_definitions(
-    version: u32,
-    trait_name: Ident,
-    method_number: u16,
-    method_name: Ident,
-    ret_declaration: TokenStream, //May be empty, for ()-returns
-    ret_type: TokenStream,
-    receiver_is_mut: bool,
-    args: Vec<(Ident, &Type)>,
-    name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut Vec<TokenStream>
-) -> MethodDefinitionComponents {
-    let method_name_str = method_name.to_string();
-
-    let mut callee_trampoline_real_method_invocation_arguments:Vec<TokenStream> = vec![];
-    let mut callee_trampoline_variable_declaration = vec![];
-    let mut callee_trampoline_temp_variable_declaration = vec![];
-    let mut callee_trampoline_variable_deserializer = vec![];
-    let mut caller_arg_serializers = vec![];
-    let mut caller_fn_arg_list = vec![];
-    let mut metadata_arguments = vec![];
-
-
-    for (arg_index, (arg_name,typ)) in args.iter().enumerate() {
-
-        let argtype = parse_type(version, arg_name, *typ, &method_name, &mut *name_generator, extra_definitions, false, false);
-
-        //let num_mask = 1u64 << (method_number as u64);
-        let temp_arg_name = Ident::new(&format!("temp_{}",arg_name), Span::call_site());
-        let temp_arg_name2 = Ident::new(&format!("temp2_{}",arg_name), Span::call_site());
-        match &argtype {
-            ArgType::PlainData(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
-            }
-            ArgType::Reference(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{&#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
-            }
-            ArgType::SliceReference(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{&#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
-            }
-            ArgType::BoxedTrait(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote!{let #temp_arg_name;});
-            }
-            ArgType::TraitReference(_,ismut) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
-                let mutsymbol = if *ismut {quote!(mut)} else {quote!{}};
-                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name;});
-            }
-            ArgType::Fn(_,_,_,ismut) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote!{#arg_name});
-                let mutsymbol = if *ismut {quote!(mut)} else {quote!{}};
-                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name;});
-                callee_trampoline_temp_variable_declaration.push(quote!{let #mutsymbol #temp_arg_name2;});
-            }
-        }
-        callee_trampoline_variable_declaration.push(quote!{let #arg_name;});
-        match &argtype {
-            ArgType::Reference(arg_type) => {
-                callee_trampoline_variable_deserializer.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) != 0 {
-                                    #arg_name = unsafe { &*(deserializer.read_raw_ptr::<#arg_type>()?) };
-                                } else {
-                                    #temp_arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
-                                    #arg_name = &#temp_arg_name;
-                                }
-                            });
-                caller_arg_serializers.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) != 0 {
-                                    unsafe { serializer.write_raw_ptr(#arg_name as *const #arg_type).expect("Writing argument ref") };
-                                } else {
-                                    #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
-                                }
-                            });
-            }
-            ArgType::SliceReference(arg_type) => {
-                callee_trampoline_variable_deserializer.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) != 0 {
-                                    #arg_name = unsafe { &*(deserializer.read_raw_ptr::<[#arg_type]>()?) };
-                                } else {
-                                    #temp_arg_name = deserialize_slice_as_vec::<_,#arg_type>(&mut deserializer)?;
-                                    #arg_name = &#temp_arg_name;
-                                }
-                            });
-                caller_arg_serializers.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) != 0 {
-                                    unsafe { serializer.write_raw_ptr(#arg_name as *const [#arg_type]).expect("Writing argument ref") };
-                                } else {
-                                    #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
-                                }
-                            });
-            }
-            ArgType::PlainData(arg_type) => {
-                callee_trampoline_variable_deserializer.push(quote!{
-                                #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
-                            });
-                caller_arg_serializers.push(quote!{
-                                #arg_name.serialize(&mut serializer).expect("Serializing arg");
-                            });
-
-            }
-            ArgType::BoxedTrait(trait_type) => {
-                callee_trampoline_variable_deserializer.push(quote!{
-                                // SAFETY
-                                // Todo: Well, why exactly?
-                                if compatibility_mask&(1<<#arg_index) == 0 {
-                                    panic!("Function arg is not layout-compatible!")
-                                }
-                                #temp_arg_name = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
-                                #arg_name = Box::new(unsafe { AbiConnection::from_raw_packaged(#temp_arg_name, Owning::Owned)? } );
-                            });
-                caller_arg_serializers.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) == 0 {
-                                    panic!("Function arg is not layout-compatible!")
-                                }
-                                PackagedTraitObject::new::<dyn #trait_type>(#arg_name).serialize(&mut serializer).expect("PackagedTraitObject");
-                            });
-            }
-            ArgType::TraitReference(trait_type, ismut) => {
-                let mutsymbol = if *ismut {quote!{mut}} else {quote!{}};
-                let newsymbol = if *ismut {quote!{new_from_ptr}} else {quote!{new_from_ptr}};
-                callee_trampoline_variable_deserializer.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) == 0 {
-                                    panic!("Function arg is not layout-compatible!")
-                                }
-                                #temp_arg_name = unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
-                                #arg_name = & #mutsymbol #temp_arg_name;
-                            });
-                caller_arg_serializers.push(quote!{
-                                if compatibility_mask&(1<<#arg_index) == 0 {
-                                    panic!("Function arg is not layout-compatible!")
-                                }
-                                PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer).expect("PackagedTraitObject");
-                            });
-
-
-            }
-            ArgType::Fn(temp_trait_type, _,args, ismut) => {
-                let mutsymbol = if *ismut {quote!{mut}} else {quote!{}};
-                let mutorconst = if *ismut {quote!{mut}} else {quote!{const}};
-                let newsymbol = if *ismut {quote!{new_from_ptr}} else {quote!{new_from_ptr}};
-
-                let temp_trait_name_wrapper = Ident::new(
-                    &format!("{}_wrapper", temp_trait_type), Span::call_site()
-                );
-
-                let typedarglist:Vec<TokenStream> = args.iter().enumerate().map(|(idx,typ)|
-                    {
-                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
-                        quote!{#id : #typ}
-                    }
-                ).collect();
-
-                let arglist:Vec<Ident> = (0..args.len()).map(|idx|
-                    {
-                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
-                        id
-                    }
-                ).collect();
-                callee_trampoline_variable_deserializer.push(quote!{
-                        if compatibility_mask&(1<<#arg_index) == 0 {
-                            panic!("Function arg is not layout-compatible!")
-                        }
-
-                        #temp_arg_name = unsafe { AbiConnection::<#temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
-                        #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
-                        #arg_name = & #mutsymbol #temp_arg_name2;
-                    });
-                caller_arg_serializers.push(quote!{
-                        if compatibility_mask&(1<<#arg_index) == 0 {
-                            panic!("Function arg is not layout-compatible!")
-                        }
-
-                        let #mutsymbol temp = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
-                        let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol temp as *#mutorconst _;
-                        PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer).expect("PackagedTraitObject");
-                    });
-
-
-            }
-        }
-        match &argtype {
-            ArgType::Reference(arg_type) => {
-                caller_fn_arg_list.push(quote!{#arg_name : &#arg_type});
-                metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: <#arg_type as WithSchema>::schema(version),
-                                    can_be_sent_as_ref: true
-                                }
-                            })
-            }
-            ArgType::SliceReference(arg_type) => {
-
-                caller_fn_arg_list.push(quote!{#arg_name : &[#arg_type]});
-                metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: <[#arg_type] as WithSchema>::schema(version),
-                                    can_be_sent_as_ref: true
-                                }
-                            })
-            }
-            ArgType::PlainData(arg_type) => {
-                caller_fn_arg_list.push(quote!{#arg_name : #arg_type});
-                metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: <#arg_type as WithSchema>::schema(version),
-                                    can_be_sent_as_ref: false
-                                }
-                            })
-            }
-            ArgType::BoxedTrait(trait_name) => {
-                caller_fn_arg_list.push(quote!{#arg_name : Box<dyn #trait_name>});
-                metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
-                                    can_be_sent_as_ref: true
-                                }
-                            })
-            }
-            ArgType::TraitReference(trait_name, ismut) => {
-                if *ismut {
-                    caller_fn_arg_list.push(quote!{#arg_name : &mut dyn #trait_name });
-                } else {
-                    caller_fn_arg_list.push(quote!{#arg_name : &dyn #trait_name });
-                }
-
-                metadata_arguments.push(quote!{
-                                AbiMethodArgument {
-                                    schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
-                                    can_be_sent_as_ref: true,
-                                }
-                            })
-            }
-            ArgType::Fn(temp_trait_name, fndef,_,ismut) => {
-                if *ismut {
-                    caller_fn_arg_list.push(quote!{#arg_name : &mut dyn #fndef });
-                } else {
-                    caller_fn_arg_list.push(quote!{#arg_name : &dyn #fndef });
-                }
-                //let temp_trait_name_str = temp_trait_name.to_string();
-                metadata_arguments.push(quote!{
-                                {
-                                    AbiMethodArgument {
-                                        schema: Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)),
-                                        can_be_sent_as_ref: true,
-                                    }
-                                }
-                            })
-
-            }
-        }
-    }
-
-    let callee_real_method_invocation_except_args;
-    if receiver_is_mut {
-        callee_real_method_invocation_except_args = quote!{ unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name };
-    } else {
-        callee_real_method_invocation_except_args = quote!{ unsafe { &*trait_object.as_const_ptr::<dyn #trait_name>() }.#method_name };
-    }
-
-    //let receiver_mut_str = receiver_mut.to_string();
-    let receiver_mut = if receiver_is_mut {quote!(mut)} else {quote!{}};
-    let caller_method_trampoline = quote!{
-        fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
-            let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
-
-            let Some(callee_method_number) = info.callee_method_number else {
-                panic!("Method '{}' does not exist in implementation.", info.method_name);
-            };
-
-            let mut result_buffer: MaybeUninit<Result<#ret_type,SavefileError>> = MaybeUninit::<Result<#ret_type,SavefileError>>::uninit();
-            let compatibility_mask = info.compatibility_mask;
-
-            let mut data = FlexBuffer::new();
-            let mut serializer = Serializer {
-                writer: &mut data,
-                file_version: self.template.effective_version,
-            };
-            serializer.write_u32(self.template.effective_version).unwrap();
-            #(#caller_arg_serializers)*
-
-            (self.template.entry)(AbiProtocol::RegularCall {
-                trait_object: self.trait_object,
-                compatibility_mask: compatibility_mask,
-                method_number: callee_method_number,
-                effective_version: self.template.effective_version,
-                data: data.as_ptr() as *const u8,
-                data_length: data.len(),
-                abi_result: &mut result_buffer as *mut MaybeUninit<Result<#ret_type,SavefileError>> as *mut (),
-                receiver: abi_result_receiver::<#ret_type>,
-            });
-            let resval = unsafe { result_buffer.assume_init() };
-
-            resval.expect("Unexpected panic in invocation target")
-        }
-    };
-
-    let method_metadata = quote!{
-        AbiMethod {
-            name: #method_name_str.to_string(),
-            info: AbiMethodInfo {
-                return_value: <#ret_type as WithSchema>::schema(version),
-                arguments: vec![ #(#metadata_arguments,)* ],
-            }
-        }
-    };
-
-    let callee_method_trampoline = quote!{
-                    #method_number => {
-                        #(#callee_trampoline_variable_declaration)*
-                        #(#callee_trampoline_temp_variable_declaration)*
-
-                        #(#callee_trampoline_variable_deserializer)*
-
-                        let ret = #callee_real_method_invocation_except_args( #(#callee_trampoline_real_method_invocation_arguments,)* );
-
-                        let mut slow_temp = FlexBuffer::new();
-                        let mut serializer = Serializer {
-                            writer: &mut slow_temp,
-                            file_version: #version,
-                        };
-                        serializer.write_u32(effective_version)?;
-                        match ret.serialize(&mut serializer)
-                        {
-                            Ok(()) => {
-                                let outcome = RawAbiCallResult::Success {data: slow_temp.as_ptr(), len: slow_temp.len()};
-                                receiver(&outcome as *const _, abi_result);
-                            }
-                            Err(err) => {
-                                let err_str = format!("{:?}", err);
-                                let outcome = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: err_str.as_ptr(), len: err_str.len()});
-                                receiver(&outcome as *const _, abi_result)
-                            }
-                        }
-
-                    }
-
-                };
-    MethodDefinitionComponents {
-        method_metadata,
-        callee_method_trampoline,
-        caller_method_trampoline,
-    }
-}
+mod savefile_abi;
 
 #[proc_macro_attribute]
 pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -1569,7 +217,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
 
     let mut version = None;
     for item in attr.to_string().split(',') {
-        let keyvals : Vec<_> = item.split('=').collect();
+        let keyvals: Vec<_> = item.split('=').collect();
         if keyvals.len() != 2 {
             panic!("savefile_abi_exportable arguments should be of form #[savefile_abi_exportable(version=0)], not '{}'", attr);
         }
@@ -1585,8 +233,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
             _ => panic!("Unknown savefile_abi_exportable key: '{}'", key)
         }
     }
-    let version:u32 = version.unwrap_or(0);
-
+    let version: u32 = version.unwrap_or(0);
 
 
     let trait_name_str = parsed.ident.to_string();
@@ -1603,15 +250,13 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
     };
 
 
-
-    let mut method_metadata:Vec<TokenStream> = vec![];
-    let mut callee_method_trampoline:Vec<TokenStream> = vec![];
+    let mut method_metadata: Vec<TokenStream> = vec![];
+    let mut callee_method_trampoline: Vec<TokenStream> = vec![];
     let mut caller_method_trampoline = vec![];
     let mut extra_definitions = vec![];
 
 
-    for (method_number,item) in parsed.items.iter().enumerate() {
-
+    for (method_number, item) in parsed.items.iter().enumerate() {
         if method_number > u16::MAX.into() {
             panic!("Savefile only supports 2^16 methods per interface. Sorry.");
         }
@@ -1620,7 +265,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
 
         match item {
             TraitItem::Const(c) => {
-                panic!("savefile_abi_exportable does not support associated consts: {}",c.ident);
+                panic!("savefile_abi_exportable does not support associated consts: {}", c.ident);
             }
             TraitItem::Method(method) => {
                 let method_name = method.sig.ident.clone();
@@ -1632,11 +277,11 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 let ret_declaration;
                 match &method.sig.output {
                     ReturnType::Default => {
-                        ret_type = Tuple(TypeTuple{
+                        ret_type = Tuple(TypeTuple {
                             paren_token: Paren::default(),
                             elems: Default::default(),
                         }).to_token_stream();
-                        ret_declaration = quote!{}
+                        ret_declaration = quote! {}
                     }
                     ReturnType::Type(_, ty) => {
                         match &**ty {
@@ -1647,7 +292,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                             Type::Reference(_) => {
                                 panic!("References in return-position are not supported.")
                             }
-                            Type::Tuple(TypeTuple{elems, ..}) => {
+                            Type::Tuple(TypeTuple { elems, .. }) => {
                                 if elems.len() > 3 {
                                     panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
                                 }
@@ -1659,7 +304,6 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                         }
                     }
                 }
-
 
 
                 let self_arg = method.sig.inputs.iter().next().expect(&format!("Method {} has no arguments. This is not supported - it must at least have a self-argument.", method_name));
@@ -1678,7 +322,7 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                     panic!("Method {} must have 'self'-parameter", method_name);
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
-                for (arg_index,arg) in method.sig.inputs.iter().enumerate().skip(1) {
+                for (arg_index, arg) in method.sig.inputs.iter().enumerate().skip(1) {
                     match arg {
                         FnArg::Typed(typ) => {
                             match &*typ.pat {
@@ -1693,34 +337,31 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
                 }
                 let mut current_name_index = 0u32;
                 let name_baseplate = format!("Temp{}_{}", trait_name_str, method_name);
-                let mut temp_name_generator = move||{
+                let mut temp_name_generator = move || {
                     current_name_index += 1;
-                    format!("{}_{}",name_baseplate, current_name_index)
+                    format!("{}_{}", name_baseplate, current_name_index)
                 };
 
-                let method_defs = generate_method_definitions(version, trait_name.clone(), method_number, method_name, ret_declaration, ret_type, receiver_is_mut, args, &mut temp_name_generator, &mut extra_definitions);
+                let method_defs = crate::savefile_abi::generate_method_definitions(version, trait_name.clone(), method_number, method_name, ret_declaration, ret_type, receiver_is_mut, args, &mut temp_name_generator, &mut extra_definitions);
                 method_metadata.push(method_defs.method_metadata);
                 callee_method_trampoline.push(method_defs.callee_method_trampoline);
                 caller_method_trampoline.push(method_defs.caller_method_trampoline);
-
-
             }
             TraitItem::Type(t) => {
-                panic!("savefile_abi_exportable does not support associated types: {}",t.ident);
+                panic!("savefile_abi_exportable does not support associated types: {}", t.ident);
             }
             TraitItem::Macro(m) => {
                 panic!("savefile_abi_exportable does not support macro items: {:?}", m);
             }
             x => panic!("Unsupported item in trait definition: {:?}", x)
         }
-
     }
 
 
-    let abi_entry_light = Ident::new(&format!("abi_entry_light_{}",trait_name_str), Span::call_site());
+    let abi_entry_light = Ident::new(&format!("abi_entry_light_{}", trait_name_str), Span::call_site());
 
-    let exports_for_trait = quote!{
-        
+    let exports_for_trait = quote! {
+
         pub extern "C" fn #abi_entry_light(flag: AbiProtocol) {
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
@@ -1785,6 +426,44 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
 
     expanded.into()
 }
+#[proc_macro]
+pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = item.to_string();
+    let symbols: Vec<_> = input.split(',').map(|x| x.trim()).collect();
+    if symbols.len() != 2 {
+        panic!("savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
+    }
+    let defspan = Span::call_site();
+    let uses = quote_spanned! { defspan =>
+        extern crate savefile_abi;
+        use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry};
+    };
+
+    let implementing_type = Ident::new(symbols[0], Span::call_site());
+    let trait_type = Ident::new(symbols[1], Span::call_site());
+    let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
+
+    let expanded = quote! {
+        #[allow(clippy::double_comparisons)]
+        const _:() = {
+            #uses
+            unsafe impl AbiExportableImplementation for #implementing_type {
+                const ABI_ENTRY: extern "C" fn (AbiProtocol) = #abi_entry;
+                type AbiInterface = dyn #trait_type;
+
+                fn new() -> Box<Self::AbiInterface> {
+                    Box::new(#implementing_type::default())
+                }
+            }
+            #[no_mangle]
+            pub extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
+                unsafe { abi_entry::<#implementing_type>(flag); }
+            }
+        };
+    };
+
+    expanded.into()
+}
 
 #[proc_macro_derive(
     Savefile,
@@ -1802,9 +481,9 @@ pub fn savefile_abi_exportable(attr: proc_macro::TokenStream, input: proc_macro:
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [Savefile]");
 
-    let s = savefile_derive_crate_serialize(input.clone());
+    let s = serialize::savefile_derive_crate_serialize(input.clone());
 
-    let d = savefile_derive_crate_deserialize(input.clone());
+    let d = deserialize::savefile_derive_crate_deserialize(input.clone());
 
     let w = savefile_derive_crate_withschema(input.clone());
 
@@ -1841,9 +520,9 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileNoIntrospect]");
 
-    let s = savefile_derive_crate_serialize(input.clone());
+    let s = serialize::savefile_derive_crate_serialize(input.clone());
 
-    let d = savefile_derive_crate_deserialize(input.clone());
+    let d = deserialize::savefile_derive_crate_deserialize(input.clone());
 
     let w = savefile_derive_crate_withschema(input.clone());
 
@@ -1885,178 +564,6 @@ pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::T
     expanded.into()
 }
 
-fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
-    let span = proc_macro2::Span::call_site();
-    let defspan = proc_macro2::Span::call_site();
-
-    let name = input.ident;
-
-    let generics = input.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause,quote!{_savefile::prelude::Deserialize + _savefile::prelude::ReprC});
-
-
-
-    let deserialize = quote_spanned! {defspan=>
-        _savefile::prelude::Deserialize
-    };
-
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile as _savefile;
-    };
-
-    let deserializer = quote_spanned! {defspan=>
-        _savefile::prelude::Deserializer<impl std::io::Read>
-    };
-
-    let saveerr = quote_spanned! {defspan=>
-        _savefile::prelude::SavefileError
-    };
-
-    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
-
-    let expanded = match &input.data {
-        &syn::Data::Enum(ref enum1) => {
-            let mut output = Vec::new();
-            //let variant_count = enum1.variants.len();
-            let enum_size = get_enum_size(&input.attrs,enum1.variants.len());
-
-            for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
-                let var_idx = Literal::u32_unsuffixed(var_idx_usize as u32);
-
-                let var_ident = variant.ident.clone();
-                let variant_name = quote! { #name::#var_ident };
-                let variant_name_spanned = quote_spanned! { span => #variant_name};
-                match &variant.fields {
-                    &syn::Fields::Named(ref fields_named) => {
-                        let field_infos: Vec<FieldInfo> = fields_named
-                            .named
-                            .iter()
-                            .enumerate()
-                            .map(|(field_index,field)| FieldInfo {
-                                ident: Some(field.ident.clone().expect("Expected identifier [6]")),
-                                ty: &field.ty,
-                                index: field_index as u32,
-                                attrs: &field.attrs,
-                            })
-                            .collect();
-
-                        let fields_deserialized = implement_deserialize(field_infos);
-
-                        output.push(quote!( #var_idx => #variant_name_spanned{ #(#fields_deserialized,)* } ));
-                    }
-                    &syn::Fields::Unnamed(ref fields_unnamed) => {
-                        let field_infos: Vec<FieldInfo> = fields_unnamed
-                            .unnamed
-                            .iter()
-                            .enumerate()
-                            .map(|(field_index,field)| FieldInfo {
-                                ident: None,
-                                ty: &field.ty,
-                                index: field_index as u32,
-                                attrs: &field.attrs,
-                            })
-                            .collect();
-                        let fields_deserialized = implement_deserialize(field_infos);
-
-                        output.push(quote!( #var_idx => #variant_name_spanned( #(#fields_deserialized,)*) ));
-                    }
-                    &syn::Fields::Unit => {
-                        output.push(quote!( #var_idx => #variant_name_spanned ));
-                    }
-                }
-            }
-
-            let variant_deserializer = match enum_size.discriminant_size {
-                1 => quote! { deserializer.read_u8()?  },
-                2 => quote! { deserializer.read_u16()?  },
-                4 => quote! { deserializer.read_u32()?  },
-                _ => unreachable!(),
-            };
-
-            quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                    #uses
-                    impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
-                        #[allow(unused_comparisons, unused_variables)]
-                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-
-                            Ok(match #variant_deserializer {
-                                #(#output,)*
-                                _ => return Err(_savefile::prelude::SavefileError::GeneralError{msg:format!("Corrupt file - unknown enum variant detected.")})
-                            })
-                        }
-                    }
-                };
-            }
-        }
-        &syn::Data::Struct(ref struc) => {
-            let output = match &struc.fields {
-                &syn::Fields::Named(ref namedfields) => {
-                    let field_infos: Vec<FieldInfo> = namedfields
-                        .named
-                        .iter()
-                        .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
-                            ident: Some(field.ident.clone().expect("Expected identifier[7]")),
-                            index: field_index as u32,
-                            ty: &field.ty,
-                            attrs: &field.attrs,
-                        })
-                        .collect();
-
-                    let output1 = implement_deserialize(field_infos);
-                    quote! {Ok(#name {
-                        #(#output1,)*
-                    })}
-                }
-                &syn::Fields::Unnamed(ref fields_unnamed) => {
-                    let field_infos: Vec<FieldInfo> = fields_unnamed
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(field_index,field)| FieldInfo {
-                            ident: None,
-                            index: field_index as u32,
-                            ty: &field.ty,
-                            attrs: &field.attrs,
-                        })
-                        .collect();
-                    let output1 = implement_deserialize(field_infos);
-
-                    quote! {Ok(#name (
-                        #(#output1,)*
-                    ))}
-                }
-                &syn::Fields::Unit => {
-                    quote! {Ok(#name )}
-                } //_ => panic!("Only regular structs supported, not tuple structs."),
-            };
-            quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                        #uses
-                        impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
-                        #[allow(unused_comparisons, unused_variables)]
-                        fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
-                            #output
-                        }
-                    }
-                };
-            }
-        }
-        _ => {
-            panic!("Only regular structs are supported");
-        }
-    };
-
-    expanded
-}
 #[allow(non_snake_case)]
 fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
@@ -2798,10 +1305,7 @@ enum FieldOffsetStrategy {
 #[allow(non_snake_case)]
 fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
-
     //let mut have_u8 = false;
-
-
 
     //let discriminant_size = discriminant_size.expect("Enum discriminant must be u8, u16 or u32. Use for example #[repr(u8)].");
 
