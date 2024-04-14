@@ -149,8 +149,8 @@ fn main() {
 # Behind the scenes
 
 For Savefile to be able to load and save a type T, that type must implement traits
-[crate::WithSchema], [crate::Serialize] and [crate::Deserialize] . The custom derive macro Savefile derives
-all of these.
+[crate::WithSchema], [crate::ReprC], [crate::Serialize] and [crate::Deserialize] .
+The custom derive macro Savefile derives all of these.
 
 You can also implement these traits manually. Manual implementation can be good for:
 
@@ -160,14 +160,18 @@ example, trait objects or objects containing pointers.
 2: Objects for which not all fields should be serialized, or which need complex
 initialization (like running arbitrary code during deserialization).
 
-Note that the three trait implementations for a particular type must be in sync.
+Note that the four trait implementations for a particular type must be in sync.
 That is, the Serialize and Deserialize traits must follow the schema defined
-by the WithSchema trait for the type.
+by the WithSchema trait for the type, and if the ReprC trait promises a packed
+layout, then the format produced by Serialize and Deserialze *must* exactly match
+the in-memory format.
 
 ## WithSchema
 
 The [crate::WithSchema] trait represents a type which knows which data layout it will have
-when saved.
+when saved. Savefile saves schema in the output by default, but this can be disabled
+by using the `save_noschema` function. When reading a file with unknown schema, it
+is up to the user to guarantee that the file is actually of the correct format.
 
 ## Serialize
 
@@ -178,7 +182,12 @@ a `Serializer`.
 
 The [crate::Deserialize] trait represents a type which knows how to read instances of itself from a `Deserializer`.
 
+## ReprC
 
+The [crate::ReprC] trait has an optional method that can be used to promise that the
+in-memory format is identical to the savefile disk representation. If this is true,
+instances of the type can be serialized by simply writing all the bytes in one go,
+rather than having to visit individual fields. This can speed up saves significantly.
 
 
 # Rules for managing versions
@@ -238,6 +247,7 @@ Rules for using the #\[savefile_versions] attribute:
     items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
     For example, if you remove a field in version 3, you should add a #\[savefile_versions="..2"] attribute.
  You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
+ You may add enum variants in future versions, but you may not change the size of the discriminant.
 
 
 
@@ -406,15 +416,23 @@ Rules for using the #\[savefile_versions] attribute:
  # Speeding things up
 
  Now, let's say we want to add a list of all positions that our player have visited,
- so that we can provide a instant-replay function to our game. The list can become
+ so that we can provide an instant-replay function to our game. The list can become
  really long, so we want to make sure that the overhead when serializing this is
  as low as possible.
 
- Savefile has an unsafe trait [crate::ReprC] that you must implement for each T. This trait
- has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
+ Savefile can speed up serialization of arrays/vectors of certain types, when it can
+ detect that the type consists entirely of packed plain binary data.
+
+ Savefile has a trait [crate::ReprC] that must be implemented for each T. The savefile-derive
+ macro knows how to implement this correctly.
+
+ This trait has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
  - Is this type such that it can safely be copied byte-per-byte?
  Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
  a very fast, raw memory copy.
+ The exact criteria is that the in-memory representation of the type must be identical what
+ the serialize trait does for the type.
+
 
  Most of the time, the user doesn't need to implement ReprC, as it can be derived automatically
  by the savefile derive macro.
@@ -430,10 +448,11 @@ Rules for using the #\[savefile_versions] attribute:
  that the #\[repr(C)] attribute is not enough to do this - it will include padding if needed for alignment
  reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
  Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
- If the type is an enum, it must be #\[repr(u8)]. Enums with fields should work, as long as they
- are #\[repr(u8,C)], but this has not been tested.
+ If the type is an enum, it must be #\[repr(u8)], #\[repr(u16)] or #\[repr(u32)].
+ Enums with fields are not presently optimized.
 
- Now, for example, don't do:
+
+ Regarding padding, don't do:
  ```
  #[repr(C)]
  struct Bad {
@@ -1676,16 +1695,16 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         data: &T,
         with_compression: bool,
     ) -> Result<(), SavefileError> {
-        Ok(Self::save_impl(writer, version, data, true, with_compression)?)
+        Ok(Self::save_impl(writer, version, data, Some(T::schema(version)), with_compression)?)
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save_noschema] function instead.
-    pub fn save_noschema<T: WithSchema + Serialize>(
+    pub fn save_noschema<T: Serialize>(
         writer: &mut W,
         version: u32,
         data: &T,
     ) -> Result<(), SavefileError> {
-        Ok(Self::save_impl(writer, version, data, false, false)?)
+        Ok(Self::save_impl(writer, version, data, None, false)?)
     }
 
     /// Serialize without any header. Using this means that bare_deserialize must be used to
@@ -1697,11 +1716,12 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         Ok(())
     }
 
-    fn save_impl<T: WithSchema + Serialize>(
+    #[inline(always)]
+    fn save_impl<T: Serialize>(
         writer: &mut W,
         version: u32,
         data: &T,
-        with_schema: bool,
+        with_schema: Option<Schema>,
         with_compression: bool,
     ) -> Result<(), SavefileError> {
         let header = "savefile\0".to_string().into_bytes();
@@ -1719,8 +1739,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
                 #[cfg(feature = "bzip2")]
                 {
                     let mut compressed_writer = bzip2::write::BzEncoder::new(writer, Compression::best());
-                    if with_schema {
-                        let schema = T::schema(version);
+                    if let Some(schema) = with_schema {
                         let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(
                             &mut compressed_writer,
                             CURRENT_SAVEFILE_LIB_VERSION as u32,
@@ -1742,8 +1761,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
                 }
             } else {
                 writer.write_u8(0)?;
-                if with_schema {
-                    let schema = T::schema(version);
+                if let Some(schema) = with_schema {
                     let mut schema_serializer = Serializer::<W>::new_raw(writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
                     schema.serialize(&mut schema_serializer)?;
                 }
@@ -1895,14 +1913,15 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
     pub fn load<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
-        Deserializer::<_>::load_impl::<T>(reader, version, true)
+        Deserializer::<_>::load_impl::<T>(reader, version, Some(|version|T::schema(version)))
     }
 
     /// Deserialize an object of type T from the given reader.
     /// Don't use this method directly, use the [crate::load_noschema] function
     /// instead.
-    pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
-        Deserializer::<TR>::load_impl::<T>(reader, version, false)
+    pub fn load_noschema<T: Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
+        let dummy: Option<fn(u32) -> Schema> = None;
+        Deserializer::<TR>::load_impl::<T>(reader, version, dummy)
     }
 
     /// Deserialize data which was serialized using 'bare_serialize'
@@ -1915,10 +1934,11 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
         Ok(T::deserialize(&mut deserializer)?)
     }
 
-    fn load_impl<T: WithSchema + Deserialize>(
+    #[inline(always)]
+    fn load_impl<T: Deserialize>(
         reader: &mut TR,
         version: u32,
-        fetch_schema: bool,
+        expected_schema: Option<impl FnOnce(u32) -> Schema>,
     ) -> Result<T, SavefileError> {
         let mut head: [u8; 9] = [0u8; 9];
         reader.read_exact(&mut head)?;
@@ -1951,9 +1971,9 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
             #[cfg(feature = "bzip2")]
             {
                 let mut compressed_reader = bzip2::read::BzDecoder::new(reader);
-                if fetch_schema {
+                if let Some(memory_schema) = expected_schema {
                     let mut schema_deserializer = new_schema_deserializer(&mut compressed_reader, savefile_lib_version);
-                    let memory_schema = T::schema(file_ver);
+                    let memory_schema = memory_schema(file_ver);
                     let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
                     if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
@@ -1977,9 +1997,9 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
                 return Err(SavefileError::CompressionSupportNotCompiledIn);
             }
         } else {
-            if fetch_schema {
+            if let Some(memory_schema) = expected_schema {
                 let mut schema_deserializer = new_schema_deserializer(reader, savefile_lib_version);
-                let memory_schema = T::schema(file_ver);
+                let memory_schema = memory_schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
                 if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
@@ -2058,7 +2078,7 @@ pub fn save_to_mem<T: WithSchema + Serialize>(version: u32, data: &T) -> Result<
 
 /// Like [crate::load] , but used to open files saved without schema,
 /// by one of the _noschema versions of the save functions.
-pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut impl Read, version: u32) -> Result<T, SavefileError> {
+pub fn load_noschema<T: Deserialize>(reader: &mut impl Read, version: u32) -> Result<T, SavefileError> {
     Deserializer::<_>::load_noschema::<T>(reader, version)
 }
 
@@ -2071,7 +2091,7 @@ pub fn load_noschema<T: WithSchema + Deserialize>(reader: &mut impl Read, versio
 /// but means that any mistake in implementation of the
 /// Serialize or Deserialize traits will cause hard-to-troubleshoot
 /// data corruption instead of a nice error message.
-pub fn save_noschema<T: WithSchema + Serialize>(
+pub fn save_noschema<T: Serialize>(
     writer: &mut impl Write,
     version: u32,
     data: &T,
@@ -2099,7 +2119,7 @@ pub fn save_file<T: WithSchema + Serialize, P: AsRef<Path>>(
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file_noschema<T: WithSchema + Deserialize, P: AsRef<Path>>(
+pub fn load_file_noschema<T: Deserialize, P: AsRef<Path>>(
     filepath: P,
     version: u32,
 ) -> Result<T, SavefileError> {
@@ -2109,7 +2129,7 @@ pub fn load_file_noschema<T: WithSchema + Deserialize, P: AsRef<Path>>(
 
 /// Like [crate::save_noschema] , except it opens a file on the filesystem and writes
 /// the data to it. This is a pure convenience function.
-pub fn save_file_noschema<T: WithSchema + Serialize, P: AsRef<Path>>(
+pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
     filepath: P,
     version: u32,
     data: &T,

@@ -69,12 +69,8 @@ fn main() {
 
 # Changelog
 
-## 0.17.0-beta.9
 
-Fixed bug where schema of slices was not serialized correctly. Introduced in 0.17, so 
-only present in beta releases.
-
-## 0.17.0-beta.6
+## 0.17.0 (to be released, betas available)
 
 This is a big change! With 0.17 Savefile gains yet another major function: Support for
 making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
@@ -88,7 +84,27 @@ The dataformat for schemas has changed, but in a backward compatible way.
 
 Version 0.17.0-beta.9 is, as can be seen from the name, a beta. There will be bugs.
 
-The latest stable version is 0.16.5.
+### Upgrade guide
+
+1: Schemas have been expanded. 
+1.1: Schema::Vector takes a 2nd parameter. Just set it to 'VecOrStringLayout::Unknown' or `VecOrStringLayout::default()`.
+
+1.2: Field of Schema::Struct now takes an 'offset' parameter. It is safe to always set to None.
+
+1.3: The field 'discriminator' of SchemaEnum Variant has been renamed to 'discriminant' (since this is
+what the rust project calls it)
+
+1.4: The SchemaEnum type has gained the field 'discriminant_size'. This is the number of bytes needed to
+encode the discriminant. Set to 1 for enums which will never have more than 256 fields. Set to 2 for bigger
+enums. If you ever need an enum to have more than 65536 fields, set it to 4.
+
+
+
+## 0.17.0-beta.9
+
+Fixed bug where schema of slices was not serialized correctly. Introduced in 0.17, so 
+only present in beta releases.
+
 
 ## 0.16.5
 
