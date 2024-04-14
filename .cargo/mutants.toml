@@ -1,0 +1,3 @@
+exclude_globs = ["savefile-test/src/*.rs"]
+
+
