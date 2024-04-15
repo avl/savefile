@@ -394,7 +394,7 @@ pub fn savefile_abi_exportable(
 
     let exports_for_trait = quote! {
 
-        pub unsafe extern "C" fn #abi_entry_light(flag: AbiProtocol) {
+        unsafe extern "C" fn #abi_entry_light(flag: AbiProtocol) {
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
 
@@ -489,7 +489,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
                 }
             }
             #[no_mangle]
-            pub unsafe extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
+            unsafe extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
                 unsafe { abi_entry::<#implementing_type>(flag); }
             }
         };
@@ -1484,14 +1484,14 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             let field_offset_impl;
             if need_determine_offsets {
                 field_offset_impl = quote! {
-                    pub fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
+                    fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
                         assert!(std::mem::size_of::<#name>()>0);
                         let base_ptr = value as *const #name as *const u8;
                         match value {
                             #(#variant_field_offset_extractors)*
                         }
                     }
-                    pub fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
+                    fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
                         let mut value : MaybeUninit<#name> = MaybeUninit::uninit();
                         let base_ptr = &mut value as *mut MaybeUninit<#name> as *mut u8;
                         unsafe { *base_ptr = variant as u8; }
