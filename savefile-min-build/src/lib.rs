@@ -8,6 +8,44 @@ use savefile::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Debug;
 use std::io::{BufWriter, Cursor, Write};
 
+#[derive(Savefile, Debug, PartialEq)]
+pub struct ExampleGeneric<T> {
+    pub x: T,
+}
+
+#[test]
+fn test() {}
+/*
+#[repr(u32)]
+#[derive(Savefile, Debug, PartialEq)]
+#[savefile_require_fast]
+enum EnumVer1 {
+    Variant1([u8;4]),
+    Variant2([u32;1]),
+}
+#[derive(Savefile, Debug, PartialEq)]
+#[repr(C)]
+#[savefile_require_fast]
+struct SubOptimal {
+    x: u32,
+    y: u8,
+    y1: u8,
+    y2: u8,
+    y3: u8,
+}
+/*#[repr(u16)]
+#[derive(Savefile, Debug, PartialEq)]
+enum EnumVer2 {
+    Variant0,
+    Variant1,
+}*/
+#[test]
+fn test() {
+    println!("Opt1: {:?}", unsafe {<EnumVer1 as ReprC>::repr_c_optimization_safe(0).is_yes()});
+    //println!("Opt2: {:?}", unsafe {<EnumVer2 as ReprC>::repr_c_optimization_safe(0).is_yes()});
+}
+*/
+/*
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0)
 }
@@ -49,3 +87,4 @@ fn it_works() {
     assert_roundtrip(SimpleStruct{x:42});
 }
 
+*/

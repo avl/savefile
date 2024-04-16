@@ -11,7 +11,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let local_deserializer = quote_spanned! { defspan => deserializer};
 
     let mut output = Vec::new();
-    let mut min_safe_version = 0;
+    //let mut min_safe_version = 0;
     for field in &field_infos {
         let field_type = &field.ty;
 
@@ -68,14 +68,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
                 #effective_default_val
             }
         } else {
-            if field_to_version < std::u32::MAX {
-                // A delete
-                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-            }
-            if field_from_version < std::u32::MAX {
-                // An addition
-                min_safe_version = min_safe_version.max(field_from_version);
-            }
+            //min_safe_version = min_safe_version.max(verinfo.min_safe_version());
             let mut version_mappings = Vec::new();
             for dt in verinfo.deserialize_types.iter() {
                 let dt_from = dt.from;

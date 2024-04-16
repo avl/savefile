@@ -99,6 +99,9 @@ encode the discriminant. Set to 1 for enums which will never have more than 256 
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
 
+## 0.17.0-beta.10
+
+Tentative support for fast serialization/deserialization of enums. May be buggy!
 
 ## 0.17.0-beta.9
 
@@ -223,7 +226,7 @@ The new way is:
 
 ```rust
 #[derive(Savefile)]
-#[savefile_unsafe_and_fast]
+#[savefile_require_fast]
 #[repr(C)]
 pub struct Example {
     pub x: u32,
@@ -255,10 +258,10 @@ to the unsafe but performant optimization.
 I don't know of a way to require 'unsafe' keyword to a derive macro, so we use a deliberately
 eye-catching non-conforming name ```#[savefile_unsafe_and_fast]``` to signal danger.
 
-Update: With 0.15, savefile_unsafe_and_fast is mostly not needed. Using it, however,
-means we give an error if fast operation was not possible, except if the problem
-is due to mis-alignment or padding. Savefile still operates correctly in that case,
-it just goes slower.
+Update: With 0.15, savefile_unsafe_and_fast is mostly not needed. Instead there's a
+new attribute, 'savefile_require_fast'. Using it, means we get a compile error if fast operation 
+was not possible because of mis-alignment or padding. Without 'savefile_require_fast'-attribute
+savefile works even if alignment is bad, it just goes slower.
 
 ## 0.13 Support generic structs without Savefile type-constraints
 

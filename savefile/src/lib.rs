@@ -420,27 +420,79 @@ Rules for using the #\[savefile_versions] attribute:
  really long, so we want to make sure that the overhead when serializing this is
  as low as possible.
 
+
+ ```
+ extern crate savefile;
+ use savefile::prelude::*;
+ use std::path::Path;
+
+ #[macro_use]
+ extern crate savefile_derive;
+
+ #[derive(Clone, Copy, Savefile)]
+ #[repr(C)] // Memory layout will become equal to savefile disk format - optimization possible!
+ struct Position {
+     x : u32,
+     y : u32,
+ }
+
+ const GLOBAL_VERSION:u32 = 2;
+ #[derive(Savefile)]
+ struct Player {
+     name : String,
+     #[savefile_versions="0..0"] //Only version 0 had this field
+     strength : Removed<u32>,
+     inventory : Vec<String>,
+     #[savefile_versions="1.."] //Only versions 1 and later have this field
+     skills : Vec<String>,
+     #[savefile_versions="2.."] //Only versions 2 and later have this field
+     history : Vec<Position>
+ }
+
+ fn save_player(file:&'static str, player:&Player) {
+     save_file(file, GLOBAL_VERSION, player).unwrap();
+ }
+
+ fn load_player(file:&'static str) -> Player {
+     load_file(file, GLOBAL_VERSION).unwrap()
+ }
+
+ fn main() {
+
+     if Path::new("newsave.bin").exists() == false { /* error handling */ return;}
+
+     let mut player = load_player("newsave.bin"); //Load from previous save
+     player.history.push(Position{x:1,y:1});
+     player.history.push(Position{x:2,y:1});
+     player.history.push(Position{x:2,y:2});
+     save_player("newersave.bin", &player);
+ }
+ ```
  Savefile can speed up serialization of arrays/vectors of certain types, when it can
  detect that the type consists entirely of packed plain binary data.
 
+ The above will be very fast, even if 'history' contains millions of position-instances.
+
+
  Savefile has a trait [crate::ReprC] that must be implemented for each T. The savefile-derive
- macro knows how to implement this correctly.
+ macro implements this automatically.
 
  This trait has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
  - Is this type such that it can safely be copied byte-per-byte?
  Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
  a very fast, raw memory copy.
- The exact criteria is that the in-memory representation of the type must be identical what
- the serialize trait does for the type.
+ The exact criteria is that the in-memory representation of the type must be identical to what
+ the Serialize trait does for the type.
 
 
  Most of the time, the user doesn't need to implement ReprC, as it can be derived automatically
  by the savefile derive macro.
 
- However, implementing it manually can be done, but requires care. You, as implementor of the `ReprC`
- trait ()  take full responsibility that all the following rules are upheld:
+ However, implementing it manually can be done, with care. You, as implementor of the `ReprC`
+ trait take full responsibility that all the following rules are upheld:
 
  * The type T is Copy
+ * The in-memory representation of T is identical to the savefile disk format.
  * The host platform is little endian. The savefile disk format uses little endian.
  * The type is represented in memory in an ordered, packed representation. Savefile is not
  clever enough to inspect the actual memory layout and adapt to this, so the memory representation
@@ -487,63 +539,88 @@ Rules for using the #\[savefile_versions] attribute:
  ```
  This restriction may be lifted at a later time.
 
- Note that having a struct with bad alignment will be detected, at runtime, for debug-builds. It may not be
- detected in release builds. Serializing or deserializing each optimized type at least once somewhere in your test suite
- is recommended.
+ When it comes to enums, there are requirements to enable the optimization:
 
- When deriving the savefile-traits automatically, specify the attribute ```#[savefile_unsafe_and_fast]``` to require
+ This enum is not optimizable, since it doesn't have a defined discrminant size:
+ ```
+ enum BadEnum1 {
+    Variant1,
+    Variant2,
+ }
+ ```
+
+ This will be optimized:
+ ```
+ #[repr(u8)]
+ enum GoodEnum1 {
+    Variant1,
+    Variant2,
+ }
+ ```
+
+ This also:
+ ```
+ #[repr(u8)]
+ enum GoodEnum2 {
+    Variant1(u8),
+    Variant2(u8),
+ }
+ ```
+
+ However, the following will not be optimized, since there will be padding after Variant1.
+ To have the optimization enabled, all variants must be the same size, and without any padding.
+
+ ```
+ #[repr(u8)]
+ enum BadEnum2 {
+    Variant1,
+    Variant2(u8),
+ }
+ ```
+
+This can be fixed with manual padding:
+ ```
+ #[repr(u8)]
+ enum BadEnum2Fixed {
+    Variant1{padding:u8},
+    Variant2(u8),
+ }
+ ```
+
+
+ This will be optimized:
+ ```
+ #[repr(u8)]
+ enum GoodEnum3 {
+    Variant1{x:u8,y:u16,z:u16,w:u16},
+    Variant2{x:u8,y:u16,z:u32},
+ }
+ ```
+
+ However, the following will not be:
+ ```
+ #[repr(u8,C)]
+ enum BadEnum3 {
+    Variant1{x:u8,y:u16,z:u16,w:u16},
+    Variant2{x:u8,y:u16,z:u32},
+ }
+ ```
+ The reason is that the format `#[repr(u8,C)]` will layout the struct as if the fields of each
+ variant were a C-struct. This means alignment of Variant2 will be 4, and the offset of 'x' will be 4.
+ This in turn means there will be padding between the discriminant and the fields, making the optimization
+ impossible.
+
+
+ ### The attribute savefile_require_fast
+
+ When deriving the savefile-traits automatically, specify the attribute ```#[savefile_require_fast]``` to require
  the optimized behaviour. If the type doesn't fulfill the required characteristics, a diagnostic will be printed in
- many situations. Using 'savefile_unsafe_and_fast' is not actually unsafe, althought it used to be in an old version.
- Since the speedups it produces are now produced regardless, it is mostly recommended to not use savefile_unsafe_and_fast
- anymore.
+ many situations. Presently, badly aligned data structures are detected at compile time. Other problems are
+ only detected at runtime, and result in lower performance but still correct behaviour.
+ Using 'savefile_require_fast' is not unsafe, although it used to be in an old version.
+ Since the speedups it produces are now produced regardless, it is mostly recommended to not use
+ savefile_require_fast, unless compilation failure on bad alignment is desired.
 
- ```
- extern crate savefile;
- use savefile::prelude::*;
- use std::path::Path;
-
- #[macro_use]
- extern crate savefile_derive;
-
- #[derive(Clone, Copy, Savefile)]
- #[repr(C)]
- struct Position {
-     x : u32,
-     y : u32,
- }
-
- const GLOBAL_VERSION:u32 = 2;
- #[derive(Savefile)]
- struct Player {
-     name : String,
-     #[savefile_versions="0..0"] //Only version 0 had this field
-     strength : Removed<u32>,
-     inventory : Vec<String>,
-     #[savefile_versions="1.."] //Only versions 1 and later have this field
-     skills : Vec<String>,
-     #[savefile_versions="2.."] //Only versions 2 and later have this field
-     history : Vec<Position>
- }
-
- fn save_player(file:&'static str, player:&Player) {
-     save_file(file, GLOBAL_VERSION, player).unwrap();
- }
-
- fn load_player(file:&'static str) -> Player {
-     load_file(file, GLOBAL_VERSION).unwrap()
- }
-
- fn main() {
-
-     if Path::new("newsave.bin").exists() == false { /* error handling */ return;}
-
-     let mut player = load_player("newsave.bin"); //Load from previous save
-     player.history.push(Position{x:1,y:1});
-     player.history.push(Position{x:2,y:1});
-     player.history.push(Position{x:2,y:2});
-     save_player("newersave.bin", &player);
- }
- ```
 
  # Custom serialization
 

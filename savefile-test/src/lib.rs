@@ -242,7 +242,8 @@ pub fn test_string() {
 }
 
 #[derive(Clone, Copy, Debug, Savefile, PartialEq)]
-#[savefile_unsafe_and_fast]
+#[savefile_require_fast]
+#[repr(C)]
 pub struct BenchStruct {
     x: usize,
     y: usize,
@@ -794,7 +795,7 @@ pub fn test_bitset() {
 }
 #[repr(u8)]
 #[derive(Savefile, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-#[savefile_unsafe_and_fast]
+#[savefile_require_fast]
 pub enum TerrainType {
     Wheat,
     Forest,
@@ -807,7 +808,7 @@ pub enum TerrainType {
 
 #[repr(C)]
 #[derive(Savefile, Clone, Copy, Debug, PartialEq)]
-#[savefile_unsafe_and_fast]
+#[savefile_require_fast]
 pub struct TerrainTile {
     pub curtype: TerrainType,
     pub resource: u8, //logarithmic scale, base resource abundance
@@ -1557,4 +1558,19 @@ fn test_quickcheck_schema_diff_different(a: Schema, b: Schema) -> bool {
 #[cfg(not(miri))]
 fn test_quickcheck_schema_diff_same(a: Schema) -> bool {
     diff_schema(&a, &a, "".into()).is_none() //Should always equal itself
+}
+#[derive(Savefile)]
+#[repr(u8)]
+pub enum FastEnum {
+    Variant1(u8,/*padding:*/[u8;6]),
+    Variant2{
+        padding1: u8,
+        padding2: u16,
+        mydata: u32
+    }
+}
+
+#[test]
+fn test_enum_optimizations() {
+    assert_eq!(unsafe {FastEnum::repr_c_optimization_safe(0).is_yes()}, true);
 }

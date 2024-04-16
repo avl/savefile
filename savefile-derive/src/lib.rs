@@ -20,6 +20,7 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 
+use std::collections::{HashSet};
 use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
     path_to_string, FieldInfo,
@@ -39,7 +40,6 @@ fn implement_fields_serialize(
     implicit_self: bool,
     index: bool,
 ) -> (TokenStream, Vec<TokenStream>) {
-    let mut min_safe_version = 0;
     let mut output = Vec::new();
 
     let defspan = proc_macro2::Span::call_site();
@@ -161,13 +161,6 @@ fn implement_fields_serialize(
             } else {
                 realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
 
-                if field_to_version < std::u32::MAX {
-                    min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-                }
-                if field_from_version < std::u32::MAX {
-                    // An addition
-                    min_safe_version = min_safe_version.max(field_from_version);
-                }
                 output.push(quote!(
                 if #local_serializer.file_version >= #field_from_version && #local_serializer.file_version <= #field_to_version {
                     <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
@@ -255,7 +248,7 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
         use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
@@ -442,6 +435,8 @@ pub fn savefile_abi_exportable(
         #[allow(clippy::double_comparisons)]
         #[allow(clippy::needless_late_init)]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        #[allow(non_upper_case_globals)]
+        #[allow(clippy::manual_range_contains)]
         const _:() = {
             #uses
 
@@ -502,6 +497,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     Savefile,
     attributes(
         savefile_unsafe_and_fast,
+        savefile_require_fast,
         savefile_versions,
         savefile_versions_as,
         savefile_introspect_ignore,
@@ -524,16 +520,28 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let r = derive_reprc_new(input);
 
+
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+
     let expanded = quote! {
         #s
 
         #d
 
-        #w
-
         #i
 
-        #r
+        #[allow(non_upper_case_globals)]
+        #[allow(clippy::double_comparisons)]
+        #[allow(clippy::manual_range_contains)]
+        const #dummy_const: () = {
+            extern crate savefile as _savefile;
+            use std::mem::MaybeUninit;
+            use savefile::prelude::ReprC;
+
+            #w
+            #r
+        };
+
     };
     //std::fs::write("/home/anders/savefile/savefile-min-build/src/expanded.rs", expanded.to_string()).unwrap();
 
@@ -544,6 +552,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     SavefileNoIntrospect,
     attributes(
         savefile_unsafe_and_fast,
+        savefile_require_fast,
         savefile_versions,
         savefile_versions_as,
         savefile_ignore,
@@ -563,14 +572,25 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
 
     let r = derive_reprc_new(input);
 
+
+    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+
     let expanded = quote! {
         #s
 
         #d
 
-        #w
+        #[allow(non_upper_case_globals)]
+        #[allow(clippy::double_comparisons)]
+        #[allow(clippy::manual_range_contains)]
+        const #dummy_const: () = {
+            extern crate savefile as _savefile;
+            use std::mem::MaybeUninit;
+            use savefile::prelude::ReprC;
 
-        #r
+            #w
+            #r
+        };
     };
 
     expanded.into()
@@ -606,9 +626,6 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::WithSchema});
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile as _savefile;
-    };
     let reprc = quote_spanned! {defspan=>
         _savefile::prelude::ReprC
     };
@@ -620,7 +637,6 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
         #[allow(non_upper_case_globals)]
         const #dummy_const: () = {
             extern crate std;
-            #uses
             impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                 #[allow(unused_comparisons,unused_variables, unused_variables)]
                 unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -632,13 +648,12 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
 }
 
 #[allow(non_snake_case)]
-fn implement_reprc(
+fn implement_reprc_struct(
     field_infos: Vec<FieldInfo>,
     generics: syn::Generics,
     name: syn::Ident,
     expect_fast: bool,
 ) -> TokenStream {
-    let generics = generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::ReprC});
 
@@ -650,34 +665,34 @@ fn implement_reprc(
     let isreprc = quote_spanned! {defspan=>
         _savefile::prelude::IsReprC
     };
-    let spanof = quote_spanned! {defspan=>
-        _savefile::prelude::span_of
+    let offsetof = quote_spanned! {defspan=>
+        _savefile::prelude::offset_of
     };
     let local_file_version = quote_spanned! { defspan => local_file_version};
     //let WithSchema = quote_spanned! { defspan => _savefile::prelude::WithSchema};
     let mut min_safe_version = 0;
-    let mut optsafe_outputs = Vec::new();
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile as _savefile;
-    };
-
-    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+    let mut packed_outputs = Vec::new();
+    let mut reprc_outputs = Vec::new();
 
     for field in field_infos.windows(2) {
         let field_name1 = field[0].get_accessor();
         let field_name2 = field[1].get_accessor();
-
-        optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #field_name1).end == #spanof!(#name #ty_generics, #field_name2).start )));
+        let ty = field[0].ty;
+        packed_outputs.push(quote!( (#offsetof!(#name #ty_generics, #field_name1) + std::mem::size_of::<#ty>() == #offsetof!(#name #ty_generics, #field_name2) )));
     }
     if field_infos.len() > 0 {
         if field_infos.len() == 1 {
-            optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).start == 0 )));
-            optsafe_outputs.push(quote!(  (#spanof!( #name #ty_generics, ..).end == std::mem::size_of::<Self>() )));
+            let ty = field_infos[0].ty;
+            let field_name = field_infos[0].get_accessor();
+            packed_outputs.push(quote!(  (#offsetof!( #name #ty_generics, #field_name) == 0 )));
+            packed_outputs.push(quote!(  (#offsetof!( #name #ty_generics, #field_name) + std::mem::size_of::<#ty>() == std::mem::size_of::<#name #ty_generics>() )));
         } else {
             let first = field_infos.first().expect("field_infos.first()[2]").get_accessor();
-            let last = field_infos.last().expect("field_infos.last()[2]").get_accessor();
-            optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics, #first).start == 0 )));
-            optsafe_outputs.push(quote!( (#spanof!(#name #ty_generics,#last).end == std::mem::size_of::<Self>() )));
+            let last_field = field_infos.last().expect("field_infos.last()[2]");
+            let last = last_field.get_accessor();
+            let last_ty = &last_field.ty;
+            packed_outputs.push(quote!( (#offsetof!(#name #ty_generics, #first) == 0 )));
+            packed_outputs.push(quote!( (#offsetof!(#name #ty_generics, #last) + std::mem::size_of::<#last_ty>()  == std::mem::size_of::<#name #ty_generics>() )));
         }
     }
 
@@ -686,7 +701,7 @@ fn implement_reprc(
         if verinfo.ignore {
             if expect_fast {
                 panic!(
-                    "The #[savefile_unsafe_and_fast] attribute cannot be used for structures containing ignored fields"
+                    "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                 );
             } else {
                 return implement_reprc_hardcoded_false(name, generics);
@@ -704,47 +719,55 @@ fn implement_reprc(
                     return implement_reprc_hardcoded_false(name, generics);
                 }
             }
-            optsafe_outputs
+            reprc_outputs
                 .push(quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()));
         } else {
-            if field_to_version < std::u32::MAX {
-                min_safe_version = min_safe_version.max(field_to_version.saturating_add(1));
-            }
-
-            min_safe_version = min_safe_version.max(field_from_version);
+            min_safe_version = min_safe_version.max(verinfo.min_safe_version());
 
             if !removed.is_removed() {
-                optsafe_outputs.push(
+                reprc_outputs.push(
                     quote_spanned!( span => <#field_type as #reprc>::repr_c_optimization_safe(#local_file_version).is_yes()),
                 );
             }
         }
     }
 
+    let require_packed = if expect_fast {
+        quote!( const _:() = { if !PACKED {panic!("Memory layout not optimal - requires padding which disables savefile-optimization");} };)
+    } else {
+        quote!( )
+    };
+
+    let packed_storage = if generics.params.is_empty() == false {
+        quote!(let)
+    } else {
+        quote!(const)
+    };
+
     quote! {
 
-        #[allow(non_upper_case_globals)]
-        #[allow(clippy::manual_range_contains)]
-        const #dummy_const: () = {
-            extern crate std;
-            #uses
-            impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
-                #[allow(unused_comparisons,unused_variables, unused_variables)]
-                unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
-                    let local_file_version = file_version;
-                    if file_version >= #min_safe_version #( && #optsafe_outputs)* {
-                        unsafe { #isreprc::yes() }
-                    } else {
-                        #isreprc::no()
-                    }
+        extern crate std;
+
+        impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+            #[allow(unused_comparisons,unused_variables, unused_variables)]
+            unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
+                let local_file_version = file_version;
+                #packed_storage PACKED : bool = true #( && #packed_outputs)*;
+                #require_packed
+                if file_version >= #min_safe_version && PACKED #( && #reprc_outputs)*{
+                    unsafe { #isreprc::yes() }
+                } else {
+                    #isreprc::no()
                 }
             }
-        };
+        }
     }
 }
 
+#[derive(Debug)]
 struct EnumSize {
     discriminant_size: u8,
+    #[allow(unused)] //Keep around, useful for debugging
     repr_c: bool,
     explicit_size: bool,
 }
@@ -850,6 +873,7 @@ pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let name = input.ident;
+    let (_impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
 
     let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
@@ -857,7 +881,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             Ok(ref meta) => match meta {
                 &syn::Meta::Path(ref x) => {
                     let x = path_to_string(x);
-                    if x == "savefile_unsafe_and_fast" {
+                    if x == "savefile_unsafe_and_fast" || x == "savefile_require_fast"{
                         opt_in_fast = true;
                     }
                 }
@@ -873,40 +897,146 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
-            /*if enum1.variants.len() >= 256 {
-                if opt_in_fast {
-                    panic!("The #[savefile_unsafe_and_fast] attribute assumes that the enum representation is u8 or i8. Savefile does not support enums with more than 256 variants. Sorry.");
-                }
-                return implement_reprc_hardcoded_false(name, input.generics);
-            }*/
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            let any_fields = enum1.variants.iter().any(|v|v.fields.len()>0);
             if !enum_size.explicit_size {
                 if opt_in_fast {
-                    panic!("The #[savefile_unsafe_and_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
+                    if any_fields {
+                        panic!("The #[savefile_require_fast] requires an explicit #[repr(u8),C],#[repr(u16,C)] or #[repr(u32,C)], attribute.");
+                    } else {
+                        panic!("The #[savefile_require_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
+                    }
                 }
                 return implement_reprc_hardcoded_false(name, input.generics);
             }
-            _ = enum_size.repr_c; //We're going to use this in the future
 
-            for variant in enum1.variants.iter() {
+            let mut conditions = vec![];
+
+
+            let mut min_safe_version: u32 = 0;
+
+            let mut unique_field_types = HashSet::new();
+
+            for (variant_index, variant) in enum1.variants.iter().enumerate() {
+                let mut attrs:Vec<_> = vec![];
+
+                let mut num_fields = 0usize;
+                let mut field_types = vec![];
                 match &variant.fields {
-                    //TODO: #[repr(u8,C)] enums could implement ReprC
-                    &syn::Fields::Named(ref _fields_named) => {
-                        if opt_in_fast {
-                            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                    &syn::Fields::Named(ref fields_named) => {
+                        for field in fields_named.named.iter() {
+                            attrs.push(&field.attrs);
+                            field_types.push(&field.ty);
+                            num_fields += 1;
                         }
-                        return implement_reprc_hardcoded_false(name, input.generics);
                     }
-                    &syn::Fields::Unnamed(ref _fields_unnamed) => {
-                        if opt_in_fast {
-                            panic!("The #[savefile_unsafe_and_fast] attribute cannot be used for enums with fields.");
+                    &syn::Fields::Unnamed(ref fields_unnamed) => {
+                        for field in fields_unnamed.unnamed.iter() {
+                            attrs.push(&field.attrs);
+                            field_types.push(&field.ty);
+                            num_fields += 1;
                         }
-                        return implement_reprc_hardcoded_false(name, input.generics);
                     }
                     &syn::Fields::Unit => {}
                 }
+                for i in 0usize..num_fields {
+
+                    let typ =  field_types[i].to_token_stream();
+                    unique_field_types.insert(field_types[i].clone());
+                    if i == 0 {
+                        let discriminant_bytes = enum_size.discriminant_size as usize;
+                        conditions.push( quote!( (#discriminant_bytes == get_variant_offsets(#variant_index)[#i]) ) );
+                    }
+                    if i == num_fields - 1 {
+                        conditions.push(
+                            quote!(  (std::mem::size_of::<#name #ty_generics>() == get_variant_offsets(#variant_index)[#i] + std::mem::size_of::<#typ>())  )
+                        );
+                    } else {
+                        let n = i + 1;
+                        let end_offset_condition = quote!(  (get_variant_offsets(#variant_index)[#n] == get_variant_offsets(#variant_index)[#i] + std::mem::size_of::<#typ>())  );
+                        conditions.push(quote!(#end_offset_condition));
+                    };
+                }
+
+                for attr in attrs {
+                    let verinfo = parse_attr_tag(attr);
+                    if verinfo.ignore {
+                        if opt_in_fast {
+                            panic!(
+                                "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
+                            );
+                        } else {
+                            return implement_reprc_hardcoded_false(name, input.generics);
+                        }
+                    }
+                    min_safe_version = min_safe_version.max(verinfo.min_safe_version());
+                }
             }
-            implement_reprc(vec![], input.generics, name, opt_in_fast)
+
+            let defspan = proc_macro2::Span::call_site();
+            let generics = input.generics;
+            let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+            let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::ReprC});
+            let reprc = quote_spanned! { defspan=>
+                _savefile::prelude::ReprC
+            };
+            let isreprc = quote_spanned! {defspan=>
+                _savefile::prelude::IsReprC
+            };
+
+            if conditions.is_empty() {
+                conditions.push(quote!(true));
+            }
+            let require_packed = if opt_in_fast {
+                quote!( const _:() = {if !PACKED {panic!("Memory layout not optimal - requires padding which disables savefile-optimization");}};)
+            } else {
+                quote!( )
+            };
+            let mut reprc_condition = vec![];
+            for typ in unique_field_types {
+                reprc_condition.push(
+                    quote!(
+                        <#typ as ReprC>::repr_c_optimization_safe(file_version).is_yes()
+                    )
+                );
+            }
+
+            let packed_constraints = if any_fields {
+                quote!(
+                    const PACKED : bool = true #( && #conditions)*;
+                    #require_packed
+                    if !PACKED {
+                        return #isreprc::no();
+                    }
+                )
+
+            } else {
+                quote!()
+            };
+
+
+            return
+                quote! {
+
+                    extern crate std;
+
+                    impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+                        #[allow(unused_comparisons,unused_variables, unused_variables)]
+                        unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
+                            let local_file_version = file_version;
+
+                            #packed_constraints
+
+                            if file_version >= #min_safe_version #( && #reprc_condition)* {
+                                unsafe { #isreprc::yes() }
+                            } else {
+                                #isreprc::no()
+                            }
+                        }
+                    }
+                };
+
+            //implement_reprc_struct(vec![], input.generics, name, opt_in_fast) //Hacky, consider enum without any fields as a field-less struct
         }
         &syn::Data::Struct(ref struc) => match &struc.fields {
             &syn::Fields::Named(ref namedfields) => {
@@ -922,7 +1052,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc(field_infos, input.generics, name, opt_in_fast)
+                implement_reprc_struct(field_infos, input.generics, name, opt_in_fast)
             }
             &syn::Fields::Unnamed(ref fields_unnamed) => {
                 let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -937,9 +1067,9 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc(field_infos, input.generics, name, opt_in_fast)
+                implement_reprc_struct(field_infos, input.generics, name, opt_in_fast)
             }
-            &syn::Fields::Unit => implement_reprc(Vec::new(), input.generics, name, opt_in_fast),
+            &syn::Fields::Unit => implement_reprc_struct(Vec::new(), input.generics, name, opt_in_fast),
         },
         _ => {
             if opt_in_fast {
@@ -1367,10 +1497,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     let withschema = quote_spanned! {defspan=>
         _savefile::prelude::WithSchema
     };
-    let uses = quote_spanned! { defspan =>
-        extern crate savefile as _savefile;
-        use std::mem::MaybeUninit;
-    };
 
     let SchemaStruct = quote_spanned! { defspan => _savefile::prelude::SchemaStruct };
     let SchemaEnum = quote_spanned! { defspan => _savefile::prelude::SchemaEnum };
@@ -1378,15 +1504,14 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     let Field = quote_spanned! { defspan => _savefile::prelude::Field };
     let Variant = quote_spanned! { defspan => _savefile::prelude::Variant };
 
-    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
+    //let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let max_variant_fields = enum1.variants.iter().map(|x| x.fields.len()).max().unwrap_or(0);
 
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
-            let need_determine_offsets =
-                enum_size.explicit_size && (enum_size.repr_c || max_variant_fields == 0);
+            let need_determine_offsets = enum_size.explicit_size;
 
             let mut variants = Vec::new();
             let mut variant_field_offset_extractors = vec![];
@@ -1481,21 +1606,45 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 )});
             }
 
+
             let field_offset_impl;
             if need_determine_offsets {
+                let varbuf_assign;
+                if enum_size.discriminant_size == 1 {
+                    varbuf_assign = quote!( varbuf[0] = variant as u8; );
+                } else if enum_size.discriminant_size == 2 {
+                    // We only support little endian
+                    varbuf_assign = quote!(
+                        varbuf[0] = variant as u8;
+                        varbuf[1] = (variant>>8) as u8;
+                    );
+                } else if enum_size.discriminant_size == 4 {
+                    // We only support little endian
+                    varbuf_assign = quote!(
+                        varbuf[0] = variant as u8;
+                        varbuf[1] = (variant>>8) as u8;
+                        varbuf[2] = (variant>>16) as u8;
+                        varbuf[3] = (variant>>24) as u8;
+                    );
+                } else {
+                    panic!("Unsupported enum size: {}", enum_size.discriminant_size);
+                }
+
                 field_offset_impl = quote! {
-                    pub fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
-                        assert!(std::mem::size_of::<#name>()>0);
+                    const fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
+                        assert!(std::mem::size_of::<#name #ty_generics>()>0);
                         let base_ptr = value as *const #name as *const u8;
                         match value {
                             #(#variant_field_offset_extractors)*
                         }
                     }
-                    pub fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
-                        let mut value : MaybeUninit<#name> = MaybeUninit::uninit();
-                        let base_ptr = &mut value as *mut MaybeUninit<#name> as *mut u8;
-                        unsafe { *base_ptr = variant as u8; }
-                        get_field_offset_impl(unsafe { &*(&value as *const MaybeUninit<#name> as *const #name) } )
+                    const fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
+                        let mut varbuf = [0u8;std::mem::size_of::<#name #ty_generics>()];
+                        #varbuf_assign
+                        let mut value : MaybeUninit<#name #ty_generics> = unsafe { std::mem::transmute(varbuf) };
+                        //let base_ptr = &mut value as *mut MaybeUninit<#name> as *mut u8;
+                        //unsafe { *base_ptr = variant as u8; }
+                        get_field_offset_impl(unsafe { &*(&value as *const MaybeUninit<#name #ty_generics> as *const #name #ty_generics) } )
                     }
                 };
             } else {
@@ -1505,38 +1654,32 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             let discriminant_size = enum_size.discriminant_size;
 
             quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                    #uses
+                #field_offset_impl
 
-                    impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
+                impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
 
-                        #[allow(unused_mut)]
-                        #[allow(unused_comparisons, unused_variables)]
-                        fn schema(version:u32) -> #Schema {
-                            let local_version = version;
+                    #[allow(unused_mut)]
+                    #[allow(unused_comparisons, unused_variables)]
+                    fn schema(version:u32) -> #Schema {
+                        let local_version = version;
 
-                            #field_offset_impl
+                        #Schema::Enum (
+                            #SchemaEnum {
+                                dbg_name : stringify!(#name).to_string(),
+                                discriminant_size: #discriminant_size,
+                                variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
+                                    if local_version >= fromver && local_version <= tover {
+                                        Some(x)
+                                    } else {
+                                        None
+                                    }
+                                }).collect(),
 
-                            #Schema::Enum (
-                                #SchemaEnum {
-                                    dbg_name : stringify!(#name).to_string(),
-                                    discriminant_size: #discriminant_size,
-                                    variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
-                                        if local_version >= fromver && local_version <= tover {
-                                            Some(x)
-                                        } else {
-                                            None
-                                        }
-                                    }).collect(),
-
-                                }
-                            )
-                        }
+                            }
+                        )
                     }
-                };
+                }
+
             }
         }
         &syn::Data::Struct(ref struc) => {
@@ -1586,27 +1729,20 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 }
             }
             quote! {
-                #[allow(non_upper_case_globals)]
-                #[allow(clippy::double_comparisons)]
-                #[allow(clippy::manual_range_contains)]
-                const #dummy_const: () = {
-                    #uses
+                impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
+                    #[allow(unused_comparisons)]
+                    #[allow(unused_mut, unused_variables)]
+                    fn schema(version:u32) -> #Schema {
+                        let local_version = version;
+                        let mut fields1 = Vec::new();
+                        #(#fields;)* ;
+                        #Schema::Struct(#SchemaStruct{
+                            dbg_name: stringify!(#name).to_string(),
+                            fields: fields1
+                        })
 
-                    impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
-                        #[allow(unused_comparisons)]
-                        #[allow(unused_mut, unused_variables)]
-                        fn schema(version:u32) -> #Schema {
-                            let local_version = version;
-                            let mut fields1 = Vec::new();
-                            #(#fields;)* ;
-                            #Schema::Struct(#SchemaStruct{
-                                dbg_name: stringify!(#name).to_string(),
-                                fields: fields1
-                            })
-
-                        }
                     }
-                };
+                }
             }
         }
         _ => {
