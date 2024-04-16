@@ -21,8 +21,8 @@ the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.17.0-beta.9"
-savefile-derive = "0.17.0-beta.9"
+savefile = "0.17.0-beta.10"
+savefile-derive = "0.17.0-beta.10"
 ````
 
 # Sample 
@@ -82,7 +82,7 @@ can continue as usual.
 
 The dataformat for schemas has changed, but in a backward compatible way.
 
-Version 0.17.0-beta.9 is, as can be seen from the name, a beta. There will be bugs.
+Version 0.17.0-beta.10 is, as can be seen from the name, a beta. There will be bugs.
 
 ### Upgrade guide
 

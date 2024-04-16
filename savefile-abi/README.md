@@ -8,9 +8,9 @@ Note! This is a work-in-progress.
 
 
 ```toml
-savefile-abi = "0.17.0-beta.9"
-savefile = "0.17.0-beta.9"
-savefile-derive = "0.17.0-beta.9"
+savefile-abi = "0.17.0-beta.10"
+savefile = "0.17.0-beta.10"
+savefile-derive = "0.17.0-beta.10"
 ```
 
 # Example
