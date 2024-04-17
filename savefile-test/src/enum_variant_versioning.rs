@@ -1,4 +1,6 @@
-use assert_roundtrip_to_new_version;
+use ::{assert_roundtrip, assert_roundtrip_to_new_version};
+use assert_roundtrip_version;
+use savefile::Removed;
 
 #[repr(u8)]
 #[derive(Savefile, Debug, PartialEq)]
@@ -67,4 +69,41 @@ pub enum EnumBVer2 {
 #[test]
 fn test_change_add_enum_variants() {
     assert_roundtrip_to_new_version(EnumBVer1::Var1, 0, EnumBVer2::Var1, 0);
+}
+
+#[derive(Savefile, Debug, PartialEq)]
+pub enum EnumBVer3 {
+    Var1,
+    Var2,
+    #[savefile_versions = "1.."]
+    Var3,
+    #[savefile_versions = "2.."]
+    Var4,
+}
+#[test]
+fn test_change_add_enum_variants2() {
+    assert_roundtrip_to_new_version(EnumBVer2::Var3, 1, EnumBVer3::Var3, 1);
+}
+#[test]
+#[should_panic(expected = "Enum EnumBVer2, variant Var3 is not present in version 0")]
+fn test_change_add_enum_variants3() {
+    assert_roundtrip_to_new_version(EnumBVer2::Var3, 0, EnumBVer3::Var3, 0);
+}
+
+#[derive(Savefile, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EnumCVer2 {
+    Var1,
+    Var2{
+        #[savefile_versions="..0"]
+        a: Removed<u32>,
+        b: u32
+    },
+}
+#[test]
+fn test_change_remove_enum_field() {
+    assert_roundtrip_version(EnumCVer2::Var2{
+        b: 42,
+        a: Removed::new(),
+    }, 1, true);
 }

@@ -7,10 +7,15 @@ use savefile::prelude::*;
 use savefile::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Debug;
 use std::io::{BufWriter, Cursor, Write};
-
-#[derive(Savefile, Debug, PartialEq)]
-pub struct ExampleGeneric<T> {
-    pub x: T,
+#[derive(Savefile)]
+#[repr(u32)]
+pub enum EnumCVer2 {
+    Var1,
+    Var2{
+        #[savefile_versions="1.."]
+        a: Removed<u32>,
+        b: u32
+    },
 }
 
 #[test]

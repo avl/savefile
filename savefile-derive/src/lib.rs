@@ -940,8 +940,17 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     &syn::Fields::Unit => {}
                 }
                 for i in 0usize..num_fields {
-
+                    let verinfo = parse_attr_tag(&attrs[i]);
+                    if check_is_remove(&field_types[i]).is_removed() {
+                        if verinfo.version_to==u32::MAX {
+                            panic!("Removed fields must have a max version, provide one using #[savefile_versions=\"..N\"]")
+                        }
+                        min_safe_version = min_safe_version.max(verinfo.version_to + 1);
+                    }
                     let typ =  field_types[i].to_token_stream();
+
+
+
                     unique_field_types.insert(field_types[i].clone());
                     if i == 0 {
                         let discriminant_bytes = enum_size.discriminant_size as usize;
