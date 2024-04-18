@@ -137,6 +137,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                 const #dummy_const: () = {
                     #uses
 
+                    #[automatically_derived]
                     impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_comparisons, unused_variables)]
@@ -200,6 +201,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                 const #dummy_const: () = {
                     #uses
 
+                    #[automatically_derived]
                     impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {

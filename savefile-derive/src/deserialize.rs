@@ -206,6 +206,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                     #uses
+                    #[automatically_derived]
                     impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
@@ -267,6 +268,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 #[allow(clippy::manual_range_contains)]
                 const #dummy_const: () = {
                         #uses
+                        #[automatically_derived]
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {

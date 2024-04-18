@@ -391,6 +391,7 @@ pub fn savefile_abi_exportable(
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
 
+        #[automatically_derived]
         unsafe impl AbiExportable for dyn #trait_name {
             const ABI_ENTRY : unsafe extern "C" fn (flag: AbiProtocol)  = #abi_entry_light;
             fn get_definition( version: u32) -> AbiTraitDefinition {
@@ -424,6 +425,7 @@ pub fn savefile_abi_exportable(
             }
         }
 
+        #[automatically_derived]
         impl #trait_name for AbiConnection<dyn #trait_name> {
             #(#caller_method_trampoline)*
         }
@@ -475,6 +477,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         #[allow(clippy::double_comparisons)]
         const _:() = {
             #uses
+            #[automatically_derived]
             unsafe impl AbiExportableImplementation for #implementing_type {
                 const ABI_ENTRY: unsafe extern "C" fn (AbiProtocol) = #abi_entry;
                 type AbiInterface = dyn #trait_type;
@@ -623,7 +626,6 @@ pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::T
 fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
 
-    let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::WithSchema});
     let reprc = quote_spanned! {defspan=>
@@ -634,16 +636,14 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
     };
     quote! {
 
-        #[allow(non_upper_case_globals)]
-        const #dummy_const: () = {
-            extern crate std;
-            impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
-                #[allow(unused_comparisons,unused_variables, unused_variables)]
-                unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
-                    #isreprc::no()
-                }
+        #[automatically_derived]
+        impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+            #[allow(unused_comparisons,unused_variables, unused_variables)]
+            unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
+                #isreprc::no()
             }
-        };
+        }
+
     }
 }
 
@@ -746,8 +746,7 @@ fn implement_reprc_struct(
 
     quote! {
 
-        extern crate std;
-
+        #[automatically_derived]
         impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
             #[allow(unused_comparisons,unused_variables, unused_variables)]
             unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -1030,8 +1029,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             return
                 quote! {
 
-                    extern crate std;
-
+                    #[automatically_derived]
                     impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons,unused_variables, unused_variables)]
                         unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -1295,6 +1293,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
+                    #[automatically_derived]
                     impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_mut)]
@@ -1377,6 +1376,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
 
+                    #[automatically_derived]
                     impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
@@ -1695,6 +1695,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             quote! {
                 #field_offset_impl
 
+                #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
 
                     #[allow(unused_mut)]
@@ -1772,6 +1773,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 }
             }
             quote! {
+                #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
                     #[allow(unused_comparisons)]
                     #[allow(unused_mut, unused_variables)]
