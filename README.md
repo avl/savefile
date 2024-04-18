@@ -10,20 +10,24 @@ disk for persistent storage.
 
 Docs: https://docs.rs/savefile/latest/savefile/
 
-Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
-shared libraries, written in rust, to be used as binary plugins in rust-programs.
-
-Docs: https://docs.rs/savefile-abi/latest/
 
 Savefile is not yet a very widely used project. However, although there may be bugs, 
 the intention is that the quality should be enough for production when it comes to
 the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
-````
-savefile = "0.17.0-beta.11"
-savefile-derive = "0.17.0-beta.11"
-````
+```toml
+savefile = "0.16"
+savefile-derive = "0.16"
+```
+
+Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
+shared libraries, written in rust, to be used as binary plugins in rust-programs.
+
+Savefile ABI is available in the latest beta-version ( `0.17.0-beta.11` )
+
+Docs: https://docs.rs/savefile-abi/latest/
+
 
 # Sample 
 
@@ -84,9 +88,10 @@ The dataformat for schemas has changed, but in a backward compatible way.
 
 Version 0.17.0-beta.11 is, as can be seen from the name, a beta. There will be bugs.
 
-### Upgrade guide
+### Upgrade guide from 0.16 -> 0.17
 
 1: Schemas have been expanded. 
+
 1.1: Schema::Vector takes a 2nd parameter. Just set it to 'VecOrStringLayout::Unknown' or `VecOrStringLayout::default()`.
 
 1.2: Field of Schema::Struct now takes an 'offset' parameter. It is safe to always set to None.
@@ -99,7 +104,7 @@ encode the discriminant. Set to 1 for enums which will never have more than 256 
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
 
-## 0.17.0-beta.11
+## 0.17.0-beta.10
 
 Tentative support for fast serialization/deserialization of enums. May be buggy!
 
