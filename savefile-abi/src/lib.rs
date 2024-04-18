@@ -677,13 +677,11 @@ impl PackagedTraitObject {
 impl<T: ?Sized> Drop for AbiConnection<T> {
     fn drop(&mut self) {
         match &self.owning {
-            Owning::Owned => {
-                unsafe {
-                    (self.template.entry)(AbiProtocol::DropInstance {
-                        trait_object: self.trait_object,
-                    });
-                }
-            }
+            Owning::Owned => unsafe {
+                (self.template.entry)(AbiProtocol::DropInstance {
+                    trait_object: self.trait_object,
+                });
+            },
             Owning::NotOwned => {}
         }
     }
@@ -751,8 +749,10 @@ pub enum AbiProtocol {
         abi_result: *mut (),
         /// Callback which will be called by callee in order to supply the return value
         /// (without having to allocate heap-memory)
-        receiver:
-            unsafe extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut () /*Result<T,SaveFileError>>*/),
+        receiver: unsafe extern "C" fn(
+            outcome: *const RawAbiCallResult,
+            result_receiver: *mut (), /*Result<T,SaveFileError>>*/
+        ),
         /// The negotiated protocol version
         effective_version: u32,
         /// The method to call. This is the method number using the
@@ -783,8 +783,12 @@ pub enum AbiProtocol {
         result_receiver: *mut AbiTraitDefinition,
         /// Called by callee to convey information back to caller.
         /// `receiver` is place the caller will want to write the result.
-        callback:
-            unsafe extern "C" fn(receiver: *mut AbiTraitDefinition, callee_schema_version: u16, data: *const u8, len: usize),
+        callback: unsafe extern "C" fn(
+            receiver: *mut AbiTraitDefinition,
+            callee_schema_version: u16,
+            data: *const u8,
+            len: usize,
+        ),
     },
     /// Create a new trait object.
     CreateInstance {
@@ -834,8 +838,9 @@ static ENTRY_CACHE: Mutex<
     Option<HashMap<(String /*filename*/, String /*trait name*/), unsafe extern "C" fn(flag: AbiProtocol)>>,
 > = Mutex::new(None);
 
-static ABI_CONNECTION_TEMPLATES: Mutex<Option<HashMap<unsafe extern "C" fn(flag: AbiProtocol), AbiConnectionTemplate>>> =
-    Mutex::new(None);
+static ABI_CONNECTION_TEMPLATES: Mutex<
+    Option<HashMap<unsafe extern "C" fn(flag: AbiProtocol), AbiConnectionTemplate>>,
+> = Mutex::new(None);
 
 struct Guard<'a, K: Hash + Eq, V> {
     guard: MutexGuard<'a, Option<HashMap<K, V>>>,
@@ -918,7 +923,10 @@ impl Write for FlexBuffer {
 
 /// Entry point for raw FFI-calls from other shared libraries
 #[doc(hidden)]
-pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(outcome: *const RawAbiCallResult, result_receiver: *mut ()) {
+pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
+    outcome: *const RawAbiCallResult,
+    result_receiver: *mut (),
+) {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
     result_receiver.write(parse_return_value::<T>(outcome));
@@ -1282,10 +1290,12 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
 
                 let mut callee_abi_version = 0u32;
                 let mut callee_schema_version = 0u16;
-                unsafe {(remote_entry)(AbiProtocol::InterrogateVersion {
-                    schema_version_receiver: &mut callee_schema_version as *mut _,
-                    abi_version_receiver: &mut callee_abi_version as *mut _,
-                }); }
+                unsafe {
+                    (remote_entry)(AbiProtocol::InterrogateVersion {
+                        schema_version_receiver: &mut callee_schema_version as *mut _,
+                        abi_version_receiver: &mut callee_abi_version as *mut _,
+                    });
+                }
 
                 if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
                     return Err(SavefileError::IncompatibleSavefileLibraryVersion);
@@ -1315,19 +1325,23 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                     *receiver = schema.unwrap_or(Default::default());
                 }
 
-                unsafe { (remote_entry)(AbiProtocol::InterrogateMethods {
-                    schema_version_required: callee_schema_version,
-                    callee_schema_version_interrogated: callee_abi_version,
-                    result_receiver: &mut callee_abi_native_definition as *mut _,
-                    callback: definition_receiver,
-                }); }
+                unsafe {
+                    (remote_entry)(AbiProtocol::InterrogateMethods {
+                        schema_version_required: callee_schema_version,
+                        callee_schema_version_interrogated: callee_abi_version,
+                        result_receiver: &mut callee_abi_native_definition as *mut _,
+                        callback: definition_receiver,
+                    });
+                }
 
-                unsafe { (remote_entry)(AbiProtocol::InterrogateMethods {
-                    schema_version_required: callee_schema_version,
-                    callee_schema_version_interrogated: effective_version,
-                    result_receiver: &mut callee_abi_effective_definition as *mut _,
-                    callback: definition_receiver,
-                }); }
+                unsafe {
+                    (remote_entry)(AbiProtocol::InterrogateMethods {
+                        schema_version_required: callee_schema_version,
+                        callee_schema_version_interrogated: effective_version,
+                        result_receiver: &mut callee_abi_effective_definition as *mut _,
+                        callback: definition_receiver,
+                    });
+                }
 
                 let own_effective_definition = T::get_definition(effective_version);
                 let trait_name = Self::trait_name();
@@ -1353,11 +1367,13 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 let error_msg = unsafe { &mut *(error_receiver as *mut String) };
                 *error_msg = unsafe { &*error }.convert_to_string();
             }
-            unsafe { (remote_entry)(AbiProtocol::CreateInstance {
-                trait_object_receiver: &mut trait_object as *mut _,
-                error_receiver: &mut error_msg as *mut String as *mut _,
-                error_callback,
-            }); }
+            unsafe {
+                (remote_entry)(AbiProtocol::CreateInstance {
+                    trait_object_receiver: &mut trait_object as *mut _,
+                    error_receiver: &mut error_msg as *mut String as *mut _,
+                    error_callback,
+                });
+            }
 
             if error_msg.len() > 0 {
                 return Err(SavefileError::CalleePanic { msg: error_msg });

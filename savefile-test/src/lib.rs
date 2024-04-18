@@ -1562,12 +1562,8 @@ fn test_quickcheck_schema_diff_same(a: Schema) -> bool {
 #[derive(Savefile)]
 #[repr(u8)]
 pub enum FastEnum {
-    Variant1(u8,/*padding:*/[u8;6]),
-    Variant2{
-        padding1: u8,
-        padding2: u16,
-        mydata: u32
-    }
+    Variant1(u8, /*padding:*/ [u8; 6]),
+    Variant2 { padding1: u8, padding2: u16, mydata: u32 },
 }
 
 #[test]
@@ -1578,38 +1574,38 @@ fn test_enum_optimizations() {
 #[repr(u8)]
 pub enum EnumWithBadPadding {
     Variant1(u32),
-    Variant2(u32)
+    Variant2(u32),
 }
 #[test]
 fn test_padding_disables_repr_c_optimization() {
-    assert!(unsafe {EnumWithBadPadding::repr_c_optimization_safe(0)}.is_false())
+    assert!(unsafe { EnumWithBadPadding::repr_c_optimization_safe(0) }.is_false())
 }
 #[derive(Savefile)]
 #[repr(u8)]
 pub enum EnumWithBadPadding2 {
-    Variant1(u8,u8),
-    Variant2(u8)//Padding in this variant stops optimizability
+    Variant1(u8, u8),
+    Variant2(u8), //Padding in this variant stops optimizability
 }
 #[test]
 fn test_padding_disables_repr_c_optimization2() {
-    assert!(unsafe { EnumWithBadPadding2::repr_c_optimization_safe(0)}.is_false())
+    assert!(unsafe { EnumWithBadPadding2::repr_c_optimization_safe(0) }.is_false())
 }
 #[derive(Savefile)]
 pub enum EnumWithMissingRepr {
     Variant1(u8),
-    Variant2(u8)
+    Variant2(u8),
 }
 #[test]
 fn test_missing_repr_disables_repr_c_optimization() {
-    assert!(unsafe { EnumWithMissingRepr::repr_c_optimization_safe(0)}.is_false())
+    assert!(unsafe { EnumWithMissingRepr::repr_c_optimization_safe(0) }.is_false())
 }
 #[repr(u8)]
 #[derive(Savefile)]
 pub enum GoodEnum {
     Variant1(u8),
-    Variant2(u8)
+    Variant2(u8),
 }
 #[test]
 fn test_good_enum() {
-    assert!(unsafe { GoodEnum::repr_c_optimization_safe(0)}.is_yes())
+    assert!(unsafe { GoodEnum::repr_c_optimization_safe(0) }.is_yes())
 }

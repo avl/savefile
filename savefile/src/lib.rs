@@ -1772,15 +1772,17 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         data: &T,
         with_compression: bool,
     ) -> Result<(), SavefileError> {
-        Ok(Self::save_impl(writer, version, data, Some(T::schema(version)), with_compression)?)
+        Ok(Self::save_impl(
+            writer,
+            version,
+            data,
+            Some(T::schema(version)),
+            with_compression,
+        )?)
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save_noschema] function instead.
-    pub fn save_noschema<T: Serialize>(
-        writer: &mut W,
-        version: u32,
-        data: &T,
-    ) -> Result<(), SavefileError> {
+    pub fn save_noschema<T: Serialize>(writer: &mut W, version: u32, data: &T) -> Result<(), SavefileError> {
         Ok(Self::save_impl(writer, version, data, None, false)?)
     }
 
@@ -1990,7 +1992,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
     pub fn load<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
-        Deserializer::<_>::load_impl::<T>(reader, version, Some(|version|T::schema(version)))
+        Deserializer::<_>::load_impl::<T>(reader, version, Some(|version| T::schema(version)))
     }
 
     /// Deserialize an object of type T from the given reader.
@@ -2168,11 +2170,7 @@ pub fn load_noschema<T: Deserialize>(reader: &mut impl Read, version: u32) -> Re
 /// but means that any mistake in implementation of the
 /// Serialize or Deserialize traits will cause hard-to-troubleshoot
 /// data corruption instead of a nice error message.
-pub fn save_noschema<T: Serialize>(
-    writer: &mut impl Write,
-    version: u32,
-    data: &T,
-) -> Result<(), SavefileError> {
+pub fn save_noschema<T: Serialize>(writer: &mut impl Write, version: u32, data: &T) -> Result<(), SavefileError> {
     Serializer::save_noschema::<T>(writer, version, data)
 }
 
@@ -2196,10 +2194,7 @@ pub fn save_file<T: WithSchema + Serialize, P: AsRef<Path>>(
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
 /// This is a pure convenience function.
-pub fn load_file_noschema<T: Deserialize, P: AsRef<Path>>(
-    filepath: P,
-    version: u32,
-) -> Result<T, SavefileError> {
+pub fn load_file_noschema<T: Deserialize, P: AsRef<Path>>(filepath: P, version: u32) -> Result<T, SavefileError> {
     let mut f = BufReader::new(File::open(filepath)?);
     Deserializer::load_noschema::<T>(&mut f, version)
 }
@@ -2592,9 +2587,8 @@ impl SchemaPrimitive {
 }
 
 fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<String> {
-
     if a != b {
-        if let (SchemaPrimitive::schema_string(_),SchemaPrimitive::schema_string(_)) = (&a, &b) {
+        if let (SchemaPrimitive::schema_string(_), SchemaPrimitive::schema_string(_)) = (&a, &b) {
             return None; //Strings have the same schema, even if they're not memory-layout compatible
         }
         return Some(format!(
@@ -2608,7 +2602,7 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 }
 
 /// The actual layout in memory of a Vec-like datastructure.
-#[derive(Debug, PartialEq, Eq, Clone, Copy,Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 #[repr(u8)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub enum VecOrStringLayout {

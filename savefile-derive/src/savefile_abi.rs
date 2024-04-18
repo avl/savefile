@@ -154,12 +154,12 @@ fn parse_type(
                     .bounds
                     .iter()
                     .map(|x| match x {
-                        TypeParamBound::Trait(t) =>
-                            t.path
-                                .segments
-                                .iter()
-                                .last()
-                                .expect("Missing bounds of Box trait object"),
+                        TypeParamBound::Trait(t) => t
+                            .path
+                            .segments
+                            .iter()
+                            .last()
+                            .expect("Missing bounds of Box trait object"),
                         TypeParamBound::Lifetime(_) => {
                             panic!(
                                 "Method {}, argument {}: Specifying lifetimes is not supported.",

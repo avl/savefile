@@ -20,7 +20,6 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 
-use std::collections::{HashSet};
 use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
     path_to_string, FieldInfo,
@@ -28,12 +27,16 @@ use common::{
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
+use std::collections::HashSet;
 #[allow(unused_imports)]
 use std::iter::IntoIterator;
 use syn::__private::bool;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeTuple};
+use syn::{
+    DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type,
+    TypeGenerics, TypeTuple,
+};
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -234,7 +237,7 @@ pub fn savefile_abi_exportable(
                 }
                 version = Some(
                     val.parse()
-                        .unwrap_or_else(|_|panic!("Version must be numeric, but was: {}", val)),
+                        .unwrap_or_else(|_| panic!("Version must be numeric, but was: {}", val)),
                 );
             }
             _ => panic!("Unknown savefile_abi_exportable key: '{}'", key),
@@ -312,10 +315,12 @@ pub fn savefile_abi_exportable(
                     }
                 }
 
-                let self_arg = method.sig.inputs.iter().next().unwrap_or_else(||panic!(
-                    "Method {} has no arguments. This is not supported - it must at least have a self-argument.",
-                    method_name
-                ));
+                let self_arg = method.sig.inputs.iter().next().unwrap_or_else(|| {
+                    panic!(
+                        "Method {} has no arguments. This is not supported - it must at least have a self-argument.",
+                        method_name
+                    )
+                });
                 if let FnArg::Receiver(recv) = self_arg {
                     if let Some(reference) = &recv.reference {
                         if reference.1.is_some() {
@@ -523,7 +528,6 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let r = derive_reprc_new(input);
 
-
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = quote! {
@@ -547,7 +551,6 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     };
     //std::fs::write("/home/anders/savefile/savefile-min-build/src/expanded.rs", expanded.to_string()).unwrap();
-
 
     expanded.into()
 }
@@ -574,7 +577,6 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
     let w = savefile_derive_crate_withschema(input.clone());
 
     let r = derive_reprc_new(input);
-
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
@@ -733,9 +735,15 @@ fn implement_reprc_struct(
     }
 
     let require_packed = if expect_fast {
-        quote!( const _:() = { if !PACKED {panic!("Memory layout not optimal - requires padding which disables savefile-optimization");} };)
+        quote!(
+            const _: () = {
+                if !PACKED {
+                    panic!("Memory layout not optimal - requires padding which disables savefile-optimization");
+                }
+            };
+        )
     } else {
-        quote!( )
+        quote!()
     };
 
     let packed_storage = if generics.params.is_empty() == false {
@@ -880,7 +888,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             Ok(ref meta) => match meta {
                 &syn::Meta::Path(ref x) => {
                     let x = path_to_string(x);
-                    if x == "savefile_unsafe_and_fast" || x == "savefile_require_fast"{
+                    if x == "savefile_unsafe_and_fast" || x == "savefile_require_fast" {
                         opt_in_fast = true;
                     }
                 }
@@ -897,7 +905,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
-            let any_fields = enum1.variants.iter().any(|v|v.fields.len()>0);
+            let any_fields = enum1.variants.iter().any(|v| v.fields.len() > 0);
             if !enum_size.explicit_size {
                 if opt_in_fast {
                     if any_fields {
@@ -911,14 +919,17 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
             let mut conditions = vec![];
 
-
             let mut min_safe_version: u32 = 0;
 
             let mut unique_field_types = HashSet::new();
 
-            let fn_impl_generics = if !input.generics.params.is_empty() { quote! { :: #impl_generics} } else {quote!{}};
+            let fn_impl_generics = if !input.generics.params.is_empty() {
+                quote! { :: #impl_generics}
+            } else {
+                quote! {}
+            };
             for (variant_index, variant) in enum1.variants.iter().enumerate() {
-                let mut attrs:Vec<_> = vec![];
+                let mut attrs: Vec<_> = vec![];
 
                 let mut num_fields = 0usize;
                 let mut field_types = vec![];
@@ -942,13 +953,12 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 for i in 0usize..num_fields {
                     let verinfo = parse_attr_tag(&attrs[i]);
                     if check_is_remove(&field_types[i]).is_removed() {
-                        if verinfo.version_to==u32::MAX {
+                        if verinfo.version_to == u32::MAX {
                             panic!("Removed fields must have a max version, provide one using #[savefile_versions=\"..N\"]")
                         }
                         min_safe_version = min_safe_version.max(verinfo.version_to + 1);
                     }
-                    let typ =  field_types[i].to_token_stream();
-
+                    let typ = field_types[i].to_token_stream();
 
                     let variant_index = proc_macro2::Literal::u32_unsuffixed(variant_index as u32);
 
@@ -998,20 +1008,28 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 conditions.push(quote!(true));
             }
             let require_packed = if opt_in_fast {
-                quote!( const _:() = {if !PACKED {panic!("Memory layout not optimal - requires padding which disables savefile-optimization");}};)
+                quote!(
+                    const _: () = {
+                        if !PACKED {
+                            panic!("Memory layout not optimal - requires padding which disables savefile-optimization");
+                        }
+                    };
+                )
             } else {
-                quote!( )
+                quote!()
             };
             let mut reprc_condition = vec![];
             for typ in unique_field_types {
-                reprc_condition.push(
-                    quote!(
-                        <#typ as ReprC>::repr_c_optimization_safe(file_version).is_yes()
-                    )
-                );
+                reprc_condition.push(quote!(
+                    <#typ as ReprC>::repr_c_optimization_safe(file_version).is_yes()
+                ));
             }
 
-            let packed_decl = if generics.params.is_empty() {quote!{ const }} else {quote!{ let }};
+            let packed_decl = if generics.params.is_empty() {
+                quote! { const }
+            } else {
+                quote! { let }
+            };
             let packed_constraints = if any_fields {
                 quote!(
                     #packed_decl PACKED : bool = true #( && #conditions)*;
@@ -1020,31 +1038,28 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                         return #isreprc::no();
                     }
                 )
-
             } else {
                 quote!()
             };
 
+            return quote! {
 
-            return
-                quote! {
+                #[automatically_derived]
+                impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+                    #[allow(unused_comparisons,unused_variables, unused_variables)]
+                    unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
+                        let local_file_version = file_version;
 
-                    #[automatically_derived]
-                    impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
-                        #[allow(unused_comparisons,unused_variables, unused_variables)]
-                        unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
-                            let local_file_version = file_version;
+                        #packed_constraints
 
-                            #packed_constraints
-
-                            if file_version >= #min_safe_version #( && #reprc_condition)* {
-                                unsafe { #isreprc::yes() }
-                            } else {
-                                #isreprc::no()
-                            }
+                        if file_version >= #min_safe_version #( && #reprc_condition)* {
+                            unsafe { #isreprc::yes() }
+                        } else {
+                            #isreprc::no()
                         }
                     }
-                };
+                }
+            };
 
             //implement_reprc_struct(vec![], input.generics, name, opt_in_fast) //Hacky, consider enum without any fields as a field-less struct
         }
@@ -1425,8 +1440,11 @@ fn implement_withschema(
         _savefile::prelude::offset_of
     };
 
-
-    let fn_impl_generics = if !generics.params.is_empty() { quote! { :: #impl_generics} } else {quote!{}};
+    let fn_impl_generics = if !generics.params.is_empty() {
+        quote! { :: #impl_generics}
+    } else {
+        quote! {}
+    };
     let mut fields = Vec::new();
     for (idx, field) in field_infos.iter().enumerate() {
         let verinfo = parse_attr_tag(field.attrs);
@@ -1608,7 +1626,14 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     FieldOffsetStrategy::EnumWithUnknownOffsets
                 };
 
-                let fields = implement_withschema(&name.to_string(), field_infos, field_offset_strategy, &generics, &ty_generics, &impl_generics);
+                let fields = implement_withschema(
+                    &name.to_string(),
+                    field_infos,
+                    field_offset_strategy,
+                    &generics,
+                    &ty_generics,
+                    &impl_generics,
+                );
 
                 variants.push(quote! {
                 (#field_from_version,
@@ -1621,7 +1646,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     }}
                 )});
             }
-
 
             let field_offset_impl;
             if need_determine_offsets {
@@ -1645,7 +1669,11 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 } else {
                     panic!("Unsupported enum size: {}", enum_size.discriminant_size);
                 }
-                let not_const_if_gen = if generics.params.is_empty() {quote!{const}} else {quote!{}};
+                let not_const_if_gen = if generics.params.is_empty() {
+                    quote! {const}
+                } else {
+                    quote! {}
+                };
                 let conjure_variant;
                 if generics.params.is_empty() {
                     conjure_variant = quote! {
@@ -1656,10 +1684,10 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 } else {
                     let discr_type;
                     match enum_size.discriminant_size {
-                        1 => discr_type = quote!{ u8 },
-                        2 => discr_type = quote!{ u16 },
-                        4 => discr_type = quote!{ u32 },
-                        _ => unreachable!()
+                        1 => discr_type = quote! { u8 },
+                        2 => discr_type = quote! { u16 },
+                        4 => discr_type = quote! { u32 },
+                        _ => unreachable!(),
                     }
                     conjure_variant = quote! {
                         let mut value = MaybeUninit::< #name #ty_generics >::uninit();
@@ -1669,7 +1697,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         }
                     }
                 }
-
 
                 field_offset_impl = quote! {
                     #not_const_if_gen fn get_field_offset_impl #impl_generics (value: &#name #ty_generics) -> [usize;#max_variant_fields] {
@@ -1744,7 +1771,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         FieldOffsetStrategy::Struct,
                         &generics,
                         &ty_generics,
-                        &impl_generics
+                        &impl_generics,
                     );
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
@@ -1765,7 +1792,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         FieldOffsetStrategy::Struct,
                         &generics,
                         &ty_generics,
-                        &impl_generics
+                        &impl_generics,
                     );
                 }
                 &syn::Fields::Unit => {

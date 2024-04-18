@@ -42,7 +42,7 @@ pub(crate) struct VersionRange {
 #[derive(Debug)]
 pub(crate) struct AttrsResult {
     pub(crate) version_from: u32, //0 means no lower bound
-    pub(crate) version_to: u32, //u32::MAX means no upper bound
+    pub(crate) version_to: u32,   //u32::MAX means no upper bound
     pub(crate) ignore: bool,
     pub(crate) default_fn: Option<syn::Ident>,
     pub(crate) default_val: Option<TokenStream>,
@@ -58,7 +58,7 @@ impl AttrsResult {
             // A delete
             min_safe_version = min_safe_version.max(self.version_to.saturating_add(1));
         }
-            // An addition
+        // An addition
         min_safe_version.max(self.version_from)
     }
 }
