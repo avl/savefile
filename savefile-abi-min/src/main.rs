@@ -30,7 +30,7 @@ pub fn call_add(adder: &AbiConnection<dyn AdderInterface>, a: u32, b: u32) -> u3
 
 fn main() {
     let connection = AbiConnection::<dyn AdderInterface>::load_shared_library(
-        "/home/anders/savefile/target/debug/libsavefile_abi_min_lib_impl.so",
+        "c:/savefile/target/debug/savefile_abi_min_lib_impl.dll", //Change this to the proper path on your machine
     )
     .unwrap();
 

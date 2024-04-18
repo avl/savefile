@@ -2592,7 +2592,11 @@ impl SchemaPrimitive {
 }
 
 fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<String> {
+
     if a != b {
+        if let (SchemaPrimitive::schema_string(_),SchemaPrimitive::schema_string(_)) = (&a, &b) {
+            return None; //Strings have the same schema, even if they're not memory-layout compatible
+        }
         return Some(format!(
             "At location [{}]: Application protocol has datatype {}, but disk format has {}",
             path,

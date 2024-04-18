@@ -1,6 +1,6 @@
 use ::{assert_roundtrip, assert_roundtrip_to_new_version};
 use assert_roundtrip_version;
-use savefile::Removed;
+use savefile::{Removed, ReprC};
 
 #[repr(u8)]
 #[derive(Savefile, Debug, PartialEq)]
@@ -102,6 +102,8 @@ pub enum EnumCVer2 {
 }
 #[test]
 fn test_change_remove_enum_field() {
+    assert!(unsafe{EnumCVer2::repr_c_optimization_safe(0)}.is_false());
+    assert!(unsafe{EnumCVer2::repr_c_optimization_safe(1)}.is_yes());
     assert_roundtrip_version(EnumCVer2::Var2{
         b: 42,
         a: Removed::new(),

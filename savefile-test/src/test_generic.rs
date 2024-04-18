@@ -65,3 +65,19 @@ pub fn test_generic_example_enum() {
     let a = ExampleGenericEnum::Value2(42u32);
     assert_roundtrip(a);
 }
+
+
+#[repr(u8)]
+#[derive(Savefile, Debug, PartialEq)]
+pub enum ExampleGenericEnum2<T1> {
+    Value1(T1),
+    Value2(T1),
+}
+#[test]
+pub fn test_generic_example_enum2() {
+    let a = ExampleGenericEnum::Value2(42u8);
+    assert_roundtrip(a);
+    assert!(unsafe{ExampleGenericEnum2::<u8>::repr_c_optimization_safe(0)}.is_yes());
+    assert!(unsafe{ExampleGenericEnum2::<u16>::repr_c_optimization_safe(0)}.is_false()); //Padding
+}
+

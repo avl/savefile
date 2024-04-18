@@ -33,7 +33,7 @@ use std::iter::IntoIterator;
 use syn::__private::bool;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{DeriveInput, FnArg, Ident, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeTuple};
+use syn::{DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeTuple};
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -387,7 +387,7 @@ pub fn savefile_abi_exportable(
 
     let exports_for_trait = quote! {
 
-        pub unsafe extern "C" fn #abi_entry_light(flag: AbiProtocol) {
+        unsafe extern "C" fn #abi_entry_light(flag: AbiProtocol) {
             unsafe { abi_entry_light::<dyn #trait_name>(flag); }
         }
 
@@ -484,7 +484,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
                 }
             }
             #[no_mangle]
-            pub unsafe extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
+            unsafe extern "C" fn #abi_entry(flag: AbiProtocol) where #implementing_type: Default + #trait_type {
                 unsafe { abi_entry::<#implementing_type>(flag); }
             }
         };
@@ -873,7 +873,7 @@ pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let name = input.ident;
-    let (_impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
+    let (impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
 
     let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
@@ -917,6 +917,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
             let mut unique_field_types = HashSet::new();
 
+            let fn_impl_generics = if !input.generics.params.is_empty() { quote! { :: #impl_generics} } else {quote!{}};
             for (variant_index, variant) in enum1.variants.iter().enumerate() {
                 let mut attrs:Vec<_> = vec![];
 
@@ -950,19 +951,20 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     let typ =  field_types[i].to_token_stream();
 
 
+                    let variant_index = proc_macro2::Literal::u32_unsuffixed(variant_index as u32);
 
                     unique_field_types.insert(field_types[i].clone());
                     if i == 0 {
                         let discriminant_bytes = enum_size.discriminant_size as usize;
-                        conditions.push( quote!( (#discriminant_bytes == get_variant_offsets(#variant_index)[#i]) ) );
+                        conditions.push( quote!( (#discriminant_bytes == (get_variant_offsets #fn_impl_generics(#variant_index)[#i])) ) );
                     }
                     if i == num_fields - 1 {
                         conditions.push(
-                            quote!(  (std::mem::size_of::<#name #ty_generics>() == get_variant_offsets(#variant_index)[#i] + std::mem::size_of::<#typ>())  )
+                            quote!(  (std::mem::size_of::<#name #ty_generics>() == (get_variant_offsets #fn_impl_generics(#variant_index)[#i]) + std::mem::size_of::<#typ>())  )
                         );
                     } else {
                         let n = i + 1;
-                        let end_offset_condition = quote!(  (get_variant_offsets(#variant_index)[#n] == get_variant_offsets(#variant_index)[#i] + std::mem::size_of::<#typ>())  );
+                        let end_offset_condition = quote!(  (get_variant_offsets #fn_impl_generics(#variant_index)[#n] == (get_variant_offsets #fn_impl_generics(#variant_index)[#i]) + std::mem::size_of::<#typ>())  );
                         conditions.push(quote!(#end_offset_condition));
                     };
                 }
@@ -1010,9 +1012,10 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 );
             }
 
+            let packed_decl = if generics.params.is_empty() {quote!{ const }} else {quote!{ let }};
             let packed_constraints = if any_fields {
                 quote!(
-                    const PACKED : bool = true #( && #conditions)*;
+                    #packed_decl PACKED : bool = true #( && #conditions)*;
                     #require_packed
                     if !PACKED {
                         return #isreprc::no();
@@ -1406,7 +1409,9 @@ fn implement_withschema(
     structname: &str,
     field_infos: Vec<FieldInfo>,
     is_enum: FieldOffsetStrategy,
+    generics: &Generics,
     ty_generics: &TypeGenerics,
+    impl_generics: &ImplGenerics,
 ) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -1420,6 +1425,8 @@ fn implement_withschema(
         _savefile::prelude::offset_of
     };
 
+
+    let fn_impl_generics = if !generics.params.is_empty() { quote! { :: #impl_generics} } else {quote!{}};
     let mut fields = Vec::new();
     for (idx, field) in field_infos.iter().enumerate() {
         let verinfo = parse_attr_tag(field.attrs);
@@ -1431,7 +1438,7 @@ fn implement_withschema(
         let offset;
         match is_enum {
             FieldOffsetStrategy::EnumWithKnownOffsets(variant_index) => {
-                offset = quote! { Some(get_variant_offsets(#variant_index)[#idx]) };
+                offset = quote! { Some(get_variant_offsets #fn_impl_generics (#variant_index)[#idx]) };
             }
             FieldOffsetStrategy::EnumWithUnknownOffsets => {
                 offset = quote! { None };
@@ -1601,7 +1608,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     FieldOffsetStrategy::EnumWithUnknownOffsets
                 };
 
-                let fields = implement_withschema(&name.to_string(), field_infos, field_offset_strategy, &ty_generics);
+                let fields = implement_withschema(&name.to_string(), field_infos, field_offset_strategy, &generics, &ty_generics, &impl_generics);
 
                 variants.push(quote! {
                 (#field_from_version,
@@ -1638,19 +1645,42 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 } else {
                     panic!("Unsupported enum size: {}", enum_size.discriminant_size);
                 }
+                let not_const_if_gen = if generics.params.is_empty() {quote!{const}} else {quote!{}};
+                let conjure_variant;
+                if generics.params.is_empty() {
+                    conjure_variant = quote! {
+                        let mut varbuf = [0u8;std::mem::size_of::<#name #ty_generics>()];
+                        #varbuf_assign
+                        let mut value : MaybeUninit<#name #ty_generics> = unsafe { std::mem::transmute(varbuf) };
+                    }
+                } else {
+                    let discr_type;
+                    match enum_size.discriminant_size {
+                        1 => discr_type = quote!{ u8 },
+                        2 => discr_type = quote!{ u16 },
+                        4 => discr_type = quote!{ u32 },
+                        _ => unreachable!()
+                    }
+                    conjure_variant = quote! {
+                        let mut value = MaybeUninit::< #name #ty_generics >::uninit();
+                        let discr: *mut #discr_type = &mut value as *mut MaybeUninit<#name #ty_generics> as *mut #discr_type;
+                        unsafe {
+                            *discr = variant as #discr_type;
+                        }
+                    }
+                }
+
 
                 field_offset_impl = quote! {
-                    const fn get_field_offset_impl(value: &#name) -> [usize;#max_variant_fields] {
+                    #not_const_if_gen fn get_field_offset_impl #impl_generics (value: &#name #ty_generics) -> [usize;#max_variant_fields] {
                         assert!(std::mem::size_of::<#name #ty_generics>()>0);
-                        let base_ptr = value as *const #name as *const u8;
+                        let base_ptr = value as *const #name #ty_generics as *const u8;
                         match value {
                             #(#variant_field_offset_extractors)*
                         }
                     }
-                    const fn get_variant_offsets(variant: usize) -> [usize;#max_variant_fields] {
-                        let mut varbuf = [0u8;std::mem::size_of::<#name #ty_generics>()];
-                        #varbuf_assign
-                        let mut value : MaybeUninit<#name #ty_generics> = unsafe { std::mem::transmute(varbuf) };
+                    #not_const_if_gen fn get_variant_offsets #impl_generics(variant: usize) -> [usize;#max_variant_fields] {
+                        #conjure_variant
                         //let base_ptr = &mut value as *mut MaybeUninit<#name> as *mut u8;
                         //unsafe { *base_ptr = variant as u8; }
                         get_field_offset_impl(unsafe { &*(&value as *const MaybeUninit<#name #ty_generics> as *const #name #ty_generics) } )
@@ -1711,7 +1741,9 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         &name.to_string(),
                         field_infos,
                         FieldOffsetStrategy::Struct,
+                        &generics,
                         &ty_generics,
+                        &impl_generics
                     );
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
@@ -1730,7 +1762,9 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         &name.to_string(),
                         field_infos,
                         FieldOffsetStrategy::Struct,
+                        &generics,
                         &ty_generics,
+                        &impl_generics
                     );
                 }
                 &syn::Fields::Unit => {
