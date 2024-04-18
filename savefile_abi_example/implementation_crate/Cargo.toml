@@ -7,8 +7,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-savefile-abi = "0.17.0-beta.10"
-savefile = "0.17.0-beta.10"
-savefile-derive = "0.17.0-beta.10"
+savefile-abi = "0.17.0-beta.11"
+savefile = "0.17.0-beta.11"
+savefile-derive = "0.17.0-beta.11"
 interface_crate = { path = "../interface_crate" }
 

@@ -21,8 +21,8 @@ the core savefile crate. Savefile-abi is presently more experimental.
 
 Cargo.toml:
 ````
-savefile = "0.17.0-beta.10"
-savefile-derive = "0.17.0-beta.10"
+savefile = "0.17.0-beta.11"
+savefile-derive = "0.17.0-beta.11"
 ````
 
 # Sample 
@@ -82,7 +82,7 @@ can continue as usual.
 
 The dataformat for schemas has changed, but in a backward compatible way.
 
-Version 0.17.0-beta.10 is, as can be seen from the name, a beta. There will be bugs.
+Version 0.17.0-beta.11 is, as can be seen from the name, a beta. There will be bugs.
 
 ### Upgrade guide
 
@@ -99,7 +99,7 @@ encode the discriminant. Set to 1 for enums which will never have more than 256 
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
 
-## 0.17.0-beta.10
+## 0.17.0-beta.11
 
 Tentative support for fast serialization/deserialization of enums. May be buggy!
 
