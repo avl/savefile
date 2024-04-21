@@ -169,7 +169,7 @@ the in-memory format.
 ## WithSchema
 
 The [crate::WithSchema] trait represents a type which knows which data layout it will have
-when saved. Savefile saves schema in the output by default, but this can be disabled
+when saved. Savefile includes the schema in the serialized data by default, but this can be disabled
 by using the `save_noschema` function. When reading a file with unknown schema, it
 is up to the user to guarantee that the file is actually of the correct format.
 
@@ -196,7 +196,9 @@ The basic rule is that the Deserialize trait implementation must be able to dese
 
 The WithSchema trait implementation must be able to return the schema for any previous verison.
 
-The Serialize trait implementation only needs to support the latest version.
+The Serialize trait implementation only needs to support the latest version, for savefile itself
+to work. However, for SavefileAbi to work, Serialize should support writing old versions.
+The savefile-derive macro does support serializing old versions, with some limitations.
 
 
 # Versions and derive
@@ -227,16 +229,16 @@ Using the #\[savefile_versions] tag is critically important. If this is messed u
 When a field is added, its type must implement the Default trait (unless the default_val or default_fn attributes
 are used).
 
-There also exists a savefile_default_val, a default_fn and a savefile_versions_as attribute. More about these below:
+More about the savefile_default_val, default_fn and savefile_versions_as attributes below.
 
-## The versions attribute
+## The savefile_versions attribute
 
 Rules for using the #\[savefile_versions] attribute:
 
  You must keep track of what the current version of your data is. Let's call this version N.
  You may only save data using version N (supply this number when calling `save`)
  When data is loaded, you must supply version N as the memory-version number to `load`. Load will
-    still adapt the deserialization operation to the version of the serialized data.
+    adapt the deserialization operation to the version of the serialized data.
  The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version.
  Whenever changes to the data are to be made, the global version number N must be increased.
  You may add a new field to your structs, iff you also give it a #\[savefile_versions = "N.."] attribute. N must be the new version of your data.
@@ -251,7 +253,7 @@ Rules for using the #\[savefile_versions] attribute:
 
 
 
- ## The default_val attribute
+ ## The savefile_default_val attribute
 
  The default_val attribute is used to provide a custom default value for
  primitive types, when fields are added.
@@ -280,7 +282,7 @@ Rules for using the #\[savefile_versions] attribute:
 
  The default_val attribute only works for simple types.
 
- ## The default_fn attribute
+ ## The savefile_default_fn attribute
 
  The default_fn attribute allows constructing more complex values as defaults.
 
@@ -350,7 +352,7 @@ Rules for using the #\[savefile_versions] attribute:
 
  ```
 
- After a while, we realize that a u64 is a really bad choice for datatype for a phone number,
+ After a while, we realize that u64 is a bad choice for datatype for a phone number,
  since it can't represent a number with leading 0, and also can't represent special characters
  which sometimes appear in phone numbers, like '+' or '-' etc.
 
@@ -2345,10 +2347,34 @@ pub struct Field {
     /// For fields in enums, the offset is the offset from the start of memory of the enum.
     /// For a repr(C,?)-enum, this will be the offset from the start of the discriminant.
     /// For repr(rust)-enums, the discriminant may not be at the start of the memory layout.
-    pub offset: Option<usize>,
+    /// Note - if this is !=None, then it is important that the value at the given offset
+    /// is actually an instance of the type given by the schema in 'value'. Otherwise,
+    /// layout compatibility calculations may fail, with catastrophic consequences.
+    offset: Option<usize>,
 }
 
 impl Field {
+
+    /// Create a new instance of field, with the given name and type
+    pub fn new(name: String, value: Box<Schema>) -> Field {
+        Field {
+            name,
+            value,
+            offset: None
+        }
+    }
+    /// Create a new instance of field, with the given name and type.
+    /// The offset is the offset of the field within its struct.
+    ///
+    /// # Safety
+    /// The offset *must* be the correct offset of the field within its struct.
+    pub unsafe fn unsafe_new(name: String, value: Box<Schema>, offset: Option<usize>) -> Field  {
+        Field {
+            name,
+            value,
+            offset
+        }
+    }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
     pub fn layout_compatible(&self, other: &Field) -> bool {
         let (Some(offset_a), Some(offset_b)) = (self.offset, other.offset) else {
@@ -2388,12 +2414,21 @@ impl SchemaArray {
 /// A struct is serialized by serializing its fields one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
+/// The memory format is given by size, alignment and the various
+/// field offsets. If any field lacks an offset, the memory format
+/// is unspecified.
 #[derive(Debug, PartialEq, Clone)]
 #[repr(C)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaStruct {
     /// Diagnostic value
     pub dbg_name: String,
+    /// If None, the memory layout of the struct is unspecified.
+    /// Otherwise, the size of the struct in memory (std::mem::size_of::<TheStruct>()).
+    size: Option<usize>,
+    /// If None, the memory layout of the struct is unspecified.
+    /// Otherwise, the alignment of the struct (std::mem::align_of::<TheStruct>()).
+    alignment: Option<usize>,
     /// Fields of struct
     pub fields: Vec<Field>,
 }
@@ -2406,12 +2441,42 @@ fn maybe_add(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaStruct {
+    /// * dbg_name: The name of the struct
+    /// * fields: The fields of the struct
+    pub fn new(dbg_name: String, fields: Vec<Field>) -> SchemaStruct {
+        SchemaStruct {
+            dbg_name, fields,
+            size: None,
+            alignment: None
+        }
+    }
+    /// * dbg_name: The name of the struct
+    /// * fields: The fields of the struct
+    /// * size: If None, the memory layout of the struct is unspecified.
+    ///   Otherwise, the size of the struct in memory (std::mem::size_of::<TheStruct>()).
+    /// * alignment: If None, the memory layout of the struct is unspecified.
+    ///   Otherwise, the alignment of the struct (std::mem::align_of::<TheStruct>()).
+    pub fn new_unsafe(dbg_name: String, fields: Vec<Field>, size: Option<usize>, alignment: Option<usize>) -> SchemaStruct {
+        SchemaStruct {
+            dbg_name, fields,
+            size,
+            alignment
+        }
+    }
+
+
     fn layout_compatible(&self, other: &SchemaStruct) -> bool {
         if self.fields.len() != other.fields.len() {
             return false;
         }
+        if self.alignment.is_none() || self.size.is_none() {
+            return false;
+        }
+        if self.alignment != other.alignment || self.size != other.size {
+            return false;
+        }
         for (a, b) in self.fields.iter().zip(other.fields.iter()) {
-            if !a.value.layout_compatible(&b.value) {
+            if !a.layout_compatible(&b) {
                 return false;
             }
         }
@@ -2462,6 +2527,11 @@ impl Variant {
 /// followed by all the field for that variant.
 /// The name of each variant, as well as its order in
 /// the enum (the discriminant), is significant.
+/// The memory format is given by 'has_explicit_repr',
+/// 'discriminant_size', 'size', 'alignment' and the vairous variants.
+///
+/// Note: If 'has_explicit_repr' is false,
+/// the memory format is unspecified.
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct SchemaEnum {
@@ -2472,8 +2542,15 @@ pub struct SchemaEnum {
     /// If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
     /// Valid values are 1, 2 or 4.
     /// Otherwise, this is the number of bytes needed to represent the discriminant.
-    /// This is always the size of the enum in the disk-format.
+    /// In either case, this is the size of the enum in the disk-format.
     pub discriminant_size: u8,
+    /// True if this enum type has a repr(uX) attribute, and thus a predictable
+    /// memory layout.
+    has_explicit_repr: bool,
+    /// The size of the enum (std::mem::size_of::<TheEnum>()), if known
+    size: Option<usize>,
+    /// The alignment of the enum (std::mem::align_of::<TheEnum>())
+    alignment: Option<usize>,
 }
 
 fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
@@ -2485,7 +2562,69 @@ fn maybe_max(a: Option<usize>, b: Option<usize>) -> Option<usize> {
     None
 }
 impl SchemaEnum {
+    /// Create a new SchemaEnum instance.
+    /// Arguments:
+    ///
+    /// * dbg_name - Name of the enum type.
+    /// * variants - The variants of the enum
+    /// * discriminant_size:
+    ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
+    ///   Valid values are 1, 2 or 4.
+    ///   Otherwise, this is the number of bytes needed to represent the discriminant.
+    ///   In either case, this is the size of the enum in the disk-format.
+    ///
+    pub fn new(dbg_name: String, variants: Vec<Variant>, discriminant_size: u8) -> SchemaEnum {
+        SchemaEnum {
+            dbg_name,
+            variants,
+            discriminant_size,
+            has_explicit_repr: false,
+            size: None,
+            alignment: None
+        }
+    }
+    /// Create a new SchemaEnum instance.
+    /// Arguments:
+    ///
+    /// * dbg_name - Name of the enum type.
+    /// * variants - The variants of the enum
+    /// * discriminant_size:
+    ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
+    ///   Valid values are 1, 2 or 4.
+    ///   Otherwise, this is the number of bytes needed to represent the discriminant.
+    ///   In either case, this is the size of the enum in the disk-format.
+    /// * has_explicit_repr: True if this enum type has a repr(uX) attribute, and thus a predictable
+    ///   memory layout.
+    /// * size: The size of the enum (std::mem::size_of::<TheEnum>()), if known
+    /// * alignment: The alignment of the enum (std::mem::align_of::<TheEnum>())
+    ///
+    /// # Safety
+    /// The argument 'has_explicit_repr' must only be true if the enum in fact has a #[repr(uX)] attribute.
+    /// The size and alignment must be correct for the type.
+    pub fn new_unsafe(dbg_name: String, variants: Vec<Variant>, discriminant_size: u8,
+        has_explicit_repr: bool, size: Option<usize>, alignment: Option<usize>) -> SchemaEnum {
+        SchemaEnum {
+            dbg_name,
+            variants,
+            discriminant_size,
+            has_explicit_repr,
+            size,
+            alignment,
+        }
+    }
     fn layout_compatible(&self, other: &SchemaEnum) -> bool {
+        if self.has_explicit_repr == false || other.has_explicit_repr == false {
+            return false;
+        }
+        if self.alignment.is_none() || self.size.is_none() {
+            return false;
+        }
+        if self.alignment != other.alignment || self.size != other.size {
+            return false;
+        }
+        if self.discriminant_size != other.discriminant_size {
+            return false;
+        }
         if self.variants.len() != other.variants.len() {
             return false;
         }
@@ -2508,6 +2647,8 @@ impl SchemaEnum {
 /// representation of its type, except for string,
 /// which is serialized as an usize length followed
 /// by the string in utf8.
+/// These always have a specified memory format, except
+/// for String, which can in theory be unspecified.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
@@ -2546,6 +2687,15 @@ pub enum SchemaPrimitive {
     schema_char,
 }
 impl SchemaPrimitive {
+    fn layout_compatible(&self, other: &SchemaPrimitive) -> bool {
+
+        if let (SchemaPrimitive::schema_string(layout1), SchemaPrimitive::schema_string(layout2)) = (self, other) {
+            if *layout1 == VecOrStringLayout::Unknown || *layout2 == VecOrStringLayout::Unknown {
+                return false;
+            }
+        }
+        self == other
+    }
     fn name(&self) -> &'static str {
         match *self {
             SchemaPrimitive::schema_i8 => "i8",
@@ -2566,9 +2716,7 @@ impl SchemaPrimitive {
             SchemaPrimitive::schema_char => "char",
         }
     }
-}
 
-impl SchemaPrimitive {
     fn serialized_size(&self) -> Option<usize> {
         match *self {
             SchemaPrimitive::schema_i8 | SchemaPrimitive::schema_u8 => Some(1),
@@ -2602,6 +2750,8 @@ fn diff_primitive(a: SchemaPrimitive, b: SchemaPrimitive, path: &str) -> Option<
 }
 
 /// The actual layout in memory of a Vec-like datastructure.
+/// If this is 'Unknown', the memory format is unspecified.
+/// Otherwise, it is as given by the variant.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 #[repr(u8)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
@@ -2638,7 +2788,11 @@ pub struct AbiMethodArgument {
     /// contains information that can allow savefile-abi to determine
     /// if memory layouts are the same.
     pub schema: Schema,
-    /// False if this type cannot be sent as a reference
+    /// False if this type cannot be sent as a reference.
+    /// For this to be true, two things must hold:
+    /// a) The argument type must be a reference
+    /// b) The thing pointed to by the reference must be such that its memory layout
+    ///    is known to be identical on both sides of the FFI-boundary.
     pub can_be_sent_as_ref: bool,
 }
 
@@ -2819,11 +2973,21 @@ impl AbiTraitDefinition {
 }
 
 /// The schema represents the save file format
-/// of your data structure. It is an AST (Abstract Syntax Tree)
-/// for consisting of various types of nodes in the savefile
+/// of your data structure. It is a tree,
+/// consisting of various types of nodes in the savefile
 /// format. Custom Serialize-implementations cannot add new types to
 /// this tree, but must reuse these existing ones.
-/// See the various enum variants for more information:
+/// See the various enum variants for more information.
+///
+/// Note, the Schema actually carries two different pieces of information
+///  * The disk format
+///  * The memory format. The latter is only used by SavefileAbi.
+///
+/// Note, schema instances may choose to not specify any memory format. If so,
+/// SavefileAbi will have to resort to serialization.
+///
+/// Exactly how the memory format is specified varies for the variants.
+/// Check the variant documentation.
 #[derive(Debug, PartialEq, Clone)]
 #[repr(C, u32)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
@@ -2834,22 +2998,34 @@ pub enum Schema {
     Enum(SchemaEnum),
     /// Represents a primitive: Any of the various integer types (u8, i8, u16, i16 etc...), or String
     Primitive(SchemaPrimitive),
-    /// A Vector of arbitrary nodes, all of the given type
+    /// A Vector of arbitrary nodes, all of the given type.
+    /// This has a specified memory format unless the VecOrStringLayout value is 'Unknown'.
     Vector(Box<Schema>, VecOrStringLayout /*standard savefile memory layout*/),
     /// An array of N arbitrary nodes, all of the given type
+    /// This has a specified memory format unless the VecOrStringLayout value is 'Unknown'.
     Array(SchemaArray),
     /// An Option variable instance of the given type.
+    /// This has a specified memory format (a pointer to instance of 'Schema')
     SchemaOption(Box<Schema>),
     /// Basically a dummy value, the Schema nodes themselves report this schema if queried.
+    /// This never has a specified memory format.
     Undefined,
     /// A zero-sized type. I.e, there is no data to serialize or deserialize.
+    /// This always has a specified memory format.
     ZeroSize,
     /// A user-defined, custom type. The string can be anything. The schema
-    /// only matches if the string is identical
+    /// only matches if the string is identical. Use with caution. Consider
+    /// if your type is aptly represented as a Struct or Enum instead.
+    /// This never has a specified memory format.
     Custom(String),
     /// Boxed traits cannot be serialized, but they can be exchanged using savefile-abi
+    /// This always has a specified memory format, which is assumed to be a pointer to
+    /// data and a pointer to a vtable.
     BoxedTrait(AbiTraitDefinition),
-    /// Closures cannot be serialized, but they can be exchanged using savefile-abi
+    /// Closures cannot be serialized, but they can be exchanged using savefile-abi.
+    /// The first parameter determines if the closure is a FnMut closure (true if so).
+    /// This always has a specified memory format, which is assumed to be a pointer to
+    /// data and a pointer to a vtable.
     FnClosure(bool /*mut self*/, AbiTraitDefinition),
 }
 /// Introspect is not implemented for Schema, though it could be
@@ -2884,9 +3060,11 @@ impl Schema {
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
     pub fn layout_compatible(&self, b_native: &Schema) -> bool {
         match (self, b_native) {
-            (Schema::Struct(a), Schema::Struct(b)) => a.layout_compatible(b),
+            (Schema::Struct(a), Schema::Struct(b)) => {
+                a.layout_compatible(b)
+            },
             (Schema::Enum(a), Schema::Enum(b)) => a.layout_compatible(b),
-            (Schema::Primitive(a), Schema::Primitive(b)) => a == b,
+            (Schema::Primitive(a), Schema::Primitive(b)) => a.layout_compatible(b),
             (Schema::Vector(a, a_standard_layout), Schema::Vector(b, b_standard_layout)) => {
                 a.layout_compatible(b)
                     && *a_standard_layout != VecOrStringLayout::Unknown
@@ -2919,6 +3097,8 @@ impl Schema {
         let schema = Box::new(T1::schema(version));
         Schema::Struct(SchemaStruct {
             dbg_name: "1-Tuple".to_string(),
+            size: Some(std::mem::size_of::<(T1,)>()),
+            alignment: Some(std::mem::align_of::<(T1,)>()),
             fields: vec![Field {
                 name: "0".to_string(),
                 value: schema,
@@ -2931,6 +3111,8 @@ impl Schema {
     pub fn new_tuple2<T1: WithSchema, T2: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "2-Tuple".to_string(),
+            size: Some(std::mem::size_of::<(T1,T2)>()),
+            alignment: Some(std::mem::align_of::<(T1,T2)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -2949,6 +3131,8 @@ impl Schema {
     pub fn new_tuple3<T1: WithSchema, T2: WithSchema, T3: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "3-Tuple".to_string(),
+            size: Some(std::mem::size_of::<(T1,T2,T3)>()),
+            alignment: Some(std::mem::align_of::<(T1,T2,T3)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -2972,6 +3156,8 @@ impl Schema {
     pub fn new_tuple4<T1: WithSchema, T2: WithSchema, T3: WithSchema, T4: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "4-Tuple".to_string(),
+            size: Some(std::mem::size_of::<(T1,T2,T3,T4)>()),
+            alignment: Some(std::mem::align_of::<(T1,T2,T3,T4)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -3310,6 +3496,8 @@ impl Serialize for SchemaStruct {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
         serializer.write_usize(self.fields.len())?;
+        self.size.serialize(serializer)?;
+        self.alignment.serialize(serializer)?;
         for field in &self.fields {
             field.serialize(serializer)?;
         }
@@ -3323,6 +3511,8 @@ impl Deserialize for SchemaStruct {
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
+            size: <_ as Deserialize>::deserialize(deserializer)?,
+            alignment: <_ as Deserialize>::deserialize(deserializer)?,
             fields: {
                 let mut ret = Vec::new();
                 for _ in 0..l {
@@ -3441,6 +3631,9 @@ impl Serialize for SchemaEnum {
             var.serialize(serializer)?;
         }
         self.discriminant_size.serialize(serializer)?;
+        self.has_explicit_repr.serialize(serializer)?;
+        self.size.serialize(serializer)?;
+        self.alignment.serialize(serializer)?;
         Ok(())
     }
 }
@@ -3453,15 +3646,23 @@ impl Deserialize for SchemaEnum {
         for _ in 0..l {
             ret.push(Variant::deserialize(deserializer)?);
         }
-        let size = if deserializer.file_version > 0 {
-            u8::deserialize(deserializer)?
+        let (discriminant_size, has_explicit_repr, size, alignment) = if deserializer.file_version > 0 {
+            (
+                u8::deserialize(deserializer)?,
+                bool::deserialize(deserializer)?,
+                Option::<usize>::deserialize(deserializer)?,
+                Option::<usize>::deserialize(deserializer)?,
+            )
         } else {
-            1
+            (1, false, None, None)
         };
         Ok(SchemaEnum {
             dbg_name,
             variants: ret,
-            discriminant_size: size,
+            discriminant_size,
+            has_explicit_repr,
+            size,
+            alignment,
         })
     }
 }
@@ -3542,6 +3743,9 @@ impl Arbitrary for SchemaEnum {
                 .map(|_| <_ as Arbitrary>::arbitrary(g))
                 .collect(),
             discriminant_size: *g.choose(&[1, 2, 4]).unwrap(),
+            has_explicit_repr: *g.choose(&[false, true]).unwrap(),
+            size: <_ as Arbitrary>::arbitrary(g),
+            alignment: <_ as Arbitrary>::arbitrary(g),
         }
     }
 }
@@ -3554,6 +3758,8 @@ impl Arbitrary for SchemaStruct {
                 .map(|_| <_ as Arbitrary>::arbitrary(g))
                 .collect(),
             dbg_name: <_ as Arbitrary>::arbitrary(g),
+            size:  <_ as Arbitrary>::arbitrary(g),
+            alignment:  <_ as Arbitrary>::arbitrary(g),
         }
     }
 }
@@ -4097,6 +4303,8 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
+                size: None,
+                alignment: None,
                 fields: vec![
                     Field {
                         name: "key".to_string(),
@@ -4170,6 +4378,8 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
+                size: None,
+                alignment: None,
                 fields: vec![
                     Field {
                         name: "key".to_string(),
@@ -4218,6 +4428,8 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
+                size: None,
+                alignment: None,
                 fields: vec![
                     Field {
                         name: "key".to_string(),
@@ -4374,6 +4586,8 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "Key".to_string(),
+                size: None,
+                alignment: None,
                 fields: vec![Field {
                     name: "key".to_string(),
                     value: Box::new(K::schema(version)),
@@ -4676,6 +4890,8 @@ impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
     fn schema(version: u32) -> Schema {
         Schema::Enum(SchemaEnum {
             dbg_name: "Result".to_string(),
+            size: None,
+            alignment: None,
             variants: vec![
                 Variant {
                     name: "Ok".to_string(),
@@ -4697,6 +4913,7 @@ impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
                 },
             ],
             discriminant_size: 1,
+            has_explicit_repr: false,
         })
     }
 }
@@ -4735,6 +4952,8 @@ impl WithSchema for bit_vec::BitVec {
     fn schema(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitVec".to_string(),
+            size: None,
+            alignment: None,
             fields: vec![
                 Field {
                     name: "num_bits".to_string(),
@@ -4828,6 +5047,8 @@ impl WithSchema for bit_set::BitSet {
     fn schema(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitSet".to_string(),
+            size: None,
+            alignment: None,
             fields: vec![
                 Field {
                     name: "num_bits".to_string(),
@@ -5158,14 +5379,27 @@ impl<T: Deserialize + ReprC> Deserialize for Box<[T]> {
         Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
 }
-
-impl<T: WithSchema> WithSchema for [T] {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::DataLength)
+impl<'a> WithSchema for &'a str {
+    fn schema(_version: u32) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<T: Serialize + ReprC> Serialize for [T] {
+impl<'a> Serialize for &'a str {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        serializer.write_buf(self.as_bytes())
+    }
+}
+
+impl<'a, T: WithSchema> WithSchema for &'a [T] {
+    fn schema(version: u32) -> Schema {
+        Schema::Vector(Box::new(T::schema(version)), calculate_slice_memory_layout::<T>())
+        //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
+    }
+}
+impl<'a, T: Serialize + ReprC> Serialize for &'a [T] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5202,7 +5436,21 @@ struct RawVecInspector {
     p2: usize,
     p3: usize,
 }
-
+#[derive(Debug)]
+#[repr(C)]
+struct RawSliceInspector {
+    p1: usize,
+    p2: usize,
+}
+impl RawSliceInspector {
+    const fn get_layout(&self) -> VecOrStringLayout {
+        if self.p1 == 0 {
+            VecOrStringLayout::LengthData
+        } else {
+            VecOrStringLayout::DataLength
+        }
+    }
+}
 impl RawVecInspector {
     fn get_layout(&self, ptr: *const u8) -> VecOrStringLayout {
         let ptr = ptr as usize;
@@ -5221,6 +5469,18 @@ impl RawVecInspector {
     }
 }
 
+/// Calculate the memory layout of &[T]. I.e, of the reference to the data.
+/// This type is typically 16 bytes, consisting of two words, one being the length,
+/// the other being a pointer to the start of the data.
+pub const fn calculate_slice_memory_layout<T>() -> VecOrStringLayout {
+    if std::mem::size_of::<&[T]>() != 16 || std::mem::size_of::<RawSliceInspector>() != 16 {
+        VecOrStringLayout::Unknown
+    } else {
+        let test_slice:&[T] = &[];
+        let insp: RawSliceInspector = unsafe { std::mem::transmute_copy::<&[T],RawSliceInspector>(&test_slice) };
+        insp.get_layout()
+    }
+}
 /// Calculate the memory layout of a Vec of the given type
 pub fn calculate_vec_memory_layout<T>() -> VecOrStringLayout {
     if std::mem::size_of::<Vec<u8>>() != 24 || std::mem::size_of::<RawVecInspector>() != 24 {
@@ -5914,7 +6174,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::ptr::NonNull;
+use std::ptr::{NonNull};
 use std::slice;
 use std::sync::Arc;
 

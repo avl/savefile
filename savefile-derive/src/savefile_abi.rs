@@ -71,6 +71,7 @@ enum ArgType {
     PlainData(TokenStream),
     Reference(TokenStream),
     SliceReference(TokenStream),
+    Str,
     TraitReference(Ident, bool /*ismut*/),
     BoxedTrait(Ident),
     Fn(
@@ -122,7 +123,7 @@ fn parse_type(
                 &mut *name_generator,
                 extra_definitions,
                 true,
-                typref.mutability.is_some(),
+                typref.mutability.is_some()
             );
         }
         Type::Tuple(tuple) => {
@@ -223,9 +224,21 @@ fn parse_type(
             }
         }
         Type::Path(path) => {
-            let first_seg = path.path.segments.iter().next().expect("Missing path segments");
-            if first_seg.ident == "Box" {
-                match &first_seg.arguments {
+            let last_seg = path.path.segments.iter().last().expect("Missing path segments");
+            if last_seg.ident == "str" {
+                if path.path.segments.len()!=1 {
+                    panic!("Savefile does not support types named 'str', unless they are the standard type str, and it must be specified as 'str', without any namespace");
+                }
+                if !is_reference {
+                    panic!("Savefile does not support the type 'str' (but it does support '&str').");
+                }
+                return ArgType::Str;
+            }
+            else if last_seg.ident == "Box" {
+                if path.path.segments.len()!=1 {
+                    panic!("Savefile does not support types named 'Box', unless they are the standard type Box, and it must be specified as 'Box', without any namespace");
+                }
+                match &last_seg.arguments {
                     PathArguments::AngleBracketed(ang) => {
                         let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
                         if ang.args.len() != 1 {
@@ -333,6 +346,7 @@ pub(super) fn generate_method_definitions(
     method_name: Ident,
     ret_declaration: TokenStream, //May be empty, for ()-returns
     ret_type: TokenStream,
+    no_return: bool, //Returns ()
     receiver_is_mut: bool,
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
@@ -372,6 +386,10 @@ pub(super) fn generate_method_definitions(
                 callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
             }
             ArgType::SliceReference(_) => {
+                callee_trampoline_real_method_invocation_arguments.push(quote! {&#arg_name});
+                callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
+            }
+            ArgType::Str => {
                 callee_trampoline_real_method_invocation_arguments.push(quote! {&#arg_name});
                 callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
             }
@@ -418,6 +436,23 @@ pub(super) fn generate_method_definitions(
                             }
                         });
             }
+            ArgType::Str => {
+                callee_trampoline_variable_deserializer.push(quote! {
+                    if compatibility_mask&(1<<#arg_index) != 0 {
+                        #arg_name = unsafe { &*(deserializer.read_raw_ptr::<str>()?) };
+                    } else {
+                        #temp_arg_name = String::deserialize(&mut deserializer)?;
+                        #arg_name = &#temp_arg_name;
+                    }
+                });
+                caller_arg_serializers.push(quote! {
+                            if compatibility_mask&(1<<#arg_index) != 0 {
+                                unsafe { serializer.write_raw_ptr(#arg_name as *const str).expect("Writing argument ref") };
+                            } else {
+                                (#arg_name.to_string()).serialize(&mut serializer).expect("Writing argument serialized");
+                            }
+                        });
+            }
             ArgType::SliceReference(arg_type) => {
                 callee_trampoline_variable_deserializer.push(quote! {
                     if compatibility_mask&(1<<#arg_index) != 0 {
@@ -431,7 +466,7 @@ pub(super) fn generate_method_definitions(
                             if compatibility_mask&(1<<#arg_index) != 0 {
                                 unsafe { serializer.write_raw_ptr(#arg_name as *const [#arg_type]).expect("Writing argument ref") };
                             } else {
-                                #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
+                                (&#arg_name).serialize(&mut serializer).expect("Writing argument serialized");
                             }
                         });
             }
@@ -541,11 +576,20 @@ pub(super) fn generate_method_definitions(
                     }
                 })
             }
+            ArgType::Str => {
+                caller_fn_arg_list.push(quote! {#arg_name : &str});
+                metadata_arguments.push(quote! {
+                    AbiMethodArgument {
+                        schema: <&str as WithSchema>::schema(version),
+                        can_be_sent_as_ref: true
+                    }
+                })
+            }
             ArgType::SliceReference(arg_type) => {
                 caller_fn_arg_list.push(quote! {#arg_name : &[#arg_type]});
                 metadata_arguments.push(quote! {
                     AbiMethodArgument {
-                        schema: <[#arg_type] as WithSchema>::schema(version),
+                        schema: <&[#arg_type] as WithSchema>::schema(version),
                         can_be_sent_as_ref: true
                     }
                 })
@@ -616,6 +660,11 @@ pub(super) fn generate_method_definitions(
     } else {
         quote! {}
     };
+    let result_default = if no_return {
+        quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ) //Safe, does not need drop and does not allocate
+    } else {
+        quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() )
+    };
     let caller_method_trampoline = quote! {
         fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
@@ -624,7 +673,7 @@ pub(super) fn generate_method_definitions(
                 panic!("Method '{}' does not exist in implementation.", info.method_name);
             };
 
-            let mut result_buffer: MaybeUninit<Result<#ret_type,SavefileError>> = MaybeUninit::<Result<#ret_type,SavefileError>>::uninit();
+            let mut result_buffer: MaybeUninit<Result<#ret_type,SavefileError>> = #result_default;
             let compatibility_mask = info.compatibility_mask;
 
             let mut data = FlexBuffer::new();
@@ -663,15 +712,11 @@ pub(super) fn generate_method_definitions(
         }
     };
 
-    let callee_method_trampoline = quote! {
-        #method_number => {
-            #(#callee_trampoline_variable_declaration)*
-            #(#callee_trampoline_temp_variable_declaration)*
-
-            #(#callee_trampoline_variable_deserializer)*
-
-            let ret = #callee_real_method_invocation_except_args( #(#callee_trampoline_real_method_invocation_arguments,)* );
-
+    let handle_retval;
+    if no_return {
+        handle_retval = quote!();
+    } else {
+        handle_retval = quote!{
             let mut slow_temp = FlexBuffer::new();
             let mut serializer = Serializer {
                 writer: &mut slow_temp,
@@ -690,6 +735,19 @@ pub(super) fn generate_method_definitions(
                     unsafe { receiver(&outcome as *const _, abi_result) }
                 }
             }
+        }
+    }
+
+    let callee_method_trampoline = quote! {
+        #method_number => {
+            #(#callee_trampoline_variable_declaration)*
+            #(#callee_trampoline_temp_variable_declaration)*
+
+            #(#callee_trampoline_variable_deserializer)*
+
+            let ret = #callee_real_method_invocation_except_args( #(#callee_trampoline_real_method_invocation_arguments,)* );
+
+            #handle_retval
 
         }
 

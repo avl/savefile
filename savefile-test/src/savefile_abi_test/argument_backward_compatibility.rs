@@ -96,6 +96,14 @@ pub fn test_backward_compatibility() -> Result<(), SavefileError> {
 }
 
 #[test]
+pub fn test_arg_argument_metadata() {
+    use savefile::WithSchema;
+    let schema = v2::ArgArgument::schema(0);
+    println!("Schema: {:#?}", schema);
+    assert!(!schema.layout_compatible(&schema)); //Versions containing removed items should never be considered layout compatible (since their schema type is not identical to the memory type)
+}
+
+#[test]
 pub fn test_caller_has_older_version() {
     let iface2: Box<dyn ArgInterfaceV2> = Box::new(Implementation2 {});
     assert_eq!(

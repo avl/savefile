@@ -12,11 +12,13 @@ methods:
         - schema:
             Struct:
               dbg_name: ArgArgument
+              size: 8
+              alignment: 4
               fields:
                 - name: data1
                   value:
                     Primitive: schema_u32
-                  offset: 8
+                  offset: ~
                 - name: data2
                   value:
                     Primitive: schema_u32
@@ -25,11 +27,13 @@ methods:
         - schema:
             Struct:
               dbg_name: ArgArgument
+              size: 8
+              alignment: 4
               fields:
                 - name: data1
                   value:
                     Primitive: schema_u32
-                  offset: 8
+                  offset: ~
                 - name: data2
                   value:
                     Primitive: schema_u32
@@ -52,4 +56,7 @@ methods:
                   discriminant: 1
                   fields: []
               discriminant_size: 1
+              has_explicit_repr: false
+              size: 1
+              alignment: 1
           can_be_sent_as_ref: false

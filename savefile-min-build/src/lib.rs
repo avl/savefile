@@ -5,10 +5,13 @@ use savefile::prelude::*;
 use savefile::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Debug;
 use std::io::{BufWriter, Cursor, Write};
+use savefile_derive::savefile_abi_exportable;
 
-#[derive(Debug, Savefile, PartialEq)]
-pub enum TestTupleEnum {
-    Variant1(u8),
+#[savefile_abi_exportable(version = 0)]
+pub trait TestInterface {
+    fn count_chars_str(&self, x: &str) -> usize;
 }
 #[test]
-pub fn test_generic_example_enum2() {}
+pub fn test_generic_example_enum2() {
+
+}

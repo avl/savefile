@@ -284,6 +284,7 @@ pub fn savefile_abi_exportable(
                 let mut receiver_is_mut = false;
                 let ret_type;
                 let ret_declaration;
+                let no_return;
                 match &method.sig.output {
                     ReturnType::Default => {
                         ret_type = Tuple(TypeTuple {
@@ -291,9 +292,11 @@ pub fn savefile_abi_exportable(
                             elems: Default::default(),
                         })
                         .to_token_stream();
-                        ret_declaration = quote! {}
+                        ret_declaration = quote! {};
+                        no_return = true;
                     }
                     ReturnType::Type(_, ty) => {
+                        no_return = false;
                         match &**ty {
                             Type::Path(_type_path) => {
                                 ret_type = ty.to_token_stream();
@@ -369,6 +372,7 @@ pub fn savefile_abi_exportable(
                     method_name,
                     ret_declaration,
                     ret_type,
+                    no_return,
                     receiver_is_mut,
                     args,
                     &mut temp_name_generator,
@@ -1478,20 +1482,26 @@ fn implement_withschema(
         };
         let removed = check_is_remove(field.ty);
         let field_type = &field.ty;
-        if field_from_version == 0 && field_to_version == std::u32::MAX {
+        if field_from_version == 0 && field_to_version == u32::MAX {
             if removed.is_removed() {
                 panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
             }
-            fields.push(quote_spanned!( span => #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset })));
+            fields.push(quote_spanned!( span => #fields1.push(unsafe{#Field::unsafe_new(#name_str.to_string(), Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset)} )));
         } else {
             let mut version_mappings = Vec::new();
+            let offset = if field_to_version != u32::MAX {
+                quote!(None)
+            } else {
+                offset
+            };
             for dt in verinfo.deserialize_types.iter() {
                 let dt_from = dt.from;
                 let dt_to = dt.to;
                 let dt_field_type = syn::Ident::new(&dt.serialized_type, span);
+                // We don't supply offset in this case, deserialized type doesn't match field type
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#dt_field_type as #WithSchema>::schema(#local_version)), offset: #offset });
+                        #fields1.push(#Field ::new( #name_str.to_string(), Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))) );
                     }
                 });
             }
@@ -1500,7 +1510,7 @@ fn implement_withschema(
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(#Field { name:#name_str.to_string(), value:Box::new(<#field_type as #WithSchema>::schema(#local_version)), offset: #offset });
+                    #fields1.push(unsafe{#Field ::unsafe_new( #name_str.to_string(), Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset )} );
                 }
                 ));
         }
@@ -1718,6 +1728,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             }
 
             let discriminant_size = enum_size.discriminant_size;
+            let has_explicit_repr = enum_size.repr_c;
 
             quote! {
                 #field_offset_impl
@@ -1731,18 +1742,20 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         let local_version = version;
 
                         #Schema::Enum (
-                            #SchemaEnum {
-                                dbg_name : stringify!(#name).to_string(),
-                                discriminant_size: #discriminant_size,
-                                variants : (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
+                            unsafe{#SchemaEnum::new_unsafe(
+                                stringify!(#name).to_string(),
+                                (vec![#(#variants),*]).into_iter().filter_map(|(fromver,tover,x)|{
                                     if local_version >= fromver && local_version <= tover {
                                         Some(x)
                                     } else {
                                         None
                                     }
                                 }).collect(),
-
-                            }
+                                #discriminant_size,
+                                #has_explicit_repr,
+                                Some(std::mem::size_of::<#name #ty_generics>()),
+                                Some(std::mem::align_of::<#name #ty_generics>()),
+                            )}
                         )
                     }
                 }
@@ -1808,10 +1821,12 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         let local_version = version;
                         let mut fields1 = Vec::new();
                         #(#fields;)* ;
-                        #Schema::Struct(#SchemaStruct{
-                            dbg_name: stringify!(#name).to_string(),
-                            fields: fields1
-                        })
+                        #Schema::Struct(unsafe{#SchemaStruct::new_unsafe(
+                            stringify!(#name).to_string(),
+                            fields1,
+                            Some(std::mem::size_of::<#name #ty_generics>()),
+                            Some(std::mem::align_of::<#name #ty_generics>()),
+                        )})
 
                     }
                 }

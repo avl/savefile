@@ -18,9 +18,14 @@ pub trait TestInterface {
     fn add(&self, x: u32, y: String) -> u32;
     fn call_callback(&mut self, callback: &mut dyn CallbackInterface);
     fn do_nothing(&self);
+    fn do_panic(&self);
     fn arrays_add(&self, a: &[u32], b: &[u32]) -> Vec<u32>;
+    fn string_arrays_add(&self, a: &[String], b: &[String]) -> Vec<String>;
 
     fn do_mut_nothing(&mut self);
+
+    fn count_chars(&self, x: &String) -> usize;
+    fn count_chars_str(&self, x: &str) -> usize;
 
     fn zero_sized_arg(&self, zero: ());
     fn simple_add(&self, a: u32, b: u32) -> u32;
@@ -66,6 +71,9 @@ impl TestInterface for TestInterfaceImpl {
         ret
     }
     fn do_nothing(&self) {}
+    fn do_panic(&self) {
+        panic!("TestInterface was asked to panic")
+    }
     fn do_mut_nothing(&mut self) {}
 
     fn zero_sized_arg(&self, _zero: ()) {}
@@ -89,6 +97,21 @@ impl TestInterface for TestInterfaceImpl {
     fn boxes(&self, a: Box<u32>) -> Box<u32> {
         a
     }
+
+    fn string_arrays_add(&self, a: &[String], b: &[String]) -> Vec<String> {
+        let mut ret = vec![];
+        for (a1,b1) in a.iter().zip(b.iter()) {
+            ret.push(a1.to_string() +  b1);
+        }
+        ret
+    }
+
+    fn count_chars(&self, x: &String) -> usize {
+        x.len()
+    }
+    fn count_chars_str(&self, x: &str) -> usize {
+        x.len()
+    }
 }
 
 savefile_abi_export!(TestInterfaceImpl, TestInterface);
@@ -107,6 +130,10 @@ fn test_basic_call_abi() {
     assert_eq!(conn.tuple_add2((1, 1), (2, 2)), (3, 3));
     assert_eq!(conn.tuple_add3((1, 1, 1), (2, 2, 2)), (3, 3, 3));
     assert_eq!(conn.boxes(Box::new(42u32)), Box::new(42u32));
+
+    assert_eq!(conn.count_chars(&"hejsan".to_string()), 6);
+    assert_eq!(conn.count_chars_str("hejsan"), 6);
+
 }
 
 #[test]
@@ -116,13 +143,26 @@ fn test_slices() {
 
     let t = conn.arrays_add(&[1, 2, 3], &[1, 2, 3]);
     assert_eq!(t, vec![2, 4, 6]);
+
+    let t = conn.string_arrays_add(&["hello ".to_string()], &["world".to_string()]);
+    assert_eq!(t, vec!["hello world"]);
+
 }
+
 #[test]
 fn test_zero_sized_arg() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     conn.zero_sized_arg(());
 }
+#[test]
+#[should_panic(expected = "TestInterface was asked to panic")]
+fn test_panicking() {
+    let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    conn.do_panic();
+}
+
 #[test]
 fn test_big_slices() {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
@@ -164,10 +204,46 @@ fn test_abi_removed_with_custom_default() {
 }
 
 #[cfg(feature = "nightly")]
+#[cfg(not(miri))]
+#[bench]
+fn bench_simple_call(b: &mut Bencher) {
+    let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    b.iter(move || conn.do_nothing())
+}
+#[cfg(feature = "nightly")]
+#[cfg(not(miri))]
 #[bench]
 fn bench_simple_add(b: &mut Bencher) {
     let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     b.iter(move || conn.simple_add(std::hint::black_box(1), std::hint::black_box(2)))
+}
+#[cfg(feature = "nightly")]
+#[cfg(not(miri))]
+#[bench]
+fn bench_count_chars(b: &mut Bencher) {
+    let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    let mut s = String::new();
+    use std::fmt::Write;
+    for i in 0..10000 {
+        write!(s, "{}", i).unwrap();
+    }
+    b.iter(move || conn.count_chars(std::hint::black_box(&s)))
+}
+#[cfg(feature = "nightly")]
+#[cfg(not(miri))]
+#[bench]
+fn bench_count_chars_str(b: &mut Bencher) {
+    let boxed: Box<dyn TestInterface> = Box::new(TestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    let mut s = String::new();
+    use std::fmt::Write;
+    for i in 0..10000 {
+        write!(s, "{}", i).unwrap();
+    }
+    b.iter(move || conn.count_chars_str(std::hint::black_box(&s)))
 }

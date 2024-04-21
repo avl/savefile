@@ -343,7 +343,10 @@ pub unsafe trait AbiExportable {
     /// but none such are known by the code.
     fn get_latest_version() -> u32;
     /// Implement method calling. Must deserialize data from 'data', and
-    /// must return an outcome (result, panic or abi-error) by calling `receiver`.
+    /// must return an outcome (result) by calling `receiver`.
+    ///
+    /// The return value is either Ok, or an error if the method to be called could
+    /// not be found or for some reason not called (mismatched actual ABI, for example).
     ///
     /// `receiver` must be given 'abi_result' as its 'result_receiver' parameter, so that
     /// the receiver may set the result. The receiver executes at the caller-side of the ABI-divide,
@@ -921,7 +924,7 @@ impl Write for FlexBuffer {
     }
 }
 
-/// Entry point for raw FFI-calls from other shared libraries
+/// Raw entry point for receiving return values from other shared libraries
 #[doc(hidden)]
 pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
     outcome: *const RawAbiCallResult,
@@ -1439,8 +1442,15 @@ pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
             match result {
                 Ok(()) => {}
                 Err(err) => {
-                    let msg = format!("{:?}", err);
-                    let err = RawAbiCallResult::AbiError(AbiErrorMsg {
+                    let msg:&str;
+                    let temp;
+                    if let Some(err) = err.downcast_ref::<&str>() {
+                        msg = err;
+                    } else {
+                        temp = format!("{:?}", err);
+                        msg = &temp;
+                    }
+                    let err = RawAbiCallResult::Panic(AbiErrorMsg {
                         error_msg_utf8: msg.as_ptr(),
                         len: msg.len(),
                     });
@@ -1530,7 +1540,14 @@ pub unsafe fn abi_entry<T: AbiExportableImplementation>(flag: AbiProtocol) {
             match result {
                 Ok(_) => {}
                 Err(err) => {
-                    let msg = format!("{:?}", err);
+                    let msg:&str;
+                    let temp;
+                    if let Some(err) = err.downcast_ref::<&str>() {
+                        msg = err;
+                    } else {
+                        temp = format!("{:?}", err);
+                        msg = &temp;
+                    }
                     let err = AbiErrorMsg {
                         error_msg_utf8: msg.as_ptr(),
                         len: msg.len(),
