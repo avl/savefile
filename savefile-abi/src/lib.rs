@@ -834,6 +834,38 @@ pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<
     }
 }
 
+/// Parse an RawAbiCallResult instance into a Result<Box<dyn T>, SavefileError> .
+/// This is used on the caller side, and the type T will always be statically known.
+/// TODO: There's some duplicated code here, compare parse_return_value
+pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError> where T : AbiExportable + ?Sized {
+    match outcome {
+        RawAbiCallResult::Success { data, len } => {
+            let data = unsafe { std::slice::from_raw_parts(*data, *len) };
+            let mut reader = Cursor::new(data);
+            let file_version = reader.read_u32::<LittleEndian>()?;
+            let mut deserializer = Deserializer {
+                reader: &mut reader,
+                file_version,
+                ephemeral_state: HashMap::new(),
+            };
+            let packaged = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
+            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+
+        }
+        RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
+            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
+            Err(SavefileError::CalleePanic {
+                msg: String::from_utf8_lossy(errdata).into(),
+            })
+        }
+        RawAbiCallResult::AbiError(AbiErrorMsg { error_msg_utf8, len }) => {
+            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
+            Err(SavefileError::GeneralError {
+                msg: String::from_utf8_lossy(errdata).into(),
+            })
+        }
+    }
+}
 /// We never unload libraries which have been dynamically loaded, because of all the problems with
 /// doing so.
 static LIBRARY_CACHE: Mutex<Option<HashMap<String /*filename*/, Library>>> = Mutex::new(None);
@@ -934,6 +966,18 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
     result_receiver.write(parse_return_value::<T>(outcome));
 }
+
+/// Raw entry point for receiving return values from other shared libraries
+#[doc(hidden)]
+pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(
+    outcome: *const RawAbiCallResult,
+    result_receiver: *mut (),
+) where T: AbiExportable + ?Sized {
+    let outcome = unsafe { &*outcome };
+    let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<Box<AbiConnection<T>>, SavefileError>>) };
+    result_receiver.write(parse_return_boxed_trait::<T>(outcome));
+}
+
 
 // Flex buffer is only used internally, and we don't need to provide
 // any of the regular convenience.

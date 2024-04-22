@@ -37,6 +37,7 @@ use syn::{
     DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type,
     TypeGenerics, TypeTuple,
 };
+use savefile_abi::parse_box_type;
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -252,7 +253,7 @@ pub fn savefile_abi_exportable(
         extern crate savefile;
         extern crate savefile_abi;
         use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
-        use savefile_abi::{abi_result_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
+        use savefile_abi::{abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
@@ -280,27 +281,45 @@ pub fn savefile_abi_exportable(
                 let method_name = method.sig.ident.clone();
                 //let method_name_str = method.sig.ident.to_string();
                 //let mut metadata_arguments = vec![];
-
+                let mut current_name_index = 0u32;
+                let name_baseplate = format!("Temp{}_{}", trait_name_str, method_name);
+                let mut temp_name_generator = move || {
+                    current_name_index += 1;
+                    format!("{}_{}", name_baseplate, current_name_index)
+                };
                 let mut receiver_is_mut = false;
-                let ret_type;
+                let ret_type: Type;
                 let ret_declaration;
                 let no_return;
+                let mut return_boxed_trait = None;
                 match &method.sig.output {
                     ReturnType::Default => {
                         ret_type = Tuple(TypeTuple {
                             paren_token: Paren::default(),
                             elems: Default::default(),
-                        })
-                        .to_token_stream();
+                        });
                         ret_declaration = quote! {};
                         no_return = true;
                     }
                     ReturnType::Type(_, ty) => {
                         no_return = false;
                         match &**ty {
-                            Type::Path(_type_path) => {
-                                ret_type = ty.to_token_stream();
-                                ret_declaration = quote! { -> #ret_type }
+                            Type::Path(path) => {
+                                ret_type = (**ty).clone();
+                                ret_declaration = quote! { -> #ret_type };
+                                if !path.path.segments.is_empty() &&
+                                    path.path.segments.last().unwrap().ident=="Box" {
+                                    match parse_box_type(version,&path.path,&method_name,"returnvalue",&ret_type,&mut temp_name_generator,&mut extra_definitions,false,false) {
+                                        savefile_abi::ArgType::PlainData(_) => {
+
+                                        }
+                                        savefile_abi::ArgType::BoxedTrait(t) => {
+                                            return_boxed_trait = Some(t);
+                                        }
+                                        _ => panic!("Method {}, Unsupported type in return position: {}", method_name, ret_type.to_token_stream())
+                                    }
+
+                                }
                             }
                             Type::Reference(_) => {
                                 panic!("References in return-position are not supported.")
@@ -310,7 +329,7 @@ pub fn savefile_abi_exportable(
                                     panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
                                 }
                                 // Empty tuple!
-                                ret_type = ty.to_token_stream();
+                                ret_type = (**ty).clone();
                                 ret_declaration = quote! { -> #ret_type }
                             }
                             _ => panic!("Unsupported type in return-position: {:?}", ty),
@@ -358,12 +377,7 @@ pub fn savefile_abi_exportable(
                         _ => panic!("Unexpected error: method {} had a self parameter that wasn't the first parameter!", method_name)
                     }
                 }
-                let mut current_name_index = 0u32;
-                let name_baseplate = format!("Temp{}_{}", trait_name_str, method_name);
-                let mut temp_name_generator = move || {
-                    current_name_index += 1;
-                    format!("{}_{}", name_baseplate, current_name_index)
-                };
+
 
                 let method_defs = crate::savefile_abi::generate_method_definitions(
                     version,
@@ -372,6 +386,7 @@ pub fn savefile_abi_exportable(
                     method_name,
                     ret_declaration,
                     ret_type,
+                    return_boxed_trait,
                     no_return,
                     receiver_is_mut,
                     args,

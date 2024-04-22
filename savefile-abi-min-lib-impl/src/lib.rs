@@ -34,5 +34,8 @@ impl AdderInterface for AdderImplementation {
     fn add_simple(&self, x: u32, y: u32) -> u32 {
         x + y
     }
+
+    fn do_nothing(&self) {
+    }
 }
 savefile_abi_export!(AdderImplementation, AdderInterface);

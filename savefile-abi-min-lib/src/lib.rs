@@ -19,6 +19,7 @@ pub trait AdderInterface {
     fn add(&self, x: u32, y: &u32, z: &MyStuff) -> u32;
     fn sub(&self, x: u32, y: u32, cb: Box<dyn AdderCallback>) -> u32;
     fn add_simple(&self, x: u32, y: u32) -> u32;
+    fn do_nothing(&self);
 }
 impl Debug for dyn AdderInterface {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -26,6 +26,10 @@ impl Drop for MyCallback {
 pub fn call_add(adder: &AbiConnection<dyn AdderInterface>, a: u32, b: u32) -> u32 {
     adder.add_simple(a, b)
 }
+#[no_mangle]
+pub extern fn call_do_nothing(adder: &AbiConnection<dyn AdderInterface>) {
+    adder.do_nothing();
+}
 
 fn main() {
     let connection = AbiConnection::<dyn AdderInterface>::load_shared_library(

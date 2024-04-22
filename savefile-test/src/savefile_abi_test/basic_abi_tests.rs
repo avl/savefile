@@ -203,6 +203,7 @@ fn test_abi_removed_with_custom_default() {
     assert_eq!(roundtripped, 42);
 }
 
+
 #[cfg(feature = "nightly")]
 #[cfg(not(miri))]
 #[bench]
@@ -212,6 +213,9 @@ fn bench_simple_call(b: &mut Bencher) {
 
     b.iter(move || conn.do_nothing())
 }
+
+
+
 #[cfg(feature = "nightly")]
 #[cfg(not(miri))]
 #[bench]
