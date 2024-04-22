@@ -1447,6 +1447,7 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
 /// # Safety
 /// The 'AbiProtocol' protocol must only contain valid data.
 pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
+
     match flag {
         AbiProtocol::RegularCall {
             trait_object,

@@ -63,7 +63,7 @@ fn test_trait_object_in_return_position() {
 }
 
 #[test]
-fn test_call_callbacks() {
+fn test_call_many_callbacks() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     assert_eq!(conn.many_callbacks(&mut |x|{
