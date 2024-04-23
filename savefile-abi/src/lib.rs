@@ -809,15 +809,20 @@ pub enum AbiProtocol {
     },
 }
 
-/// Parse an RawAbiCallResult instance into a Result<T, SavefileError> .
-/// This is used on the caller side, and the type T will always be statically known.
-pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<T, SavefileError> {
+/// Parse the given RawAbiCallResult. If it concerns a success, then deserialize a return value using the given closure.
+pub fn parse_return_value_impl<T>(outcome: &RawAbiCallResult, deserialize_action: impl FnOnce(&mut Deserializer<Cursor<&[u8]>>) -> Result<T,SavefileError> ) -> Result<T, SavefileError> {
     match outcome {
         RawAbiCallResult::Success { data, len } => {
             let data = unsafe { std::slice::from_raw_parts(*data, *len) };
             let mut reader = Cursor::new(data);
             let file_version = reader.read_u32::<LittleEndian>()?;
-            Deserializer::bare_deserialize::<T>(&mut reader, file_version)
+            let mut deserializer = Deserializer {
+                reader: &mut reader,
+                file_version,
+                ephemeral_state: HashMap::new(),
+            };
+            deserialize_action(&mut deserializer)
+            //T::deserialize(&mut deserializer)
         }
         RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
             let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
@@ -838,33 +843,10 @@ pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<
 /// This is used on the caller side, and the type T will always be statically known.
 /// TODO: There's some duplicated code here, compare parse_return_value
 pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError> where T : AbiExportable + ?Sized {
-    match outcome {
-        RawAbiCallResult::Success { data, len } => {
-            let data = unsafe { std::slice::from_raw_parts(*data, *len) };
-            let mut reader = Cursor::new(data);
-            let file_version = reader.read_u32::<LittleEndian>()?;
-            let mut deserializer = Deserializer {
-                reader: &mut reader,
-                file_version,
-                ephemeral_state: HashMap::new(),
-            };
-            let packaged = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
-            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
-
-        }
-        RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
-            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
-            Err(SavefileError::CalleePanic {
-                msg: String::from_utf8_lossy(errdata).into(),
-            })
-        }
-        RawAbiCallResult::AbiError(AbiErrorMsg { error_msg_utf8, len }) => {
-            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
-            Err(SavefileError::GeneralError {
-                msg: String::from_utf8_lossy(errdata).into(),
-            })
-        }
-    }
+    parse_return_value_impl(outcome, |deserializer|{
+        let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+        unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+    })
 }
 /// We never unload libraries which have been dynamically loaded, because of all the problems with
 /// doing so.
@@ -964,7 +946,11 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
 ) {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
-    result_receiver.write(parse_return_value::<T>(outcome));
+    result_receiver.write(
+        parse_return_value_impl(outcome, |deserializer|{
+            T::deserialize(deserializer)
+        })
+    );
 }
 
 /// Raw entry point for receiving return values from other shared libraries
@@ -975,7 +961,12 @@ pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(
 ) where T: AbiExportable + ?Sized {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<Box<AbiConnection<T>>, SavefileError>>) };
-    result_receiver.write(parse_return_boxed_trait::<T>(outcome));
+    result_receiver.write(
+        parse_return_value_impl(outcome, |deserializer|{
+            let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+        })
+    );
 }
 
 

@@ -253,7 +253,7 @@ pub fn savefile_abi_exportable(
         extern crate savefile;
         extern crate savefile_abi;
         use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
-        use savefile_abi::{abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, parse_return_value, AbiProtocol, abi_entry_light};
+        use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
@@ -291,7 +291,7 @@ pub fn savefile_abi_exportable(
                 let ret_type: Type;
                 let ret_declaration;
                 let no_return;
-                let mut return_boxed_trait = None;
+
                 match &method.sig.output {
                     ReturnType::Default => {
                         ret_type = Tuple(TypeTuple {
@@ -313,8 +313,8 @@ pub fn savefile_abi_exportable(
                                         savefile_abi::ArgType::PlainData(_) => {
 
                                         }
-                                        savefile_abi::ArgType::BoxedTrait(t) => {
-                                            return_boxed_trait = Some(t);
+                                        savefile_abi::ArgType::BoxedTrait(_t) => {
+
                                         }
                                         _ => panic!("Method {}, Unsupported type in return position: {}", method_name, ret_type.to_token_stream())
                                     }
@@ -386,7 +386,6 @@ pub fn savefile_abi_exportable(
                     method_name,
                     ret_declaration,
                     ret_type,
-                    return_boxed_trait,
                     no_return,
                     receiver_is_mut,
                     args,
@@ -490,7 +489,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     let defspan = Span::call_site();
     let uses = quote_spanned! { defspan =>
         extern crate savefile_abi;
-        use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry};
+        use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry,parse_return_value_impl};
     };
 
     let implementing_type = Ident::new(symbols[0], Span::call_site());

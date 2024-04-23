@@ -1,7 +1,15 @@
 use proc_macro2::{Ident, Literal, Span, TokenStream};
-use quote::ToTokens;
+use quote::{ToTokens};
 use syn::{GenericArgument, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Type, TypeParamBound};
 use common::{compile_time_check_reprc, compile_time_size};
+
+
+
+const POINTER_SIZE:usize = std::mem::size_of::<*const ()>();
+#[allow(unused)]
+const FAT_POINTER_SIZE:usize = 2*POINTER_SIZE;
+#[allow(unused)]
+const FAT_POINTER_ALIGNMENT:usize = POINTER_SIZE;
 
 fn emit_closure_helpers(
     version: u32,
@@ -106,6 +114,7 @@ pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_
             if ang.args.len() != 1 {
                 panic!("Method {}, argument {}. Savefile requires Box arguments to have exactly one generic argument, a requirement not satisfied by type: {:?}", method_name, arg_name, typ);
             }
+            
             match first_gen_arg {
                 GenericArgument::Type(angargs) => match angargs {
                     Type::TraitObject(trait_obj) => {
@@ -284,7 +293,7 @@ fn parse_type(
                     let fn_decl = bound.to_token_stream();
                     match &bound.arguments {
                         PathArguments::Parenthesized(pararg) => {
-                            //pararg.inputs
+
                             let temp_name =
                                 Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
                             emit_closure_helpers(
@@ -354,6 +363,280 @@ fn parse_type(
     }
 }
 
+struct TypeInstruction {
+    callee_trampoline_real_method_invocation_argument1: TokenStream,
+    callee_trampoline_temp_variable_declaration1: TokenStream,
+    callee_trampoline_variable_deserializer1: TokenStream,
+    caller_arg_serializer1: TokenStream,
+    caller_fn_arg1: TokenStream,
+    schema: TokenStream,
+    can_be_sent_as_ref: bool,
+
+    known_size_align1: Option<(usize,usize)>,
+    /// The type that this parameter is primarily deserialized into, on the
+    /// deserialized side (i.e, callee for arguments, caller for return value);
+    deserialized_type: TokenStream,
+}
+
+
+impl ArgType {
+    fn get_instruction(&self, arg_index: Option<usize>, arg_name: &Ident) -> TypeInstruction {
+        let temp_arg_name = Ident::new(&format!("temp_{}", arg_name), Span::call_site());
+
+        let layout_compatible = if let Some(arg_index) = arg_index {
+            quote!(compatibility_mask&(1<<#arg_index) != 0)
+        } else {
+            quote!( false )
+        };
+        match self {
+            ArgType::Reference(arg_type) => {
+
+                TypeInstruction {
+                    callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {let #temp_arg_name;},
+                    deserialized_type: quote!{#arg_type},
+                    callee_trampoline_variable_deserializer1: quote! {
+                        if #layout_compatible {
+                            unsafe { &*(deserializer.read_raw_ptr::<#arg_type>()?) }
+                        } else {
+                            #temp_arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
+                            &#temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        if #layout_compatible {
+                            unsafe { serializer.write_raw_ptr(#arg_name as *const #arg_type).expect("Writing argument ref") };
+                            Ok(())
+                        } else {
+                            #arg_name.serialize(&mut serializer)
+                        }
+                    },
+                    schema: quote!{<#arg_type as WithSchema>::schema(version)},
+                    caller_fn_arg1: quote! {#arg_name : &#arg_type},
+                    can_be_sent_as_ref: true,
+
+                    known_size_align1: None,
+                }
+            }
+            ArgType::Str => {
+
+                TypeInstruction {
+                    callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {let #temp_arg_name;},
+                    deserialized_type: quote!{String},
+                    callee_trampoline_variable_deserializer1: quote! {
+                        if #layout_compatible {
+                            unsafe { &*(deserializer.read_raw_ptr::<str>()?) }
+                        } else {
+                            #temp_arg_name = String::deserialize(&mut deserializer)?;
+                            &#temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        if #layout_compatible {
+                            unsafe { serializer.write_raw_ptr(#arg_name as *const str) }
+                        } else {
+                            (#arg_name.to_string()).serialize(&mut serializer)
+                        }
+                    },
+                    caller_fn_arg1: quote! {#arg_name : &str},
+                    schema: quote!( <&str as WithSchema>::schema(version) ),
+                    can_be_sent_as_ref: true,
+
+                    known_size_align1: None,
+                }
+            }
+            ArgType::SliceReference(arg_type) => {
+
+                TypeInstruction {
+                    callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {let #temp_arg_name;},
+                    deserialized_type: quote!{Vec<_>},
+                    callee_trampoline_variable_deserializer1: quote! {
+                        if #layout_compatible {
+                            unsafe { &*(deserializer.read_raw_ptr::<[#arg_type]>()?) }
+                        } else {
+                            #temp_arg_name = deserialize_slice_as_vec::<_,#arg_type>(&mut deserializer)?;
+                            &#temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        if #layout_compatible  {
+                            unsafe { serializer.write_raw_ptr(#arg_name as *const [#arg_type]) }
+                        } else {
+                            (&#arg_name).serialize(&mut serializer)
+                        }
+                    },
+                    caller_fn_arg1: quote! {#arg_name : &[#arg_type]},
+                    schema: quote!( <&[#arg_type] as WithSchema>::schema(version) ),
+                    can_be_sent_as_ref: true,
+                    known_size_align1: None,
+                }
+            }
+            ArgType::PlainData(arg_type) => {
+                TypeInstruction {
+                    deserialized_type: quote!{#arg_type},
+                    callee_trampoline_real_method_invocation_argument1: quote! {#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote!(),
+                    callee_trampoline_variable_deserializer1: quote! {
+                        <#arg_type as Deserialize>::deserialize(&mut deserializer)?
+                    },
+                    caller_arg_serializer1: quote! {
+                        #arg_name.serialize(&mut serializer)
+                    },
+                    caller_fn_arg1: quote! {#arg_name : #arg_type},
+                    can_be_sent_as_ref: false,
+
+                    schema: quote!( <#arg_type as WithSchema>::schema(version) ),
+                    known_size_align1: if compile_time_check_reprc(arg_type) {
+                        compile_time_size(arg_type)
+                    } else { None },
+                }
+            }
+            ArgType::BoxedTrait(trait_name) => {
+                let trait_type = trait_name;
+                TypeInstruction {
+                    deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
+                    callee_trampoline_real_method_invocation_argument1: quote! {#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {let #temp_arg_name;},
+                    callee_trampoline_variable_deserializer1: quote! {
+                        {
+                            #temp_arg_name = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
+                            Box::new(unsafe { AbiConnection::<dyn #trait_name>::from_raw_packaged(#temp_arg_name, Owning::Owned)? } )
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        PackagedTraitObject::new::<dyn #trait_type>(#arg_name).serialize(&mut serializer)
+                    },
+                    caller_fn_arg1: quote! {#arg_name : Box<dyn #trait_name>},
+                    schema: quote!( Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)) ),
+                    can_be_sent_as_ref: true,
+
+                    known_size_align1: None,
+                }
+            }
+            ArgType::TraitReference(trait_name, ismut) => {
+
+                let trait_type = trait_name;
+
+                let newsymbol = quote! {new_from_ptr};
+
+                let mutsymbol = if *ismut {
+                    quote!(mut)
+                } else {
+                    quote! {}
+                };
+
+                TypeInstruction {
+                    deserialized_type: quote!{unreachable!()},
+                    callee_trampoline_real_method_invocation_argument1: quote! {#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {let #mutsymbol #temp_arg_name;},
+                    callee_trampoline_variable_deserializer1: quote! {
+                        {
+                            if !#layout_compatible {
+                                panic!("Function arg is not layout-compatible!")
+                            }
+                            #temp_arg_name = unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
+                            & #mutsymbol #temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        {
+                            if !#layout_compatible {
+                                panic!("Function arg is not layout-compatible!")
+                            }
+                            PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer)
+                        }
+                    },
+                    caller_fn_arg1: if *ismut {
+                        quote! {#arg_name : &mut dyn #trait_name }
+                    } else {
+                        quote! {#arg_name : &dyn #trait_name }
+                    },
+                    schema: quote!( Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)) ),
+                    can_be_sent_as_ref: true,
+
+                    known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE,FAT_POINTER_ALIGNMENT)),
+                }
+            }
+            ArgType::Fn(temp_trait_name, fndef, args, ismut) => {
+                let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_name), Span::call_site());
+
+                let temp_trait_type = temp_trait_name;
+
+                let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
+
+                let mutsymbol = if *ismut {
+                    quote! {mut}
+                } else {
+                    quote! {}
+                };
+                let mutorconst = if *ismut {
+                    quote! {mut}
+                } else {
+                    quote! {const}
+                };
+                let newsymbol = quote! {new_from_ptr};
+
+                let typedarglist: Vec<TokenStream> = args
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, typ)| {
+                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
+                        quote! {#id : #typ}
+                    })
+                    .collect();
+
+                let arglist: Vec<Ident> = (0..args.len())
+                    .map(|idx| {
+                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
+                        id
+                    })
+                    .collect();
+
+                TypeInstruction {
+                    deserialized_type: quote!{unreachable!()},
+                    callee_trampoline_real_method_invocation_argument1: quote! {#arg_name},
+                    callee_trampoline_temp_variable_declaration1: quote! {
+                        let #mutsymbol #temp_arg_name;
+                        let #mutsymbol #temp_arg_name2;
+                    },
+                    callee_trampoline_variable_deserializer1: quote! {
+                        {
+                            if !#layout_compatible {
+                                panic!("Function arg is not layout-compatible!")
+                            }
+
+                            #temp_arg_name = unsafe { AbiConnection::<#temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
+                            #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
+                            & #mutsymbol #temp_arg_name2
+                        }
+                    },
+                    caller_arg_serializer1: quote! {
+                        {
+                            if !#layout_compatible {
+                                panic!("Function arg is not layout-compatible!")
+                            }
+
+                            let #mutsymbol temp = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
+                            let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol temp as *#mutorconst _;
+                            PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer)
+                        }
+                    },
+                    caller_fn_arg1: if *ismut {
+                        quote! {#arg_name : &mut dyn #fndef }
+                    } else {
+                        quote! {#arg_name : &dyn #fndef }
+                    },
+                    schema: quote!( Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)) ),
+                    can_be_sent_as_ref: true,
+                    known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE,FAT_POINTER_ALIGNMENT)),
+                }
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn generate_method_definitions(
     version: u32,
@@ -362,7 +645,6 @@ pub(super) fn generate_method_definitions(
     method_name: Ident,
     ret_declaration: TokenStream, //May be empty, for ()-returns
     ret_type: Type,
-    return_boxed_trait: Option<Ident>,
     no_return: bool, //Returns ()
     receiver_is_mut: bool,
     args: Vec<(Ident, &Type)>,
@@ -391,290 +673,36 @@ pub(super) fn generate_method_definitions(
             false,
             false,
         );
-
-        //let num_mask = 1u64 << (method_number as u64);
-        let temp_arg_name = Ident::new(&format!("temp_{}", arg_name), Span::call_site());
-        let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_name), Span::call_site());
-        match &argtype {
-            ArgType::PlainData(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {#arg_name});
-            }
-            ArgType::Reference(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {&#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
-            }
-            ArgType::SliceReference(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {&#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
-            }
-            ArgType::Str => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {&#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
-            }
-            ArgType::BoxedTrait(_) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {#arg_name});
-                callee_trampoline_temp_variable_declaration.push(quote! {let #temp_arg_name;});
-            }
-            ArgType::TraitReference(_, ismut) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {#arg_name});
-                let mutsymbol = if *ismut {
-                    quote!(mut)
-                } else {
-                    quote! {}
-                };
-                callee_trampoline_temp_variable_declaration.push(quote! {let #mutsymbol #temp_arg_name;});
-            }
-            ArgType::Fn(_, _, _, ismut) => {
-                callee_trampoline_real_method_invocation_arguments.push(quote! {#arg_name});
-                let mutsymbol = if *ismut {
-                    quote!(mut)
-                } else {
-                    quote! {}
-                };
-                callee_trampoline_temp_variable_declaration.push(quote! {let #mutsymbol #temp_arg_name;});
-                callee_trampoline_temp_variable_declaration.push(quote! {let #mutsymbol #temp_arg_name2;});
-            }
-        }
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
-        let known_size_align:Option<(usize,usize)>;
-        match &argtype {
-            ArgType::Reference(arg_type) => {
-                known_size_align = None;
-                callee_trampoline_variable_deserializer.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) != 0 {
-                        #arg_name = unsafe { &*(deserializer.read_raw_ptr::<#arg_type>()?) };
-                    } else {
-                        #temp_arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
-                        #arg_name = &#temp_arg_name;
-                    }
-                });
-                caller_arg_serializers.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) != 0 {
-                                unsafe { serializer.write_raw_ptr(#arg_name as *const #arg_type).expect("Writing argument ref") };
-                            } else {
-                                #arg_name.serialize(&mut serializer).expect("Writing argument serialized");
-                            }
-                        });
-            }
-            ArgType::Str => {
-                known_size_align = None;
-                callee_trampoline_variable_deserializer.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) != 0 {
-                        #arg_name = unsafe { &*(deserializer.read_raw_ptr::<str>()?) };
-                    } else {
-                        #temp_arg_name = String::deserialize(&mut deserializer)?;
-                        #arg_name = &#temp_arg_name;
-                    }
-                });
-                caller_arg_serializers.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) != 0 {
-                                unsafe { serializer.write_raw_ptr(#arg_name as *const str).expect("Writing argument ref") };
-                            } else {
-                                (#arg_name.to_string()).serialize(&mut serializer).expect("Writing argument serialized");
-                            }
-                        });
-            }
-            ArgType::SliceReference(arg_type) => {
-                known_size_align = None;
-                callee_trampoline_variable_deserializer.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) != 0 {
-                        #arg_name = unsafe { &*(deserializer.read_raw_ptr::<[#arg_type]>()?) };
-                    } else {
-                        #temp_arg_name = deserialize_slice_as_vec::<_,#arg_type>(&mut deserializer)?;
-                        #arg_name = &#temp_arg_name;
-                    }
-                });
-                caller_arg_serializers.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) != 0 {
-                                unsafe { serializer.write_raw_ptr(#arg_name as *const [#arg_type]).expect("Writing argument ref") };
-                            } else {
-                                (&#arg_name).serialize(&mut serializer).expect("Writing argument serialized");
-                            }
-                        });
-            }
-            ArgType::PlainData(arg_type) => {
-                known_size_align = if compile_time_check_reprc(arg_type) {
-                    compile_time_size(arg_type)
-                } else { None };
-                callee_trampoline_variable_deserializer.push(quote! {
-                    #arg_name = <#arg_type as Deserialize>::deserialize(&mut deserializer)?;
-                });
-                caller_arg_serializers.push(quote! {
-                    #arg_name.serialize(&mut serializer).expect("Serializing arg");
-                });
-            }
-            ArgType::BoxedTrait(trait_type) => {
-                known_size_align = None;
-                callee_trampoline_variable_deserializer.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) == 0 {
-                        panic!("Function arg is not layout-compatible!")
-                    }
-                    #temp_arg_name = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
-                    #arg_name = Box::new(unsafe { AbiConnection::from_raw_packaged(#temp_arg_name, Owning::Owned)? } );
-                });
-                caller_arg_serializers.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) == 0 {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-                            PackagedTraitObject::new::<dyn #trait_type>(#arg_name).serialize(&mut serializer).expect("PackagedTraitObject");
-                        });
-            }
-            ArgType::TraitReference(trait_type, ismut) => {
-                known_size_align = None;
-                let mutsymbol = if *ismut {
-                    quote! {mut}
-                } else {
-                    quote! {}
-                };
-                let newsymbol = quote! {new_from_ptr};
-                callee_trampoline_variable_deserializer.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) == 0 {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-                            #temp_arg_name = unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
-                            #arg_name = & #mutsymbol #temp_arg_name;
-                        });
-                caller_arg_serializers.push(quote! {
-                            if compatibility_mask&(1<<#arg_index) == 0 {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-                            PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer).expect("PackagedTraitObject");
-                        });
-            }
-            ArgType::Fn(temp_trait_type, _, args, ismut) => {
-                known_size_align = None;
-                let mutsymbol = if *ismut {
-                    quote! {mut}
-                } else {
-                    quote! {}
-                };
-                let mutorconst = if *ismut {
-                    quote! {mut}
-                } else {
-                    quote! {const}
-                };
-                let newsymbol = quote! {new_from_ptr};
+        let instruction = argtype.get_instruction(Some(arg_index), arg_name);
 
-                let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
+        callee_trampoline_real_method_invocation_arguments.push(instruction.callee_trampoline_real_method_invocation_argument1);
+        callee_trampoline_temp_variable_declaration.push(instruction.callee_trampoline_temp_variable_declaration1);
 
-                let typedarglist: Vec<TokenStream> = args
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, typ)| {
-                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
-                        quote! {#id : #typ}
-                    })
-                    .collect();
+        let deserializer_expression = instruction.callee_trampoline_variable_deserializer1;
 
-                let arglist: Vec<Ident> = (0..args.len())
-                    .map(|idx| {
-                        let id = Ident::new(&format!("x{}", idx), Span::call_site());
-                        id
-                    })
-                    .collect();
-                callee_trampoline_variable_deserializer.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) == 0 {
-                        panic!("Function arg is not layout-compatible!")
-                    }
-
-                    #temp_arg_name = unsafe { AbiConnection::<#temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
-                    #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
-                    #arg_name = & #mutsymbol #temp_arg_name2;
-                });
-                caller_arg_serializers.push(quote! {
-                    if compatibility_mask&(1<<#arg_index) == 0 {
-                        panic!("Function arg is not layout-compatible!")
-                    }
-
-                    let #mutsymbol temp = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
-                    let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol temp as *#mutorconst _;
-                    PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer).expect("PackagedTraitObject");
-                });
+        callee_trampoline_variable_deserializer.push( quote!( #arg_name = #deserializer_expression ; ) );
+        let arg_serializer = instruction.caller_arg_serializer1;
+        caller_arg_serializers.push(
+            quote!{
+                #arg_serializer.expect("Failed while serializing");
             }
-        }
+        );
+        caller_fn_arg_list.push(instruction.caller_fn_arg1);
+        let schema = instruction.schema;
+        let can_be_sent_as_ref = instruction.can_be_sent_as_ref;
+        metadata_arguments.push(quote!{
+                        AbiMethodArgument {
+                            schema: #schema,
+                            can_be_sent_as_ref: #can_be_sent_as_ref
+                        }
+        });
         if let Some(total_size) = &mut compile_time_known_size {
-            if let Some((known_size,_known_align)) = known_size_align {
+            if let Some((known_size,_known_align)) = instruction.known_size_align1 {
                 *total_size += known_size;
             } else {
                 compile_time_known_size = None;
-            }
-        }
-        match &argtype {
-            ArgType::Reference(arg_type) => {
-                caller_fn_arg_list.push(quote! {#arg_name : &#arg_type});
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: <#arg_type as WithSchema>::schema(version),
-                        can_be_sent_as_ref: true
-                    }
-                })
-            }
-            ArgType::Str => {
-                caller_fn_arg_list.push(quote! {#arg_name : &str});
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: <&str as WithSchema>::schema(version),
-                        can_be_sent_as_ref: true
-                    }
-                })
-            }
-            ArgType::SliceReference(arg_type) => {
-                caller_fn_arg_list.push(quote! {#arg_name : &[#arg_type]});
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: <&[#arg_type] as WithSchema>::schema(version),
-                        can_be_sent_as_ref: true
-                    }
-                })
-            }
-            ArgType::PlainData(arg_type) => {
-                caller_fn_arg_list.push(quote! {#arg_name : #arg_type});
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: <#arg_type as WithSchema>::schema(version),
-                        can_be_sent_as_ref: false
-                    }
-                })
-            }
-            ArgType::BoxedTrait(trait_name) => {
-                caller_fn_arg_list.push(quote! {#arg_name : Box<dyn #trait_name>});
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
-                        can_be_sent_as_ref: true
-                    }
-                })
-            }
-            ArgType::TraitReference(trait_name, ismut) => {
-                if *ismut {
-                    caller_fn_arg_list.push(quote! {#arg_name : &mut dyn #trait_name });
-                } else {
-                    caller_fn_arg_list.push(quote! {#arg_name : &dyn #trait_name });
-                }
-
-                metadata_arguments.push(quote! {
-                    AbiMethodArgument {
-                        schema: Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version)),
-                        can_be_sent_as_ref: true,
-                    }
-                })
-            }
-            ArgType::Fn(temp_trait_name, fndef, _, ismut) => {
-                if *ismut {
-                    caller_fn_arg_list.push(quote! {#arg_name : &mut dyn #fndef });
-                } else {
-                    caller_fn_arg_list.push(quote! {#arg_name : &dyn #fndef });
-                }
-                //let temp_trait_name_str = temp_trait_name.to_string();
-                metadata_arguments.push(quote! {
-                            {
-                                AbiMethodArgument {
-                                    schema: Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)),
-                                    can_be_sent_as_ref: true,
-                                }
-                            }
-                        })
             }
         }
     }
@@ -694,15 +722,36 @@ pub(super) fn generate_method_definitions(
     } else {
         quote! {}
     };
-    let result_default = if no_return {
-        quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ) //Safe, does not need drop and does not allocate
+    let return_value_schema;
+
+
+    let caller_return_type;
+    let ret_deserializer ;
+    let ret_temp_decl;
+    let ret_serialize;
+
+    let result_default;
+    if no_return {
+        return_value_schema = quote!( <() as WithSchema>::schema(0) );
+        ret_deserializer = quote!( () ); //Zero-sized, no deserialize actually needed
+        ret_serialize = quote!( () );
+        caller_return_type = quote!( () );
+        ret_temp_decl = quote!();
+        result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ); //Safe, does not need drop and does not allocate
     } else {
-        if let Some(trait_name) = &return_boxed_trait {
-            quote!( MaybeUninit::<Result<Box<AbiConnection<dyn #trait_name>>,SavefileError>>::uninit() )
-        } else {
-            quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() )
-        }
+        let parsed_ret_type = parse_type(version, "___retval",&ret_type,&method_name,name_generator,extra_definitions,false,false);
+        let instruction = parsed_ret_type.get_instruction(None, &Ident::new("ret", Span::call_site()));
+        caller_return_type = instruction.deserialized_type;
+        return_value_schema = instruction.schema;
+        ret_deserializer = instruction.callee_trampoline_variable_deserializer1;
+        let ret_serializer = instruction.caller_arg_serializer1;
+        ret_temp_decl = instruction.callee_trampoline_temp_variable_declaration1;
+
+        ret_serialize = quote!( #ret_serializer );
+
+        result_default = quote!( MaybeUninit::<Result<#caller_return_type,SavefileError>>::uninit() );
     };
+
 
     let arg_buffer;
     let data_as_ptr;
@@ -726,26 +775,10 @@ pub(super) fn generate_method_definitions(
         data_length = quote!( data.len() );
 
     }
-    let abi_result_receiver;
-
-    let return_value_schema;
-    if let Some(trait_name) = &return_boxed_trait {
-        abi_result_receiver = quote!{
-            abi_boxed_trait_receiver::<dyn #trait_name>
-        };
-        return_value_schema = quote!{
-            Schema::BoxedTrait(<dyn #trait_name as AbiExportable>::get_definition(version))
-        };
-    }  else {
-        abi_result_receiver = quote!{
-            abi_result_receiver::<#ret_type>
-        };
-        return_value_schema = quote!{
-            <#ret_type as WithSchema>::schema(version)
-        };
-    }
 
 
+    let _ = ret_deserializer;
+    let _ = caller_return_type;
     let caller_method_trampoline = quote! {
         fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
@@ -767,6 +800,23 @@ pub(super) fn generate_method_definitions(
             #(#caller_arg_serializers)*
 
             unsafe {
+
+                unsafe extern "C" fn abi_result_receiver(
+                    outcome: *const RawAbiCallResult,
+                    result_receiver: *mut (),
+                ) {
+                    let outcome = unsafe { &*outcome };
+                    let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<#caller_return_type, SavefileError>>) };
+                    result_receiver.write(
+                        parse_return_value_impl(outcome, |mut deserializer|{
+
+                            #ret_temp_decl
+                            Ok(#ret_deserializer)
+                            //T::deserialize(deserializer)
+                        })
+                    );
+                }
+
             (self.template.entry)(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
                 compatibility_mask: compatibility_mask,
@@ -775,7 +825,7 @@ pub(super) fn generate_method_definitions(
                 data: #data_as_ptr,
                 data_length: #data_length,
                 abi_result: &mut result_buffer as *mut _ as *mut (),
-                receiver: #abi_result_receiver,
+                receiver: abi_result_receiver,
             });
             }
             let resval = unsafe { result_buffer.assume_init() };
@@ -823,14 +873,6 @@ pub(super) fn generate_method_definitions(
             data_as_ptr = quote!( data.as_ptr() as *const u8 );
             data_length = quote!( data.len() );
 
-        }
-        let ret_serialize;
-        if let Some(boxed_trait) = &return_boxed_trait {
-            ret_serialize = quote! {
-                PackagedTraitObject::new::<dyn #boxed_trait>(ret).serialize(&mut serializer)
-            };
-        } else {
-            ret_serialize = quote!( ret.serialize(&mut serializer) );
         }
 
         handle_retval = quote!{

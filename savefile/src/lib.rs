@@ -3336,15 +3336,8 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             return None;
         }
         (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
-            if a != b {
-                return Some(format!(
-                    "At location [{}]: Application protocol has datatype Box<dyn {:?}>, but foreign format has Box<dyn {:?}>",
-                    path,
-                    a,
-                    b
-                ));
-            }
-            return None;
+
+            return diff_abi_def(a,b, path);
         }
         (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
             if amut != bmut {
@@ -3361,31 +3354,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                     ));
                 }
             }
-            for amet in a.methods.iter() {
-                if let Some(bmet) = b.methods.iter().find(|x| x.name == amet.name) {
-                    if amet.info.arguments.len() != bmet.info.arguments.len() {
-                        return Some(format!(
-                            "At location [{}]: Application protocol method {} has {} args, but foreign version has {}.",
-                            path,
-                            amet.name,
-                            amet.info.arguments.len(),
-                            bmet.info.arguments.len()
-                        ));
-                    }
-                    for (arg_index, (a_arg, b_arg)) in
-                        amet.info.arguments.iter().zip(bmet.info.arguments.iter()).enumerate()
-                    {
-                        if let Some(diff) = diff_schema(
-                            &a_arg.schema,
-                            &b_arg.schema,
-                            format!("{}(arg #{})", amet.name, arg_index),
-                        ) {
-                            return Some(diff);
-                        }
-                    }
-                }
-            }
-            return None;
+            return diff_abi_def(a,b, path);
         }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
@@ -3394,6 +3363,34 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
         "At location [{}]: In memory schema: {}, file schema: {}",
         path, atype, btype
     ))
+}
+
+fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String) -> Option<String> {
+    for amet in a.methods.iter() {
+        if let Some(bmet) = b.methods.iter().find(|x| x.name == amet.name) {
+            if amet.info.arguments.len() != bmet.info.arguments.len() {
+                return Some(format!(
+                    "At location [{}]: Application protocol method {} has {} args, but foreign version has {}.",
+                    path,
+                    amet.name,
+                    amet.info.arguments.len(),
+                    bmet.info.arguments.len()
+                ));
+            }
+            for (arg_index, (a_arg, b_arg)) in
+            amet.info.arguments.iter().zip(bmet.info.arguments.iter()).enumerate()
+            {
+                if let Some(diff) = diff_schema(
+                    &a_arg.schema,
+                    &b_arg.schema,
+                    format!("{}(arg #{})", amet.name, arg_index),
+                ) {
+                    return Some(diff);
+                }
+            }
+        }
+    }
+    return None;
 }
 
 impl WithSchema for Field {
