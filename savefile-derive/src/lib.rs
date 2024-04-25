@@ -313,12 +313,11 @@ pub fn savefile_abi_exportable(
                                         savefile_abi::ArgType::PlainData(_) => {
 
                                         }
-                                        savefile_abi::ArgType::BoxedTrait(_t) => {
+                                        savefile_abi::ArgType::Boxed(_t) => {
 
                                         }
                                         _ => panic!("Method {}, Unsupported type in return position: {}", method_name, ret_type.to_token_stream())
                                     }
-
                                 }
                             }
                             Type::Reference(_) => {
@@ -475,7 +474,7 @@ pub fn savefile_abi_exportable(
     };
 
     // For debugging, uncomment to write expanded procmacro to file
-    //std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
+    std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
 
     expanded.into()
 }

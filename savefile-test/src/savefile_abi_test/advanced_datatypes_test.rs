@@ -13,7 +13,7 @@ pub trait AdvancedTestInterface {
 
     fn return_trait_object(&self) -> Box<dyn SimpleInterface>;
 
-    //fn return_boxed_closure(&self) -> Box<dyn Fn() -> ()>;
+    fn return_boxed_closure(&self) -> Box<dyn Fn() -> ()>;
 
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32 )->u32) -> u32) -> u32;
 }
@@ -45,9 +45,9 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
         Box::new(SimpleImpl)
     }
 
-    /*fn return_boxed_closure(&self) -> Box<dyn Fn()> {
+    fn return_boxed_closure(&self) -> Box<dyn Fn()> {
         Box::new(|| {})
-    }*/
+    }
 
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32 )->u32) -> u32) -> u32
     {

@@ -2788,19 +2788,12 @@ pub struct AbiMethodArgument {
     /// contains information that can allow savefile-abi to determine
     /// if memory layouts are the same.
     pub schema: Schema,
-    /// False if this type cannot be sent as a reference.
-    /// For this to be true, two things must hold:
-    /// a) The argument type must be a reference
-    /// b) The thing pointed to by the reference must be such that its memory layout
-    ///    is known to be identical on both sides of the FFI-boundary.
-    pub can_be_sent_as_ref: bool,
 }
 
 impl Deserialize for AbiMethodArgument {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AbiMethodArgument {
             schema: <_ as Deserialize>::deserialize(deserializer)?,
-            can_be_sent_as_ref: <_ as Deserialize>::deserialize(deserializer)?,
         })
     }
 }
@@ -2814,7 +2807,6 @@ impl WithSchema for AbiMethodArgument {
 impl Serialize for AbiMethodArgument {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.schema.serialize(serializer)?;
-        self.can_be_sent_as_ref.serialize(serializer)?;
         Ok(())
     }
 }
@@ -3018,14 +3010,34 @@ pub enum Schema {
     /// if your type is aptly represented as a Struct or Enum instead.
     /// This never has a specified memory format.
     Custom(String),
-    /// Boxed traits cannot be serialized, but they can be exchanged using savefile-abi
-    /// This always has a specified memory format, which is assumed to be a pointer to
-    /// data and a pointer to a vtable.
-    BoxedTrait(AbiTraitDefinition),
-    /// Closures cannot be serialized, but they can be exchanged using savefile-abi.
-    /// The first parameter determines if the closure is a FnMut closure (true if so).
-    /// This always has a specified memory format, which is assumed to be a pointer to
-    /// data and a pointer to a vtable.
+    /// The savefile format of a Box<T> is identical to that of T.
+    /// But SavefileAbi still needs to represent Box<T> separate from T, since
+    /// their memory layout isn't the same.
+    Boxed(Box<Schema>),
+    /// Savefile does not support deserializing unsized slices.
+    /// But SavefileAbi supports these as parameters.
+    /// Savefile schema still needs to be able to represent them.
+    Slice(Box<Schema>),
+    /// Savefile does not support deserializing &str, nor the unsized str.
+    /// But SavefileAbi supports &str as parameters. It does not support str.
+    /// Savefile schema still needs to be able to represent Str.
+    Str,
+    /// Savefile does not support deserializing references.
+    /// If it would, the savefile format of &T would be identical to that of T.
+    /// But SavefileAbi still needs to represent &T separate from T, since
+    /// their memory layout isn't the same.
+    Reference(Box<Schema>),
+    /// Traits cannot be serialized, but they can be exchanged using savefile-abi
+    /// Their memory layout is considered to depend on all method signatures,
+    /// and the layouts of all argument types and all return types.
+    Trait(bool /* mut self*/, AbiTraitDefinition),
+    /// This is just a trait. But it exists as a separate schema variant,
+    /// since SavefileAbi automatically generates wrappers for standard Fn*-types,
+    /// and these should not be mixed up with regular trait definitions, even if they
+    /// would be identical
+    /// Traits cannot be serialized, but they can be exchanged using savefile-abi
+    /// Their memory layout is considered to depend on all method signatures,
+    /// and the layouts of all argument types and all return types.
     FnClosure(bool /*mut self*/, AbiTraitDefinition),
 }
 /// Introspect is not implemented for Schema, though it could be
@@ -3053,8 +3065,12 @@ impl Schema {
             Schema::Undefined => "undefined",
             Schema::ZeroSize => "zerosize",
             Schema::Custom(_) => "custom",
-            Schema::BoxedTrait(_) => "boxed_trait",
+            Schema::Boxed(_) => "box",
             Schema::FnClosure(_, _) => "fntrait",
+            Schema::Slice(_) => {"slice"}
+            Schema::Str => {"str"}
+            Schema::Reference(_) => {"reference"}
+            Schema::Trait(_, _) => {"trait"}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3084,10 +3100,13 @@ impl Schema {
                 // Closures are not supported in any other position
                 false
             }
-            (Schema::BoxedTrait(_a), Schema::BoxedTrait(_b)) => {
-                // Boxed traits can never "just be serialized". We alway have to serialize
+            (Schema::Boxed(_a), Schema::Boxed(_b)) => {
+                // Boxed traits can never "just be serialized". We always have to serialize
                 // if boxed traits are contained in a data structure
                 false
+            }
+            (Schema::Reference(a), Schema::Reference(b)) => {
+                a.layout_compatible(&*b)
             }
             _ => false,
         }
@@ -3184,7 +3203,7 @@ impl Schema {
     }
     /// Size
     pub fn serialized_size(&self) -> Option<usize> {
-        match *self {
+        match self {
             Schema::Struct(ref schema_struct) => schema_struct.serialized_size(),
             Schema::Enum(ref schema_enum) => schema_enum.serialized_size(),
             Schema::Primitive(ref schema_primitive) => schema_primitive.serialized_size(),
@@ -3194,8 +3213,12 @@ impl Schema {
             Schema::Undefined => None,
             Schema::ZeroSize => Some(0),
             Schema::Custom(_) => None,
-            Schema::BoxedTrait(_) => None,
+            Schema::Boxed(inner) => inner.serialized_size(),
             Schema::FnClosure(_, _) => None,
+            Schema::Slice(_) => None,
+            Schema::Str => None,
+            Schema::Reference(_) => None,
+            Schema::Trait(_, _) => None,
         }
     }
 }
@@ -3335,9 +3358,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             }
             return None;
         }
-        (Schema::BoxedTrait(a), Schema::BoxedTrait(b)) => {
+        (Schema::Boxed(a), Schema::Boxed(b)) => {
 
-            return diff_abi_def(a,b, path);
+            return diff_schema(&**a, &**b, path);
         }
         (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
             if amut != bmut {
@@ -3828,7 +3851,7 @@ impl Serialize for Schema {
             }
             Schema::Undefined => serializer.write_u8(5),
             Schema::ZeroSize => serializer.write_u8(6),
-            Schema::SchemaOption(ref content) => {
+            Schema::SchemaOption(content) => {
                 serializer.write_u8(7)?;
                 content.serialize(serializer)
             }
@@ -3840,13 +3863,33 @@ impl Serialize for Schema {
                 serializer.write_u8(9)?;
                 custom.serialize(serializer)
             }
-            Schema::BoxedTrait(name) => {
+            Schema::Boxed(name) => {
                 serializer.write_u8(10)?;
                 name.serialize(serializer)
             }
             Schema::FnClosure(a, b) => {
                 serializer.write_u8(11)?;
                 a.serialize(serializer)?;
+                b.serialize(serializer)?;
+                Ok(())
+            }
+            Schema::Slice(inner) => {
+                serializer.write_u8(12)?;
+                inner.serialize(serializer)?;
+                Ok(())
+            }
+            Schema::Str => {
+                serializer.write_u8(13)?;
+                Ok(())
+            }
+            Schema::Reference(inner) => {
+                serializer.write_u8(14)?;
+                inner.serialize(serializer)?;
+                Ok(())
+            }
+            Schema::Trait(a, b) => {
+                serializer.write_u8(15)?;
+                serializer.write_bool(*a)?;
                 b.serialize(serializer)?;
                 Ok(())
             }
@@ -3874,11 +3917,24 @@ impl Deserialize for Schema {
             7 => Schema::SchemaOption(Box::new(Schema::deserialize(deserializer)?)),
             8 => Schema::Array(SchemaArray::deserialize(deserializer)?),
             9 => Schema::Custom(String::deserialize(deserializer)?),
-            10 => Schema::BoxedTrait(<_ as Deserialize>::deserialize(deserializer)?),
+            10 => Schema::Boxed(<_ as Deserialize>::deserialize(deserializer)?),
             11 => Schema::FnClosure(
                 <_ as Deserialize>::deserialize(deserializer)?,
                 <_ as Deserialize>::deserialize(deserializer)?,
             ),
+            12 => {
+                Schema::Slice(Box::new(<_ as Deserialize>::deserialize(deserializer)?))
+            }
+            13 => Schema::Str,
+            14 => {
+                Schema::Reference(Box::new(<_ as Deserialize>::deserialize(deserializer)?))
+            }
+            15 => {
+                Schema::Trait(
+                    <_ as Deserialize>::deserialize(deserializer)?,
+                    <_ as Deserialize>::deserialize(deserializer)?
+                )
+            }
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),

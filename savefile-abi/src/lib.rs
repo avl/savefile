@@ -1024,11 +1024,24 @@ fn arg_layout_compatible(
                     .verify_backward_compatible(effective_version, effective_b2)
                     .is_ok()
         }
-        (Schema::BoxedTrait(_), Schema::BoxedTrait(_)) => {
-            let (Schema::BoxedTrait(effective_a2), Schema::BoxedTrait(effective_b2)) = (a_effective, b_effective)
+        (Schema::Boxed(native_a), Schema::Boxed(native_b)) => {
+            let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective)
             else {
                 return false;
             };
+            arg_layout_compatible(&**native_a, &**native_b, &**effective_a2, &**effective_b2, effective_version)
+        }
+        (Schema::Trait(s_a, _), Schema::Trait(s_b, _)) => {
+            if s_a != s_b {
+                return false;
+            }
+            let (Schema::Trait(e_a2, effective_a2), Schema::Trait(e_b2, effective_b2)) = (a_effective, b_effective)
+                else {
+                    return false;
+                };
+            if e_a2 != e_b2 {
+                return false;
+            }
 
             effective_a2
                 .verify_backward_compatible(effective_version, effective_b2)
@@ -1052,6 +1065,9 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
         callee_native_definition: AbiTraitDefinition,
     ) -> Result<AbiConnectionTemplate, SavefileError> {
         let mut methods = Vec::with_capacity(caller_native_definition.methods.len());
+        if caller_native_definition.methods.len() > 64 {
+            panic!("Too many method arguments, max 64 are supported!");
+        }
         for caller_native_method in caller_native_definition.methods.into_iter() {
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition
                 .methods
@@ -1144,12 +1160,12 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                     });
                 }
 
-                let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
-                let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
+                //let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
+                //let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                if caller_isref
-                    && callee_isref
-                    && arg_layout_compatible(
+                if /*caller_isref
+                    && callee_isref*/
+                    arg_layout_compatible(
                         &caller_native_method.info.arguments[index].schema,
                         &callee_native_method.info.arguments[index].schema,
                         &caller_effective_method.info.arguments[index].schema,
