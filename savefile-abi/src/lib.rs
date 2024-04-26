@@ -1069,6 +1069,7 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
             panic!("Too many method arguments, max 64 are supported!");
         }
         for caller_native_method in caller_native_definition.methods.into_iter() {
+            println!("Checking {}", caller_native_method.name);
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition
                 .methods
                 .iter()
@@ -1126,7 +1127,7 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 });
             }
 
-            if caller_native_method.info.arguments.len() > 63 {
+            if caller_native_method.info.arguments.len() > 64 {
                 return Err(SavefileError::TooManyArguments);
             }
 
@@ -1143,39 +1144,65 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                     ),
                 });
             }
-
             let mut mask = 0;
-            for index in 0..caller_native_method.info.arguments.len() {
+            let mut check_diff = |effective1,effective2,native1,native2,index:Option<usize>|{
+
                 let effective_schema_diff = diff_schema(
-                    &caller_effective_method.info.arguments[index].schema,
-                    &callee_effective_method.info.arguments[index].schema,
+                    effective1,
+                    effective2,
                     "".to_string(),
                 );
                 if let Some(diff) = effective_schema_diff {
                     return Err(SavefileError::IncompatibleSchema {
-                        message: format!(
-                            "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}, error: {}",
-                            trait_name, &caller_native_method.name, index, diff
-                        ),
+                        message:
+                            if let Some(index) = index {
+                                format!(
+                                    "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}: {}",
+                                    trait_name, &caller_native_method.name, index, diff)
+                            } else {
+                                format!(
+                                    "Incompatible ABI detected. Trait: {}, method: {}, return value differs: {}",
+                                    trait_name, &caller_native_method.name, diff)
+                            }
                     });
                 }
 
                 //let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
                 //let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                if /*caller_isref
-                    && callee_isref*/
-                    arg_layout_compatible(
-                        &caller_native_method.info.arguments[index].schema,
-                        &callee_native_method.info.arguments[index].schema,
-                        &caller_effective_method.info.arguments[index].schema,
-                        &callee_effective_method.info.arguments[index].schema,
-                        effective_version,
-                    )
-                {
-                    mask |= 1 << index;
+                let comp = arg_layout_compatible(
+                    native1,
+                    native2,
+                    effective1,
+                    effective2,
+                    effective_version,
+                );
+
+                if comp {
+                    if let Some(index) = index {
+                        mask |= 1 << index;
+                    }
                 }
+                Ok(())
+            };
+
+
+            for index in 0..caller_native_method.info.arguments.len() {
+
+                let effective1 = &caller_effective_method.info.arguments[index].schema;
+                let effective2 = &callee_effective_method.info.arguments[index].schema;
+                let native1 = &caller_native_method.info.arguments[index].schema;
+                let native2 = &callee_native_method.info.arguments[index].schema;
+                check_diff(effective1,effective2,native1,native2, Some(index))?;
             }
+
+            check_diff(
+                &caller_effective_method.info.return_value,
+                &callee_effective_method.info.return_value,
+                &caller_native_method.info.return_value,
+                &callee_native_method.info.return_value,
+                None /*return value*/)?;
+
 
             methods.push(AbiConnectionMethod {
                 method_name: caller_native_method.name,

@@ -447,8 +447,8 @@ fn mutsymbol(ismut: bool) -> TokenStream {
 }
 
 impl ArgType {
-    fn get_instruction(&self, arg_index: Option<usize>, arg_name: &Ident, nesting_level: u32) -> TypeInstruction {
-        let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_name,nesting_level), Span::call_site());
+    fn get_instruction(&self, arg_index: Option<usize>, arg_orig_name: &str, arg_name: &TokenStream, nesting_level: u32, take_ownership: bool) -> TypeInstruction {
+        let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name,nesting_level), Span::call_site());
 
         let layout_compatible = if let Some(arg_index) = arg_index {
             quote!(compatibility_mask&(1<<#arg_index) != 0)
@@ -468,7 +468,7 @@ impl ArgType {
                     arg_type1,
                     known_size_align1:_,
                     known_size_align_of_pointer1, deserialized_type
-                } = arg_type.get_instruction(arg_index, arg_name, nesting_level+1);
+                } = arg_type.get_instruction(arg_index, arg_orig_name, arg_name, nesting_level+1, false);
 
                 let known_size_align1 = match &**arg_type {
                     ArgType::PlainData(plain) => {
@@ -527,7 +527,7 @@ impl ArgType {
             ArgType::Str => {
                 TypeInstruction {
                     //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
-                    callee_trampoline_temp_variable_declaration1: quote! {let #temp_arg_name;},
+                    callee_trampoline_temp_variable_declaration1: quote! {},
                     deserialized_type: quote!{String},
                     callee_trampoline_variable_deserializer1: quote! {
                         {
@@ -564,7 +564,7 @@ impl ArgType {
                     known_size_align1,
                     known_size_align_of_pointer1:_,
                     deserialized_type:_
-                } = arg_type.get_instruction(arg_index, arg_name, nesting_level+1);
+                } = arg_type.get_instruction(arg_index,arg_orig_name, arg_name, nesting_level+1, false);
 
 
                 TypeInstruction {
@@ -622,21 +622,20 @@ impl ArgType {
                     known_size_align1:_,
                     known_size_align_of_pointer1:_, 
                     deserialized_type
-                } = inner_arg_type.get_instruction(arg_index, arg_name, nesting_level+1);
+                } = inner_arg_type.get_instruction(arg_index, arg_orig_name,&quote!( #arg_name ), nesting_level+1, true);
 
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
                     deserialized_type: quote!{Box<#deserialized_type>},
                     callee_trampoline_temp_variable_declaration1: quote! {
                         #callee_trampoline_temp_variable_declaration1
-                        let #temp_arg_name;
                     },
                     callee_trampoline_variable_deserializer1: quote! {
                         Box::new( #callee_trampoline_variable_deserializer1 )
                     },
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1,
-                    schema: quote!( Schema::Boxed( #schema ) ),
+                    schema: quote!( Schema::Boxed( Box::new(#schema) ) ),
                     arg_type1: quote!( Box<#arg_type1> ),
                     known_size_align1: None,
                     known_size_align_of_pointer1: None,
@@ -648,23 +647,19 @@ impl ArgType {
 
                 let newsymbol = quote! {new_from_ptr};
 
+                let owning = if take_ownership {quote!( Owning::Owned )} else {quote!(Owning::NotOwned)};
+
                 TypeInstruction {
                     deserialized_type: quote!{ AbiConnection<dyn #trait_type> },
                     callee_trampoline_temp_variable_declaration1: quote! {},
                     callee_trampoline_variable_deserializer1: quote! {
                         {
-                            if !#layout_compatible {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-                            unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? }
+                            unsafe { AbiConnection::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, #owning)? }
                         }
                     },
                     caller_arg_serializer_temp1: quote!(),
                     caller_arg_serializer1: quote! {
                         {
-                            if !#layout_compatible {
-                                panic!("Function arg is not layout-compatible!")
-                            }
                             PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer)
                         }
                     },
@@ -675,8 +670,8 @@ impl ArgType {
                 }
             }
             ArgType::Fn(temp_trait_name, fndef, args, ismut) => {
-                let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_name), Span::call_site());
-                let temp_arg_ser_name = Ident::new(&format!("temp_ser_{}", arg_name), Span::call_site());
+                let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_orig_name), Span::call_site());
+                let temp_arg_ser_name = Ident::new(&format!("temp_ser_{}", arg_orig_name), Span::call_site());
 
                 let temp_trait_type = temp_trait_name;
 
@@ -709,6 +704,17 @@ impl ArgType {
                         id
                     })
                     .collect();
+                let owning = if take_ownership {quote!( Owning::Owned )} else {quote!(Owning::NotOwned)};
+
+                let arg_access = if take_ownership {
+                    quote!{
+                        Box::into_raw(#arg_name) as *#mutorconst _
+                    }
+                } else {
+                    quote!{
+                        #arg_name as *#mutorconst _
+                    }
+                };
 
                 TypeInstruction {
                     deserialized_type: quote!{AbiConnection::<dyn #temp_trait_type>},
@@ -718,25 +724,19 @@ impl ArgType {
                     },
                     callee_trampoline_variable_deserializer1: quote! {
                         {
-                            if !#layout_compatible {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-
-                            #temp_arg_name = unsafe { AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::NotOwned)? };
-                            #temp_arg_name2 = |#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
-                            & #mutsymbol #temp_arg_name2
+                            #temp_arg_name = unsafe { AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, #owning)? };
+                            #temp_arg_name2 = move|#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
+                            #mutsymbol #temp_arg_name2
                         }
                     },
                     caller_arg_serializer_temp1: quote!{
                         let #mutsymbol #temp_arg_ser_name;
                     },
+                    compile_error!("We need an 'owning wrapper' also")
+                    //let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol #temp_arg_ser_name as *#mutorconst _;
                     caller_arg_serializer1: quote! {
                         {
-                            if !#layout_compatible {
-                                panic!("Function arg is not layout-compatible!")
-                            }
-
-                            #temp_arg_ser_name = #temp_trait_name_wrapper { func: #arg_name as *#mutorconst _ };
+                            #temp_arg_ser_name = #temp_trait_name_wrapper { func: #arg_access };
                             let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol #temp_arg_ser_name as *#mutorconst _;
                             PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer)
                         }
@@ -791,7 +791,7 @@ pub(super) fn generate_method_definitions(
         );
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
-        let instruction = argtype.get_instruction(Some(arg_index), arg_name, 0);
+        let instruction = argtype.get_instruction(Some(arg_index), &arg_name.to_string(),&arg_name.to_token_stream(), 0, true);
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
         callee_trampoline_real_method_invocation_arguments.push(
@@ -861,7 +861,7 @@ pub(super) fn generate_method_definitions(
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ); //Safe, does not need drop and does not allocate
     } else {
         let parsed_ret_type = parse_type(version, "___retval",&ret_type,&method_name,name_generator,extra_definitions,false,false);
-        let instruction = parsed_ret_type.get_instruction(None, &Ident::new("ret", Span::call_site()), 0);
+        let instruction = parsed_ret_type.get_instruction(None, "ret", &Ident::new("ret", Span::call_site()).to_token_stream(), 0, true);
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
         return_ser_temp = instruction.caller_arg_serializer_temp1;
@@ -871,7 +871,7 @@ pub(super) fn generate_method_definitions(
 
         ret_serialize = quote!( #ret_serializer );
 
-        result_default = quote!( MaybeUninit::<Result<#caller_return_type,SavefileError>>::uninit() );
+        result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() );
     };
 
 
@@ -899,7 +899,6 @@ pub(super) fn generate_method_definitions(
     }
 
 
-    let _ = ret_deserializer;
     let _ = caller_return_type;
 
     let caller_method_trampoline = quote! {
@@ -931,9 +930,9 @@ pub(super) fn generate_method_definitions(
                     result_receiver: *mut (),
                 ) {
                     let outcome = unsafe { &*outcome };
-                    let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<#caller_return_type, SavefileError>>) };
+                    let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<#ret_type, SavefileError>>) };
                     result_receiver.write(
-                        parse_return_value_impl(outcome, |mut deserializer|{
+                        parse_return_value_impl(outcome, |mut deserializer| -> Result<#ret_type, SavefileError> {
 
                             #ret_temp_decl
                             Ok(#ret_deserializer)
