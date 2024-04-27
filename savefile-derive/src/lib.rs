@@ -446,7 +446,7 @@ pub fn savefile_abi_exportable(
     };
 
     // For debugging, uncomment to write expanded procmacro to file
-    std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
+    //std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
 
     expanded.into()
 }
