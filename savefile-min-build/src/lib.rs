@@ -12,24 +12,26 @@ use savefile_derive::savefile_abi_exportable;
 
 
 
-include!("TempAdvancedTestInterface_return_boxed_closure_2____retval.rs");
-include!("TempAdvancedTestInterface_return_boxed_closure_1_returnvalue.rs");
+
+/*
+
+include!("__0_owning_.rs");
+include!("__1_.rs");
+include!("__2_.rs");
+include!("__3_.rs");
+*/
+
 include!("AdvancedTestInterface.rs");
+/*
+#[savefile_abi_exportable(version = 0)]
+pub trait AdvancedTestInterface {
+    fn count_chars_str(&self, x: &str) -> usize;
+}*/
 
-//#[savefile_abi_exportable(version = 0)] pub trait AdvancedTestInterface { fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32>; }
-
-struct AdvancedTestInterfaceImpl{
-
-}
-impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
-    fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32> {
-        Box::new(||{42})
-    }
-}
 #[test]
 fn test_call_many_callbacks() {
-    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+  /*  let boxed: Box<dyn CallbackInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
-    let temp = conn.return_boxed_closure();
-    assert_eq!((temp)(), 42);
+    let temp = conn.get();
+    assert_eq!(temp, 42);*/
 }

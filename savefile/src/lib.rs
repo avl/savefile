@@ -859,6 +859,8 @@ pub mod prelude;
 extern crate serde;
 #[cfg(feature = "serde_derive")]
 extern crate serde_derive;
+
+use core::str::Utf8Error;
 #[cfg(feature = "serde_derive")]
 use serde_derive::{Deserialize, Serialize};
 
@@ -910,7 +912,6 @@ extern crate bzip2;
 #[cfg(feature = "bit-set")]
 extern crate bit_set;
 
-extern crate core;
 #[cfg(feature = "rustc-hash")]
 extern crate rustc_hash;
 
@@ -1015,7 +1016,13 @@ pub enum SavefileError {
         msg: String,
     },
 }
-
+impl From<Utf8Error> for SavefileError {
+    fn from(value: Utf8Error) -> Self {
+        SavefileError::InvalidUtf8 {
+            msg: format!("{:?}", value)
+        }
+    }
+}
 impl Display for SavefileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1904,7 +1911,20 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
 
         Ok(unsafe { temp.assume_init() })
     }
+    /// Reads the raw bit pattern of a pointer
+    /// # Safety
+    /// The stream must contain a valid pointer to T.
+    pub unsafe fn read_raw_ptr_mut<T: ?Sized>(&mut self) -> Result<*mut T, SavefileError> {
+        let mut temp = MaybeUninit::<*mut T>::zeroed();
 
+        let temp_data = &mut temp as *mut MaybeUninit<*mut T> as *mut u8;
+        let temp_size = std::mem::size_of::<*mut T>();
+        let buf = unsafe { slice::from_raw_parts_mut(temp_data, temp_size) };
+
+        self.read_bytes_to_buf(buf)?;
+
+        Ok(unsafe { temp.assume_init() })
+    }
     /// Reads a pointer
     pub fn read_ptr(&mut self) -> Result<*const (), SavefileError> {
         let mut ptr: MaybeUninit<*const ()> = MaybeUninit::zeroed();
@@ -3358,21 +3378,34 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             }
             return None;
         }
+        (Schema::Str, Schema::Str) => {
+
+            return None;
+        }
         (Schema::Boxed(a), Schema::Boxed(b)) => {
 
             return diff_schema(&**a, &**b, path);
         }
+        (Schema::Reference(a), Schema::Reference(b)) => {
+
+            return diff_schema(&**a, &**b, path);
+        }
+        (Schema::Slice(a), Schema::Slice(b)) => {
+
+            return diff_schema(&**a, &**b, path);
+        }
+        (Schema::Trait(amut, a), Schema::Trait(bmut, b)) |
         (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
             if amut != bmut {
                 if *amut {
                     return Some(format!(
-                        "At location [{}]: Application protocol has mutable Fn*, but foreign format has non-mutable.",
+                        "At location [{}]: Application protocol uses FnMut, but foreign format has Fn.",
                         path
                     ));
                 }
                 if *bmut {
                     return Some(format!(
-                        "At location [{}]: Application protocol has non-mutable Fn*, but foreign format has mutable.",
+                        "At location [{}]: Application protocol uses Fn, but foreign format uses FnMut.",
                         path
                     ));
                 }

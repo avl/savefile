@@ -27,7 +27,7 @@ use common::{
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 #[allow(unused_imports)]
 use std::iter::IntoIterator;
 use syn::__private::bool;
@@ -37,7 +37,6 @@ use syn::{
     DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type,
     TypeGenerics, TypeTuple,
 };
-use savefile_abi::parse_box_type;
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -262,7 +261,7 @@ pub fn savefile_abi_exportable(
     let mut method_metadata: Vec<TokenStream> = vec![];
     let mut callee_method_trampoline: Vec<TokenStream> = vec![];
     let mut caller_method_trampoline = vec![];
-    let mut extra_definitions = vec![];
+    let mut extra_definitions = HashMap::new();
 
     for (method_number, item) in parsed.items.iter().enumerate() {
         if method_number > u16::MAX.into() {
@@ -302,37 +301,9 @@ pub fn savefile_abi_exportable(
                         no_return = true;
                     }
                     ReturnType::Type(_, ty) => {
+                        ret_type = (**ty).clone();
+                        ret_declaration = quote! { -> #ret_type };
                         no_return = false;
-                        match &**ty {
-                            Type::Path(path) => {
-                                ret_type = (**ty).clone();
-                                ret_declaration = quote! { -> #ret_type };
-                                if !path.path.segments.is_empty() &&
-                                    path.path.segments.last().unwrap().ident=="Box" {
-                                    match parse_box_type(version,&path.path,&method_name,"returnvalue",&ret_type,&mut temp_name_generator,&mut extra_definitions,false,false) {
-                                        savefile_abi::ArgType::PlainData(_) => {
-
-                                        }
-                                        savefile_abi::ArgType::Boxed(_t) => {
-
-                                        }
-                                        _ => panic!("Method {}, Unsupported type in return position: {}", method_name, ret_type.to_token_stream())
-                                    }
-                                }
-                            }
-                            Type::Reference(_) => {
-                                panic!("References in return-position are not supported.")
-                            }
-                            Type::Tuple(TypeTuple { elems, .. }) => {
-                                if elems.len() > 3 {
-                                    panic!("Savefile presently only supports tuples up to 3 members. Either change to using a struct, or file an issue on savefile!");
-                                }
-                                // Empty tuple!
-                                ret_type = (**ty).clone();
-                                ret_declaration = quote! { -> #ret_type }
-                            }
-                            _ => panic!("Unsupported type in return-position: {:?}", ty),
-                        }
                     }
                 }
 
@@ -455,6 +426,7 @@ pub fn savefile_abi_exportable(
 
     //let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
     let input = TokenStream::from(input);
+    let extra_definitions:Vec<_> = extra_definitions.values().map(|(_,x)|x).collect();
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
         #[allow(clippy::needless_late_init)]

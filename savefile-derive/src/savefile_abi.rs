@@ -1,6 +1,10 @@
+
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::{ToTokens};
-use syn::{GenericArgument, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Type, TypeParamBound};
+use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound,  TypeTuple};
+use syn::punctuated::Punctuated;
 use common::{compile_time_check_reprc, compile_time_size};
 
 
@@ -14,21 +18,67 @@ const FAT_POINTER_ALIGNMENT:usize = POINTER_SIZE;
 const MEGA_FAT_POINTER: (usize,usize) = (FAT_POINTER_SIZE + POINTER_SIZE, POINTER_SIZE);
 const FAT_POINTER:(usize,usize) = (2*POINTER_SIZE,POINTER_SIZE);
 
+#[derive(PartialEq,Eq,Debug,Clone,Hash)]
+pub(crate) struct FnWrapperKey {
+    fnkind: Ident,
+    ret: Type,
+    args: Vec<Type>,
+    ismut: bool,
+    owning: bool
+}
+
+#[derive(Clone,Debug)]
+pub(crate) struct ClosureWrapperNames {
+    trait_name: Ident,
+    wrapper_struct_name: Ident,
+}
+fn get_type(ret_type: &ReturnType) -> Type {
+    match ret_type {
+        ReturnType::Default => {
+            Type::Tuple(TypeTuple{
+                paren_token: Default::default(),
+                elems: Punctuated::new()
+            })
+        }
+        ReturnType::Type(_, typ) => {
+            (**typ).clone()
+        }
+    }
+}
+
+static ID_GEN: AtomicU64 = AtomicU64::new(0);
+
 fn emit_closure_helpers(
     version: u32,
-    temp_trait_name: Ident,
-    args: &ParenthesizedGenericArguments,
+    args: &[Type],
+    return_type: ReturnType,
     ismut: bool,
-    extra_definitions: &mut Vec<TokenStream>,
-    fnkind: Ident,
-) {
-    let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_name), Span::call_site());
+    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    fnkind: &Ident, //Fn or FnMut
+    owning: bool
+) -> ClosureWrapperNames /*wrapper name*/ {
+
+    let key = FnWrapperKey {
+        fnkind:fnkind.clone(), ismut, owning,
+        args: args.iter().cloned().collect(),
+        ret: get_type(&return_type)
+    };
+    if let Some((names,_)) = extra_definitions.get(&key) {
+        return names.clone();
+    }
+    let cnt = ID_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temp_trait_name = Ident::new(&format!("__{}_{}", cnt, if owning {"owning_"} else {""}), Span::call_site());
+    let temp_trait_name_wrapper = Ident::new(&format!("{}wrapper", temp_trait_name), Span::call_site());
+    let names = ClosureWrapperNames {
+        wrapper_struct_name: temp_trait_name_wrapper.clone(),
+        trait_name: temp_trait_name.clone()
+    };
 
     let mut formal_parameter_declarations = vec![];
     let mut parameter_types = vec![];
     let mut arg_names = vec![];
 
-    for (arg_index, arg) in args.inputs.iter().enumerate() {
+    for (arg_index, arg) in args.iter().enumerate() {
         let arg_name = Ident::new(&format!("x{}", arg_index), Span::call_site());
         formal_parameter_declarations.push(quote! {#arg_name : #arg});
         parameter_types.push(arg.to_token_stream());
@@ -38,9 +88,9 @@ fn emit_closure_helpers(
     let ret_type;
     let ret_type_decl;
 
-    if let ReturnType::Type(_, rettype) = &args.output {
-        let typ = rettype.to_token_stream();
-        ret_type = quote! {#typ};
+    if let ReturnType::Type(_, temp_type) = &return_type {
+        let typ = &*temp_type;
+        ret_type = quote! { #typ };
         ret_type_decl = quote! { -> #typ };
     } else {
         ret_type = quote! { () };
@@ -59,6 +109,12 @@ fn emit_closure_helpers(
         mutorconst = quote! {const};
     }
 
+    let funcdef = if owning {
+        quote!( Box <(dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)> )
+    } else {
+        quote!( *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a) )
+    };
+
     let expanded = quote! {
 
         #[savefile_abi_exportable(version=#version)]
@@ -67,7 +123,7 @@ fn emit_closure_helpers(
         }
 
         struct #temp_trait_name_wrapper<'a> {
-            func: *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)
+            func: #funcdef
         }
         impl<'a> #temp_trait_name for #temp_trait_name_wrapper<'a> {
             fn docall(&#mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type {
@@ -76,7 +132,8 @@ fn emit_closure_helpers(
         }
 
     };
-    extra_definitions.push(expanded);
+    extra_definitions.insert(key, (names.clone(), expanded));
+    return names;
 }
 
 pub(crate) enum ArgType {
@@ -87,9 +144,9 @@ pub(crate) enum ArgType {
     Slice(Box<ArgType>),
     Trait(Ident, bool /*ismut self*/),
     Fn(
-        Ident,       /*Name of temporary trait generated to be able to handle Fn* as dyn TemporaryTrait. */
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
         Vec<Type>,   /*arg types*/
+        ReturnType, //Ret-type
         bool,        /*ismut (FnMut)*/
     ),
 }
@@ -102,7 +159,7 @@ pub(crate) struct MethodDefinitionComponents {
 
 pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_name: &str, typ: &Type,
                   name_generator: &mut impl FnMut() -> String,
-                  extra_definitions: &mut Vec<TokenStream>,
+                  extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
                   is_reference: bool,
                   is_mut_ref: bool,
 ) -> ArgType
@@ -241,7 +298,7 @@ fn parse_type(
     typ: &Type,
     method_name: &Ident,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut Vec<TokenStream>,
+    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
 ) -> ArgType {
@@ -352,20 +409,12 @@ fn parse_type(
                     match &bound.arguments {
                         PathArguments::Parenthesized(pararg) => {
 
-                            let temp_name =
-                                Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());
-                            emit_closure_helpers(
-                                version,
-                                temp_name.clone(),
-                                pararg,
-                                is_mut_ref,
-                                extra_definitions,
-                                bound.ident.clone(),
-                            );
+                            /*let temp_name =
+                                Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());*/
                             return ArgType::Fn(
-                                temp_name,
                                 fn_decl,
                                 pararg.inputs.iter().cloned().collect(),
+                                pararg.output.clone(),
                                 is_mut_ref,
                             );
                         }
@@ -447,7 +496,9 @@ fn mutsymbol(ismut: bool) -> TokenStream {
 }
 
 impl ArgType {
-    fn get_instruction(&self, arg_index: Option<usize>, arg_orig_name: &str, arg_name: &TokenStream, nesting_level: u32, take_ownership: bool) -> TypeInstruction {
+    fn get_instruction(&self, version: u32, arg_index: Option<usize>, arg_orig_name: &str, arg_name: &TokenStream, nesting_level: u32, take_ownership: bool,
+        extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>
+    ) -> TypeInstruction {
         let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name,nesting_level), Span::call_site());
 
         let layout_compatible = if let Some(arg_index) = arg_index {
@@ -456,7 +507,7 @@ impl ArgType {
             quote!( false )
         };
         match self {
-            ArgType::Reference(arg_type, _is_mut) => {
+            ArgType::Reference(arg_type, is_mut) => {
 
                 //let mutsym = mutsymbol(*is_mut);
                 let TypeInstruction{
@@ -468,7 +519,7 @@ impl ArgType {
                     arg_type1,
                     known_size_align1:_,
                     known_size_align_of_pointer1, deserialized_type
-                } = arg_type.get_instruction(arg_index, arg_orig_name, arg_name, nesting_level+1, false);
+                } = arg_type.get_instruction(version, arg_index, arg_orig_name, arg_name, nesting_level+1, false, extra_definitions);
 
                 let known_size_align1 = match &**arg_type {
                     ArgType::PlainData(plain) => {
@@ -494,20 +545,26 @@ impl ArgType {
                     ArgType::Slice(_) => None,
                 };
 
+                let (mutsymbol,read_raw_ptr) = if *is_mut {
+                    (quote!( mut ), quote!( read_raw_ptr_mut ))
+                } else {
+                    (quote!( ), quote!( read_raw_ptr ))
+                };
+
 
                 TypeInstruction {
                     callee_trampoline_temp_variable_declaration1: quote! {
                         #callee_trampoline_temp_variable_declaration1
-                        let #temp_arg_name;
+                        let #mutsymbol #temp_arg_name;
                     },
                     deserialized_type,
                     arg_type1: quote!( & arg_type1 ),
                     callee_trampoline_variable_deserializer1: quote! {
                         if #layout_compatible {
-                            unsafe { &*(deserializer.read_raw_ptr::<#arg_type1>()?) }
+                            unsafe { &#mutsymbol *(deserializer. #read_raw_ptr ::<#arg_type1>()?) }
                         } else {
                             #temp_arg_name = #callee_trampoline_variable_deserializer1;
-                            &#temp_arg_name
+                            & #mutsymbol #temp_arg_name
                         }
                     },
                     caller_arg_serializer_temp1,
@@ -533,15 +590,15 @@ impl ArgType {
                         {
                             let ptr = deserializer.read_ptr()? as *const u8;
                             let len = deserializer.read_usize()?;
-                            str::from_utf8(unsafe { std::slice::from_raw_parts(ptr, len)})?
+                            std::str::from_utf8(unsafe { std::slice::from_raw_parts(ptr, len)})?
                         }
                     },
                     caller_arg_serializer_temp1: quote!(),
                     caller_arg_serializer1: quote! {
                         {
                             unsafe {
-                                serializer.write_ptr(#arg_name.as_ptr())?;
-                                serializer.write_usize(#arg_name.len())?;
+                                serializer.write_ptr(#arg_name.as_ptr() as *const ()).expect("Failed while serializing");
+                                serializer.write_usize(#arg_name.len())
                             }
                         }
                     },
@@ -564,7 +621,7 @@ impl ArgType {
                     known_size_align1,
                     known_size_align_of_pointer1:_,
                     deserialized_type:_
-                } = arg_type.get_instruction(arg_index,arg_orig_name, arg_name, nesting_level+1, false);
+                } = arg_type.get_instruction(version, arg_index,arg_orig_name, arg_name, nesting_level+1, false, extra_definitions);
 
 
                 TypeInstruction {
@@ -622,7 +679,7 @@ impl ArgType {
                     known_size_align1:_,
                     known_size_align_of_pointer1:_, 
                     deserialized_type
-                } = inner_arg_type.get_instruction(arg_index, arg_orig_name,&quote!( #arg_name ), nesting_level+1, true);
+                } = inner_arg_type.get_instruction(version, arg_index, arg_orig_name,&quote!( #arg_name ), nesting_level+1, true, extra_definitions);
 
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
@@ -641,7 +698,7 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
-            ArgType::Trait(trait_name, _ismut) => {
+            ArgType::Trait(trait_name, ismut) => {
 
                 let trait_type = trait_name;
 
@@ -663,19 +720,30 @@ impl ArgType {
                             PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer)
                         }
                     },
-                    schema: quote!( Schema::Trait(<dyn #trait_name as AbiExportable>::get_definition(version)) ),
+                    schema: quote!( Schema::Trait(#ismut, <dyn #trait_name as AbiExportable>::get_definition(version)) ),
                     arg_type1: quote!( dyn #trait_name ),
                     known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
                     known_size_align_of_pointer1: None,
                 }
             }
-            ArgType::Fn(temp_trait_name, fndef, args, ismut) => {
+            ArgType::Fn(fndef, args, ret_type, ismut) => {
                 let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_orig_name), Span::call_site());
                 let temp_arg_ser_name = Ident::new(&format!("temp_ser_{}", arg_orig_name), Span::call_site());
 
-                let temp_trait_type = temp_trait_name;
 
-                let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
+                let wrapper_names = emit_closure_helpers(
+                    version,
+                    args,
+                    ret_type.clone(),
+                    *ismut,
+                    extra_definitions,
+                    &Ident::new(if *ismut {"FnMut"} else {"Fn"}, Span::call_site()),
+                    take_ownership
+                );
+
+                let temp_trait_name_wrapper = wrapper_names.wrapper_struct_name;
+                let temp_trait_type= wrapper_names.trait_name;
+                //let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
 
                 let mutsymbol = if *ismut {
                     quote! {mut}
@@ -708,11 +776,20 @@ impl ArgType {
 
                 let arg_access = if take_ownership {
                     quote!{
-                        Box::into_raw(#arg_name) as *#mutorconst _
+                        #arg_name
                     }
                 } else {
                     quote!{
                         #arg_name as *#mutorconst _
+                    }
+                };
+                let arg_make_ptr = if take_ownership {
+                    quote! {
+                        Box::into_raw(Box::new(#temp_arg_ser_name))
+                    }
+                } else {
+                    quote! {
+                        &#mutsymbol #temp_arg_ser_name as *#mutorconst _
                     }
                 };
 
@@ -726,23 +803,23 @@ impl ArgType {
                         {
                             #temp_arg_name = unsafe { AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, #owning)? };
                             #temp_arg_name2 = move|#(#typedarglist,)*| {#temp_arg_name.docall(#(#arglist,)*)};
-                            #mutsymbol #temp_arg_name2
+                            #temp_arg_name2
                         }
                     },
                     caller_arg_serializer_temp1: quote!{
                         let #mutsymbol #temp_arg_ser_name;
                     },
-                    compile_error!("We need an 'owning wrapper' also")
+
                     //let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol #temp_arg_ser_name as *#mutorconst _;
                     caller_arg_serializer1: quote! {
                         {
                             #temp_arg_ser_name = #temp_trait_name_wrapper { func: #arg_access };
-                            let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = &#mutsymbol #temp_arg_ser_name as *#mutorconst _;
+                            let #mutsymbol temp : *#mutorconst (dyn #temp_trait_type+'_) = #arg_make_ptr;
                             PackagedTraitObject::#newsymbol::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer)
                         }
                     },
                     arg_type1: quote! {dyn #fndef },
-                    schema: quote!( Schema::FnClosure(#ismut, <dyn #temp_trait_name as AbiExportable >::get_definition(version)) ),
+                    schema: quote!( Schema::FnClosure(#ismut, <dyn #temp_trait_type as AbiExportable >::get_definition(version)) ),
                     //arg_type1: Default::default(),
                     known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
                     known_size_align_of_pointer1: None,
@@ -764,7 +841,7 @@ pub(super) fn generate_method_definitions(
     receiver_is_mut: bool,
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut Vec<TokenStream>,
+    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
 ) -> MethodDefinitionComponents {
     let method_name_str = method_name.to_string();
 
@@ -791,7 +868,7 @@ pub(super) fn generate_method_definitions(
         );
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
-        let instruction = argtype.get_instruction(Some(arg_index), &arg_name.to_string(),&arg_name.to_token_stream(), 0, true);
+        let instruction = argtype.get_instruction(version, Some(arg_index), &arg_name.to_string(),&arg_name.to_token_stream(), 0, true, extra_definitions);
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
         callee_trampoline_real_method_invocation_arguments.push(
@@ -809,7 +886,7 @@ pub(super) fn generate_method_definitions(
                 #arg_serializer.expect("Failed while serializing");
             }
         );
-        caller_fn_arg_list.push(quote!("#arg_name: #typ"));//instruction.caller_fn_arg1);
+        caller_fn_arg_list.push(quote!( #arg_name: #typ ));//instruction.caller_fn_arg1);
         let schema = instruction.schema;
         //let can_be_sent_as_ref = instruction.can_be_sent_as_ref;
         metadata_arguments.push(quote!{
@@ -861,7 +938,7 @@ pub(super) fn generate_method_definitions(
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ); //Safe, does not need drop and does not allocate
     } else {
         let parsed_ret_type = parse_type(version, "___retval",&ret_type,&method_name,name_generator,extra_definitions,false,false);
-        let instruction = parsed_ret_type.get_instruction(None, "ret", &Ident::new("ret", Span::call_site()).to_token_stream(), 0, true);
+        let instruction = parsed_ret_type.get_instruction(version, None, "ret", &Ident::new("ret", Span::call_site()).to_token_stream(), 0, true, extra_definitions);
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
         return_ser_temp = instruction.caller_arg_serializer_temp1;
