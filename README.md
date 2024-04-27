@@ -88,6 +88,9 @@ The dataformat for schemas has changed, but in a backward compatible way.
 
 Version 0.17.0-beta.11 is, as can be seen from the name, a beta. There will be bugs.
 
+Another thing in 0.17.0: We're starting to use 'release-plz' to manage releases.
+Hopefully this will make the releases more professional, with correct git tags, git releases etc.
+
 ### Upgrade guide from 0.16 -> 0.17
 
 1: Schemas have been expanded. 
