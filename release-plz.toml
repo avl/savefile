@@ -1,0 +1,17 @@
+[workspace]
+publish = false
+
+[[package]]
+name= "savefile"
+publish = true
+
+
+[[package]]
+name= "savefile-derive"
+publish = true
+
+
+[[package]]
+name= "savefile-abi"
+publish = true
+
