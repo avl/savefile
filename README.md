@@ -92,7 +92,6 @@ Another thing in 0.17.0: We're starting to use 'release-plz' to manage releases.
 Hopefully this will make the releases more professional, with correct git tags, git releases etc.
 
 
-
 ### Upgrade guide from 0.16 -> 0.17
 
 1: Schemas have been expanded. 

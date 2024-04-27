@@ -3379,11 +3379,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             return None;
         }
         (Schema::Str, Schema::Str) => {
-
             return None;
         }
         (Schema::Boxed(a), Schema::Boxed(b)) => {
-
             return diff_schema(&**a, &**b, path);
         }
         (Schema::Reference(a), Schema::Reference(b)) => {
