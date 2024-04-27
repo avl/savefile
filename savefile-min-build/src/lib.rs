@@ -19,9 +19,9 @@ include!("__0_owning_.rs");
 include!("__1_.rs");
 include!("__2_.rs");
 include!("__3_.rs");
+include!("AdvancedTestInterface.rs");
 */
 
-include!("AdvancedTestInterface.rs");
 /*
 #[savefile_abi_exportable(version = 0)]
 pub trait AdvancedTestInterface {
