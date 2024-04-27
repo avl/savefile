@@ -23,7 +23,6 @@ methods:
                   value:
                     Primitive: schema_u32
                   offset: 0
-          can_be_sent_as_ref: false
         - schema:
             Struct:
               dbg_name: ArgArgument
@@ -38,7 +37,6 @@ methods:
                   value:
                     Primitive: schema_u32
                   offset: 0
-          can_be_sent_as_ref: false
   - name: enum_arg
     info:
       return_value:
@@ -59,4 +57,3 @@ methods:
               has_explicit_repr: false
               size: 1
               alignment: 1
-          can_be_sent_as_ref: false

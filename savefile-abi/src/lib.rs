@@ -809,15 +809,20 @@ pub enum AbiProtocol {
     },
 }
 
-/// Parse an RawAbiCallResult instance into a Result<T, SavefileError> .
-/// This is used on the caller side, and the type T will always be statically known.
-pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<T, SavefileError> {
+/// Parse the given RawAbiCallResult. If it concerns a success, then deserialize a return value using the given closure.
+pub fn parse_return_value_impl<T>(outcome: &RawAbiCallResult, deserialize_action: impl FnOnce(&mut Deserializer<Cursor<&[u8]>>) -> Result<T,SavefileError> ) -> Result<T, SavefileError> {
     match outcome {
         RawAbiCallResult::Success { data, len } => {
             let data = unsafe { std::slice::from_raw_parts(*data, *len) };
             let mut reader = Cursor::new(data);
             let file_version = reader.read_u32::<LittleEndian>()?;
-            Deserializer::bare_deserialize::<T>(&mut reader, file_version)
+            let mut deserializer = Deserializer {
+                reader: &mut reader,
+                file_version,
+                ephemeral_state: HashMap::new(),
+            };
+            deserialize_action(&mut deserializer)
+            //T::deserialize(&mut deserializer)
         }
         RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
             let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
@@ -838,33 +843,10 @@ pub fn parse_return_value<T: Deserialize>(outcome: &RawAbiCallResult) -> Result<
 /// This is used on the caller side, and the type T will always be statically known.
 /// TODO: There's some duplicated code here, compare parse_return_value
 pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError> where T : AbiExportable + ?Sized {
-    match outcome {
-        RawAbiCallResult::Success { data, len } => {
-            let data = unsafe { std::slice::from_raw_parts(*data, *len) };
-            let mut reader = Cursor::new(data);
-            let file_version = reader.read_u32::<LittleEndian>()?;
-            let mut deserializer = Deserializer {
-                reader: &mut reader,
-                file_version,
-                ephemeral_state: HashMap::new(),
-            };
-            let packaged = unsafe { PackagedTraitObject::deserialize(&mut deserializer)? };
-            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
-
-        }
-        RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
-            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
-            Err(SavefileError::CalleePanic {
-                msg: String::from_utf8_lossy(errdata).into(),
-            })
-        }
-        RawAbiCallResult::AbiError(AbiErrorMsg { error_msg_utf8, len }) => {
-            let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
-            Err(SavefileError::GeneralError {
-                msg: String::from_utf8_lossy(errdata).into(),
-            })
-        }
-    }
+    parse_return_value_impl(outcome, |deserializer|{
+        let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+        unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+    })
 }
 /// We never unload libraries which have been dynamically loaded, because of all the problems with
 /// doing so.
@@ -964,7 +946,11 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
 ) {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
-    result_receiver.write(parse_return_value::<T>(outcome));
+    result_receiver.write(
+        parse_return_value_impl(outcome, |deserializer|{
+            T::deserialize(deserializer)
+        })
+    );
 }
 
 /// Raw entry point for receiving return values from other shared libraries
@@ -975,7 +961,12 @@ pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(
 ) where T: AbiExportable + ?Sized {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<Box<AbiConnection<T>>, SavefileError>>) };
-    result_receiver.write(parse_return_boxed_trait::<T>(outcome));
+    result_receiver.write(
+        parse_return_value_impl(outcome, |deserializer|{
+            let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+        })
+    );
 }
 
 
@@ -1033,11 +1024,24 @@ fn arg_layout_compatible(
                     .verify_backward_compatible(effective_version, effective_b2)
                     .is_ok()
         }
-        (Schema::BoxedTrait(_), Schema::BoxedTrait(_)) => {
-            let (Schema::BoxedTrait(effective_a2), Schema::BoxedTrait(effective_b2)) = (a_effective, b_effective)
+        (Schema::Boxed(native_a), Schema::Boxed(native_b)) => {
+            let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective)
             else {
                 return false;
             };
+            arg_layout_compatible(&**native_a, &**native_b, &**effective_a2, &**effective_b2, effective_version)
+        }
+        (Schema::Trait(s_a, _), Schema::Trait(s_b, _)) => {
+            if s_a != s_b {
+                return false;
+            }
+            let (Schema::Trait(e_a2, effective_a2), Schema::Trait(e_b2, effective_b2)) = (a_effective, b_effective)
+                else {
+                    return false;
+                };
+            if e_a2 != e_b2 {
+                return false;
+            }
 
             effective_a2
                 .verify_backward_compatible(effective_version, effective_b2)
@@ -1061,7 +1065,11 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
         callee_native_definition: AbiTraitDefinition,
     ) -> Result<AbiConnectionTemplate, SavefileError> {
         let mut methods = Vec::with_capacity(caller_native_definition.methods.len());
+        if caller_native_definition.methods.len() > 64 {
+            panic!("Too many method arguments, max 64 are supported!");
+        }
         for caller_native_method in caller_native_definition.methods.into_iter() {
+            println!("Checking {}", caller_native_method.name);
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition
                 .methods
                 .iter()
@@ -1119,7 +1127,7 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 });
             }
 
-            if caller_native_method.info.arguments.len() > 63 {
+            if caller_native_method.info.arguments.len() > 64 {
                 return Err(SavefileError::TooManyArguments);
             }
 
@@ -1136,39 +1144,65 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                     ),
                 });
             }
-
             let mut mask = 0;
-            for index in 0..caller_native_method.info.arguments.len() {
+            let mut check_diff = |effective1,effective2,native1,native2,index:Option<usize>|{
+
                 let effective_schema_diff = diff_schema(
-                    &caller_effective_method.info.arguments[index].schema,
-                    &callee_effective_method.info.arguments[index].schema,
+                    effective1,
+                    effective2,
                     "".to_string(),
                 );
                 if let Some(diff) = effective_schema_diff {
                     return Err(SavefileError::IncompatibleSchema {
-                        message: format!(
-                            "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}, error: {}",
-                            trait_name, &caller_native_method.name, index, diff
-                        ),
+                        message:
+                            if let Some(index) = index {
+                                format!(
+                                    "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}: {}",
+                                    trait_name, &caller_native_method.name, index, diff)
+                            } else {
+                                format!(
+                                    "Incompatible ABI detected. Trait: {}, method: {}, return value differs: {}",
+                                    trait_name, &caller_native_method.name, diff)
+                            }
                     });
                 }
 
-                let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
-                let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
+                //let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
+                //let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                if caller_isref
-                    && callee_isref
-                    && arg_layout_compatible(
-                        &caller_native_method.info.arguments[index].schema,
-                        &callee_native_method.info.arguments[index].schema,
-                        &caller_effective_method.info.arguments[index].schema,
-                        &callee_effective_method.info.arguments[index].schema,
-                        effective_version,
-                    )
-                {
-                    mask |= 1 << index;
+                let comp = arg_layout_compatible(
+                    native1,
+                    native2,
+                    effective1,
+                    effective2,
+                    effective_version,
+                );
+
+                if comp {
+                    if let Some(index) = index {
+                        mask |= 1 << index;
+                    }
                 }
+                Ok(())
+            };
+
+
+            for index in 0..caller_native_method.info.arguments.len() {
+
+                let effective1 = &caller_effective_method.info.arguments[index].schema;
+                let effective2 = &callee_effective_method.info.arguments[index].schema;
+                let native1 = &caller_native_method.info.arguments[index].schema;
+                let native2 = &callee_native_method.info.arguments[index].schema;
+                check_diff(effective1,effective2,native1,native2, Some(index))?;
             }
+
+            check_diff(
+                &caller_effective_method.info.return_value,
+                &callee_effective_method.info.return_value,
+                &caller_native_method.info.return_value,
+                &callee_native_method.info.return_value,
+                None /*return value*/)?;
+
 
             methods.push(AbiConnectionMethod {
                 method_name: caller_native_method.name,

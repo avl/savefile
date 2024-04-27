@@ -1,0 +1,46 @@
+[workspace]
+
+[[package]]
+name= "savefile"
+publish = true
+release = true
+
+
+[[package]]
+name= "savefile-derive"
+publish = true
+release = true
+
+
+[[package]]
+name= "savefile-abi"
+publish = true
+release = true
+
+
+[[package]]
+name= "savefile-test"
+publish = false
+release = false
+
+[[package]]
+name= "savefile-min-build"
+publish = false
+release = false
+
+[[package]]
+name= "savefile-abi-min"
+publish = false
+release = false
+
+[[package]]
+name= "savefile-abi-min-lib"
+publish = false
+release = false
+
+[[package]]
+name= "savefile-abi-min-lib-impl"
+publish = false
+release = false
+
+
