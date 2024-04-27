@@ -1,17 +1,21 @@
 [workspace]
 publish = false
+release = false
 
 [[package]]
 name= "savefile"
 publish = true
+release = true
 
 
 [[package]]
 name= "savefile-derive"
 publish = true
+release = true
 
 
 [[package]]
 name= "savefile-abi"
 publish = true
+release = true
 
