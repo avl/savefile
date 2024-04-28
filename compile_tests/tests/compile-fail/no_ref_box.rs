@@ -11,8 +11,8 @@ use savefile_derive::savefile_abi_exportable;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
-    fn set(&mut self, x: u32) -> &u32;
-//~^ 14:34: 14:35: Method 'set': savefile-abi does not support methods returning references.
+    fn example_func(&self, x: &Box<u32>);
+//~^ 14:32: 14:35: Savefile does not support reference to Box. This is also generally not very useful, just use a regular reference for arguments.
 }
 
 fn main() {}

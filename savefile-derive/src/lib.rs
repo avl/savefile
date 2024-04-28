@@ -40,7 +40,7 @@ use syn::{
     DeriveInput, FnArg, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type,
     TypeGenerics, TypeTuple,
 };
-
+use syn::spanned::Spanned;
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
     implicit_self: bool,
@@ -142,7 +142,7 @@ fn implement_fields_serialize(
 
             if field_from_version == 0 && field_to_version == std::u32::MAX {
                 if removed.is_removed() {
-                    panic!(
+                    abort!(field.ty.span(),
                         "The Removed type can only be used for removed fields. Use the savefile_versions attribute."
                     );
                 }
@@ -227,7 +227,7 @@ pub fn savefile_abi_exportable(
     for item in attr.to_string().split(',') {
         let keyvals: Vec<_> = item.split('=').collect();
         if keyvals.len() != 2 {
-            panic!(
+            abort!(item.span(),
                 "savefile_abi_exportable arguments should be of form #[savefile_abi_exportable(version=0)], not '{}'",
                 attr
             );
@@ -237,14 +237,14 @@ pub fn savefile_abi_exportable(
         match key {
             "version" => {
                 if version.is_some() {
-                    panic!("version specified more than once");
+                    abort!(item.span(), "version specified more than once");
                 }
                 version = Some(
                     val.parse()
-                        .unwrap_or_else(|_| panic!("Version must be numeric, but was: {}", val)),
+                        .unwrap_or_else(|_| abort!(item.span(),"Version must be numeric, but was: {}", val)),
                 );
             }
-            _ => panic!("Unknown savefile_abi_exportable key: '{}'", key),
+            _ => abort!(item.span(), "Unknown savefile_abi_exportable key: '{}'", key),
         }
     }
     let version: u32 = version.unwrap_or(0);
@@ -269,13 +269,13 @@ pub fn savefile_abi_exportable(
 
     for (method_number, item) in parsed.items.iter().enumerate() {
         if method_number > u16::MAX.into() {
-            panic!("Savefile only supports 2^16 methods per interface. Sorry.");
+            abort!(item.span(), "Savefile only supports 2^16 methods per interface. Sorry.");
         }
         let method_number = method_number as u16;
 
         match item {
             TraitItem::Const(c) => {
-                panic!(
+                abort!(c.span(),
                     "savefile_abi_exportable does not support associated consts: {}",
                     c.ident
                 );
@@ -312,7 +312,8 @@ pub fn savefile_abi_exportable(
                 }
 
                 let self_arg = method.sig.inputs.iter().next().unwrap_or_else(|| {
-                    panic!(
+                    abort!(
+                        method.span(),
                         "Method {} has no arguments. This is not supported - it must at least have a self-argument.",
                         method_name
                     )
@@ -320,7 +321,7 @@ pub fn savefile_abi_exportable(
                 if let FnArg::Receiver(recv) = self_arg {
                     if let Some(reference) = &recv.reference {
                         if reference.1.is_some() {
-                            panic!(
+                            abort!(reference.1.as_ref().unwrap().span(),
                                 "Method {} has a lifetime for 'self' argument. This is not supported",
                                 method_name
                             );
@@ -329,13 +330,13 @@ pub fn savefile_abi_exportable(
                             receiver_is_mut = true;
                         }
                     } else {
-                        panic!(
+                        abort!(self_arg.span(),
                             "Method {} takes 'self' by value. This is not supported. Use &self",
                             method_name
                         );
                     }
                 } else {
-                    panic!("Method {} must have 'self'-parameter", method_name);
+                    abort!(method.sig.span(), "Method {} must have 'self'-parameter (savefile-abi does not support methods without self)", method_name);
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
                 for (arg_index, arg) in method.sig.inputs.iter().enumerate().skip(1) {
@@ -345,10 +346,10 @@ pub fn savefile_abi_exportable(
                                 Pat::Ident(name) => {
                                     args.push((name.ident.clone(), &*typ.ty));
                                 }
-                                _ => panic!("Method {} had a parameter (#{}, where self is #0) which contained a complex pattern. This is not supported.", method_name, arg_index)
+                                _ => abort!(typ.pat.span(), "Method {} had a parameter (#{}, where self is #0) which contained a complex pattern. This is not supported.", method_name, arg_index)
                             }
                         },
-                        _ => panic!("Unexpected error: method {} had a self parameter that wasn't the first parameter!", method_name)
+                        _ => abort!(arg.span(), "Unexpected error: method {} had a self parameter that wasn't the first parameter!", method_name)
                     }
                 }
 
@@ -371,12 +372,12 @@ pub fn savefile_abi_exportable(
                 caller_method_trampoline.push(method_defs.caller_method_trampoline);
             }
             TraitItem::Type(t) => {
-                panic!("savefile_abi_exportable does not support associated types: {}", t.ident);
+                abort!(t.span(), "savefile_abi_exportable does not support associated types: {}", t.ident);
             }
             TraitItem::Macro(m) => {
-                panic!("savefile_abi_exportable does not support macro items: {:?}", m);
+                abort!(m.span(), "savefile_abi_exportable does not support macro items: {:?}", m);
             }
-            x => panic!("Unsupported item in trait definition: {:?}", x),
+            x => abort!(x.span(), "Unsupported item in trait definition: {:?}", x),
         }
     }
 
@@ -460,7 +461,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     let input = item.to_string();
     let symbols: Vec<_> = input.split(',').map(|x| x.trim()).collect();
     if symbols.len() != 2 {
-        panic!("savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
+        abort!(input.span(), "savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
     }
     let defspan = Span::call_site();
     let uses = quote_spanned! { defspan =>
@@ -482,7 +483,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
                 type AbiInterface = dyn #trait_type;
 
                 fn new() -> Box<Self::AbiInterface> {
-                    Box::new(#implementing_type::default())
+                    std::boxed::Box::new(#implementing_type::default())
                 }
             }
             #[no_mangle]
@@ -699,7 +700,7 @@ fn implement_reprc_struct(
         let verinfo = parse_attr_tag(field.attrs);
         if verinfo.ignore {
             if expect_fast {
-                panic!(
+                abort!(field.field_span,
                     "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                 );
             } else {
@@ -713,7 +714,7 @@ fn implement_reprc_struct(
         if field_from_version == 0 && field_to_version == std::u32::MAX {
             if removed.is_removed() {
                 if expect_fast {
-                    panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
+                    abort!(field.ty.span(), "The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
                 } else {
                     return implement_reprc_hardcoded_false(name, generics);
                 }
@@ -834,9 +835,9 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
                                     have_seen_explicit_size = true;
                                 }
                                 "u64" | "i64" => {
-                                    panic!("Savefile does not support enums with more than 2^32 variants.")
+                                    abort!(metalist.path.span(), "Savefile does not support enums with more than 2^32 variants.")
                                 }
-                                _ => panic!("Unsupported repr(X) attribute on enum: {}", size_str),
+                                _ => abort!(metalist.path.span(), "Unsupported repr(X) attribute on enum: {}", size_str),
                             }
                         }
                     }
@@ -851,7 +852,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
             2
         } else {
             if actual_variants >= u32::MAX as usize {
-                panic!("The enum had an unreasonable number of variants");
+                abort_call_site!("The enum had an unreasonable number of variants");
             }
             4
         }
@@ -874,7 +875,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     )
 )]
 pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    panic!("The #[derive(ReprC)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
+    abort_call_site!("The #[derive(ReprC)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let name = input.ident;
@@ -907,9 +908,9 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             if !enum_size.explicit_size {
                 if opt_in_fast {
                     if any_fields {
-                        panic!("The #[savefile_require_fast] requires an explicit #[repr(u8),C],#[repr(u16,C)] or #[repr(u32,C)], attribute.");
+                        abort_call_site!("The #[savefile_require_fast] requires an explicit #[repr(u8),C],#[repr(u16,C)] or #[repr(u32,C)], attribute.");
                     } else {
-                        panic!("The #[savefile_require_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
+                        abort_call_site!("The #[savefile_require_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
                     }
                 }
                 return implement_reprc_hardcoded_false(name, input.generics);
@@ -952,7 +953,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     let verinfo = parse_attr_tag(&attrs[i]);
                     if check_is_remove(&field_types[i]).is_removed() {
                         if verinfo.version_to == u32::MAX {
-                            panic!("Removed fields must have a max version, provide one using #[savefile_versions=\"..N\"]")
+                            abort!(field_types[i].span(), "Removed fields must have a max version, provide one using #[savefile_versions=\"..N\"]")
                         }
                         min_safe_version = min_safe_version.max(verinfo.version_to + 1);
                     }
@@ -980,7 +981,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     let verinfo = parse_attr_tag(attr);
                     if verinfo.ignore {
                         if opt_in_fast {
-                            panic!(
+                            abort_call_site!(
                                 "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                             );
                         } else {
@@ -1069,6 +1070,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .enumerate()
                     .map(|(field_index, field)| FieldInfo {
                         ident: Some(field.ident.clone().expect("Expected identifier [8]")),
+                        field_span: field.ident.as_ref().unwrap().span(),
                         index: field_index as u32,
                         ty: &field.ty,
                         attrs: &field.attrs,
@@ -1083,6 +1085,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     .iter()
                     .enumerate()
                     .map(|(idx, field)| FieldInfo {
+                        field_span: field.ty.span(),
                         ident: None,
                         index: idx as u32,
                         ty: &field.ty,
@@ -1096,7 +1099,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
         },
         _ => {
             if opt_in_fast {
-                panic!("Unsupported data type");
+                abort_call_site!("Unsupported data type");
             }
             return implement_reprc_hardcoded_false(name, input.generics);
         }
@@ -1128,7 +1131,7 @@ fn implement_introspect(
     for (idx, field) in field_infos.iter().enumerate() {
         let verinfo = parse_attr_tag(field.attrs);
         if verinfo.introspect_key && introspect_key.is_some() {
-            panic!("Type had more than one field with savefile_introspect_key - attribute");
+            abort!(field.field_span, "Type had more than one field with savefile_introspect_key - attribute");
         }
         if verinfo.introspect_ignore {
             continue;
@@ -1230,6 +1233,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         for (idx, f) in fields_named.named.iter().enumerate() {
                             field_infos.push(FieldInfo {
                                 ident: Some(f.ident.clone().expect("Expected identifier[9]")),
+                                field_span: f.ident.as_ref().unwrap().span(),
                                 index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
@@ -1260,6 +1264,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     &syn::Fields::Unnamed(ref fields_unnamed) => {
                         for (idx, f) in fields_unnamed.unnamed.iter().enumerate() {
                             field_infos.push(FieldInfo {
+                                field_span: f.ty.span(),
                                 ident: None,
                                 index: idx as u32,
                                 ty: &f.ty,
@@ -1346,6 +1351,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         .enumerate()
                         .map(|(idx, field)| FieldInfo {
                             ident: Some(field.ident.clone().expect("Expected identifier[10]")),
+                            field_span: field.ident.as_ref().unwrap().span(),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
@@ -1361,6 +1367,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         .enumerate()
                         .map(|(idx, f)| FieldInfo {
                             ident: None,
+                            field_span: f.ty.span(),
                             ty: &f.ty,
                             index: idx as u32,
                             attrs: &f.attrs,
@@ -1410,7 +1417,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
             }
         }
         _ => {
-            panic!("Unsupported datatype");
+            abort_call_site!("Unsupported datatype");
         }
     };
 
@@ -1478,9 +1485,9 @@ fn implement_withschema(
         let field_type = &field.ty;
         if field_from_version == 0 && field_to_version == u32::MAX {
             if removed.is_removed() {
-                panic!("The Removed type can only be used for removed fields. Use the savefile_version attribute.");
+                abort!(field.ty.span(), "The Removed type can only be used for removed fields. Use the savefile_version attribute.");
             }
-            fields.push(quote_spanned!( span => #fields1.push(unsafe{#Field::unsafe_new(#name_str.to_string(), Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset)} )));
+            fields.push(quote_spanned!( span => #fields1.push(unsafe{#Field::unsafe_new(#name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset)} )));
         } else {
             let mut version_mappings = Vec::new();
             let offset = if field_to_version != u32::MAX {
@@ -1495,7 +1502,7 @@ fn implement_withschema(
                 // We don't supply offset in this case, deserialized type doesn't match field type
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field ::new( #name_str.to_string(), Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))) );
+                        #fields1.push(#Field ::new( #name_str.to_string(), std::boxed::Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))) );
                     }
                 });
             }
@@ -1504,7 +1511,7 @@ fn implement_withschema(
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(unsafe{#Field ::unsafe_new( #name_str.to_string(), Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset )} );
+                    #fields1.push(unsafe{#Field ::unsafe_new( #name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset )} );
                 }
                 ));
         }
@@ -1566,7 +1573,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
                 if field_to_version != std::u32::MAX {
-                    panic!("Savefile automatic derive does not support removal of enum values.");
+                    abort!(variant.span(), "Savefile automatic derive does not support removal of enum values.");
                 }
 
                 let mut field_infos = Vec::new();
@@ -1587,6 +1594,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             field_pattern.push(field_name);
                             field_infos.push(FieldInfo {
                                 ident: Some(f.ident.clone().expect("Expected identifier[1]")),
+                                field_span: f.ident.as_ref().unwrap().span(),
                                 ty: &f.ty,
                                 index: idx as u32,
                                 attrs: &f.attrs,
@@ -1602,6 +1610,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                             field_offset_extractors.push(quote!(unsafe { (#field_binding as *const _ as *const u8).offset_from(base_ptr) as usize }));
                             field_infos.push(FieldInfo {
                                 ident: None,
+                                field_span: f.ty.span(),
                                 index: idx as u32,
                                 ty: &f.ty,
                                 attrs: &f.attrs,
@@ -1671,7 +1680,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         varbuf[3] = (variant>>24) as u8;
                     );
                 } else {
-                    panic!("Unsupported enum size: {}", enum_size.discriminant_size);
+                    abort_call_site!("Unsupported enum size: {}", enum_size.discriminant_size);
                 }
                 let not_const_if_gen = if generics.params.is_empty() {
                     quote! {const}
@@ -1766,6 +1775,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         .enumerate()
                         .map(|(idx, field)| FieldInfo {
                             ident: Some(field.ident.clone().expect("Expected identifier[2]")),
+                            field_span: field.ident.span(),
                             ty: &field.ty,
                             index: idx as u32,
                             attrs: &field.attrs,
@@ -1787,6 +1797,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         .iter()
                         .enumerate()
                         .map(|(idx, f)| FieldInfo {
+                            field_span: f.ty.span(),
                             ident: None,
                             index: idx as u32,
                             ty: &f.ty,
@@ -1827,7 +1838,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             }
         }
         _ => {
-            panic!("Unsupported datatype");
+            abort_call_site!("Unsupported datatype");
         }
     };
     // For debugging, uncomment to write expanded procmacro to file

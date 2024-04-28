@@ -2,6 +2,7 @@ use common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo
 use get_enum_size;
 use proc_macro2::{Literal, TokenStream};
 use syn::DeriveInput;
+use syn::spanned::Spanned;
 
 fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
@@ -52,12 +53,12 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             quote_spanned! { span => Default::default() }
         };
         if field_from_version > field_to_version {
-            panic!("Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
+            abort!(field.field_span, "Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
         }
 
         let src = if field_from_version == 0 && field_to_version == std::u32::MAX && !verinfo.ignore {
             if is_removed.is_removed() {
-                panic!("The Removed type may only be used for fields which have an old version.");
+                abort!(field_type.span(), "The Removed type may only be used for fields which have an old version.");
                 //TODO: Better message, tell user how to do this annotation
             };
             quote_spanned! { span =>
@@ -161,6 +162,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .enumerate()
                             .map(|(field_index, field)| FieldInfo {
                                 ident: Some(field.ident.clone().expect("Expected identifier [6]")),
+                                field_span: field.ident.as_ref().unwrap().span(),
                                 ty: &field.ty,
                                 index: field_index as u32,
                                 attrs: &field.attrs,
@@ -178,6 +180,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             .enumerate()
                             .map(|(field_index, field)| FieldInfo {
                                 ident: None,
+                                field_span: field.ty.span(),
                                 ty: &field.ty,
                                 index: field_index as u32,
                                 attrs: &field.attrs,
@@ -229,6 +232,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         .enumerate()
                         .map(|(field_index, field)| FieldInfo {
                             ident: Some(field.ident.clone().expect("Expected identifier[7]")),
+                            field_span: field.ident.as_ref().unwrap().span(),
                             index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
@@ -247,6 +251,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         .enumerate()
                         .map(|(field_index, field)| FieldInfo {
                             ident: None,
+                            field_span: field.ty.span(),
                             index: field_index as u32,
                             ty: &field.ty,
                             attrs: &field.attrs,
@@ -279,7 +284,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
             }
         }
         _ => {
-            panic!("Only regular structs are supported");
+            abort_call_site!("Only regular structs are supported");
         }
     };
 

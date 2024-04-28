@@ -32,6 +32,4 @@ jobs:
       run: cargo +stable build -p savefile-min-build
     - name: compile_tests (stable)
       run: cd compile_tests && cargo +stable test
-    - name: compile_tests (nightly)
-      run: cd compile_tests && cargo +nightly test
 

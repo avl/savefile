@@ -1,6 +1,7 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use syn::{Expr, GenericParam, Generics, Lit, Type, WhereClause};
+use syn::spanned::Spanned;
 
 pub(crate) fn get_extra_where_clauses(
     gen2: &Generics,
@@ -152,7 +153,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                         let default_fn_str_lit = match &x.lit {
                             &syn::Lit::Str(ref litstr) => litstr,
                             _ => {
-                                panic!("Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
+                                abort!(x.lit.span(), "Unexpected attribute value, please specify savefile_default_fn method names within quotes.");
                             }
                         };
                         default_fn = Some(syn::Ident::new(
@@ -173,7 +174,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 let output2: Vec<String> =
                                     litstr2.value().splitn(3, ':').map(|x| x.to_string()).collect();
                                 if output2.len() != 3 && output2.len() != 2 {
-                                    panic!("The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
+                                    abort!(litstr2.span(), "The #savefile_versions_as tag must contain a version range and a deserialization type, such as : #[savefile_versions_as=0..3:MyStructType]");
                                 }
                                 let litstr = &output2[0];
 
@@ -190,7 +191,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
 
                                 let output: Vec<String> = litstr.split("..").map(|x| x.to_string()).collect();
                                 if output.len() != 2 {
-                                    panic!("savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
+                                    abort!(litstr2.span(), "savefile_versions_as tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions_as-attribute)");
                                 }
                                 let (a, b) = (output[0].to_string(), output[1].to_string());
 
@@ -199,7 +200,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 } else if let Ok(a_u32) = a.parse::<u32>() {
                                     a_u32
                                 } else {
-                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                    abort!(litstr2.span(), "The from version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
                                 };
 
                                 let to_ver = if b.trim() == "" {
@@ -207,10 +208,10 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 } else if let Ok(b_u32) = b.parse::<u32>() {
                                     b_u32
                                 } else {
-                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
+                                    abort!(litstr2.span(), "The to version in the version tag must be an integer. Use #[savefile_versions_as=0..3:MyStructType] for example");
                                 };
                                 if to_ver < from_ver {
-                                    panic!("Version ranges must specify lower number first.");
+                                    abort!(litstr2.span(), "Version ranges must specify lower number first.");
                                 }
 
                                 let item = VersionRange {
@@ -220,11 +221,11 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                     serialized_type: version_type.to_string(),
                                 };
                                 if deser_types.iter().any(overlap(&item)) {
-                                    panic!("#savefile_versions_as attributes may not specify overlapping ranges");
+                                    abort!(litstr2.span(), "#savefile_versions_as attributes may not specify overlapping ranges");
                                 }
                                 deser_types.push(item);
                             }
-                            _ => panic!("Unexpected datatype for value of attribute savefile_versions_as"),
+                            _ => abort!(x.path.span(), "Unexpected datatype for value of attribute savefile_versions_as"),
                         }
                     }
 
@@ -233,19 +234,19 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                             &syn::Lit::Str(ref litstr) => {
                                 let output: Vec<String> = litstr.value().split("..").map(|x| x.to_string()).collect();
                                 if output.len() != 2 {
-                                    panic!("savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
+                                    abort!(litstr.span(), "savefile_versions tag must contain a (possibly half-open) range, such as 0..3 or 2.. (fields present in all versions to date should not use the savefile_versions-attribute)");
                                 }
                                 let (a, b) = (output[0].to_string(), output[1].to_string());
 
                                 if field_from_version.is_some() || field_to_version.is_some() {
-                                    panic!("There can only be one savefile_versions attribute on each field.")
+                                    abort!(litstr.span(), "There can only be one savefile_versions attribute on each field.")
                                 }
                                 if a.trim() == "" {
                                     field_from_version = Some(0);
                                 } else if let Ok(a_u32) = a.parse::<u32>() {
                                     field_from_version = Some(a_u32);
                                 } else {
-                                    panic!("The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                    abort!(litstr.span(), "The from version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
                                 }
 
                                 if b.trim() == "" {
@@ -253,21 +254,21 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 } else if let Ok(b_u32) = b.parse::<u32>() {
                                     field_to_version = Some(b_u32);
                                 } else {
-                                    panic!("The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
+                                    abort!(litstr.span(), "The to version in the version tag must be an integer. Use #[savefile_versions=0..3] for example");
                                 }
                                 if field_to_version.expect("Expected field_to_version")
                                     < field_from_version.expect("expected field_from_version")
                                 {
-                                    panic!("savefile_versions ranges must specify lower number first.");
+                                    abort!(litstr.span(), "savefile_versions ranges must specify lower number first.");
                                 }
                             }
-                            _ => panic!("Unexpected datatype for value of attribute savefile_versions"),
+                            _ => abort!(x.lit.span(), "Unexpected datatype for value of attribute savefile_versions"),
                         }
                     }
                 }
             },
             Err(e) => {
-                panic!("Unparsable attribute: {:?} ({:?})", e, attr.tokens);
+                abort!(attr.span(), "Unparsable attribute: {:?} ({:?})", e, attr.tokens);
             }
         }
     }
@@ -279,11 +280,11 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
         serialized_type: "dummy".to_string(),
     };
     if deser_types.iter().any(overlap(&versions_tag_range)) {
-        panic!("The version ranges of #version_as attributes may not overlap those of #savefile_versions");
+        abort_call_site!("The version ranges of #version_as attributes may not overlap those of #savefile_versions");
     }
     for dt in deser_types.iter() {
         if dt.to >= field_from_version.unwrap_or(0) {
-            panic!("The version ranges of #version_as attributes must be lower than those of the #savefile_versions attribute.");
+            abort!(dt.to.span(), "The version ranges of #version_as attributes must be lower than those of the #savefile_versions attribute.");
         }
     }
 
@@ -300,6 +301,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
 }
 
 pub(crate) struct FieldInfo<'a> {
+    pub(crate) field_span: Span,
     pub(crate) ident: Option<syn::Ident>,
     pub(crate) index: u32,
     pub(crate) ty: &'a syn::Type,
