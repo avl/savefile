@@ -108,6 +108,10 @@ encode the discriminant. Set to 1 for enums which will never have more than 256 
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
 
+## 0.17.0-beta.13
+
+Major improvements. Better diagnostics. Support for returning Box<Fn(..)>.
+
 ## 0.17.0-beta.10
 
 Tentative support for fast serialization/deserialization of enums. May be buggy!
