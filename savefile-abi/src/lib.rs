@@ -468,6 +468,13 @@ pub struct TraitObject {
     vtable: *const (),
 }
 
+unsafe impl Sync for TraitObject {
+
+}
+unsafe impl Send for TraitObject {
+
+}
+
 impl TraitObject {
     /// Returns a TraitObject with two null ptrs. This value must never be used,
     /// but can serve as a default before the real value is written.
@@ -609,6 +616,12 @@ pub struct AbiConnection<T: ?Sized> {
     /// Phantom, to make this valid rust (since we don't otherwise carry a T).
     #[doc(hidden)]
     pub phantom: PhantomData<*const T>,
+}
+unsafe impl<T:?Sized> Sync for AbiConnection<T>{
+
+}
+unsafe impl<T:?Sized> Send for AbiConnection<T>{
+
 }
 
 /// A trait object together with its entry point
