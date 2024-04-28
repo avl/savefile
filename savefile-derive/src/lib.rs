@@ -316,7 +316,7 @@ pub fn savefile_abi_exportable(
                 let self_arg = method.sig.inputs.iter().next().unwrap_or_else(|| {
                     abort!(
                         method.span(),
-                        "Method {} has no arguments. This is not supported - it must at least have a self-argument.",
+                        "Method '{}' has no arguments. This is not supported by savefile-abi - it must at least have a self-argument.",
                         method_name
                     )
                 });
@@ -325,7 +325,7 @@ pub fn savefile_abi_exportable(
                         if reference.1.is_some() {
                             abort!(
                                 reference.1.as_ref().unwrap().span(),
-                                "Method {} has a lifetime for 'self' argument. This is not supported",
+                                "Method '{}' has a lifetime for 'self' argument. This is not supported by savefile-abi",
                                 method_name
                             );
                         }
@@ -335,26 +335,26 @@ pub fn savefile_abi_exportable(
                     } else {
                         abort!(
                             self_arg.span(),
-                            "Method {} takes 'self' by value. This is not supported. Use &self",
+                            "Method '{}' takes 'self' by value. This is not supported by savefile-abi. Use &self",
                             method_name
                         );
                     }
                 } else {
                     abort!(
                         method.sig.span(),
-                        "Method {} must have 'self'-parameter (savefile-abi does not support methods without self)",
+                        "Method '{}' must have 'self'-parameter (savefile-abi does not support methods without self)",
                         method_name
                     );
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
-                for (arg_index, arg) in method.sig.inputs.iter().enumerate().skip(1) {
+                for arg in method.sig.inputs.iter().skip(1) {
                     match arg {
                         FnArg::Typed(typ) => {
                             match &*typ.pat {
                                 Pat::Ident(name) => {
                                     args.push((name.ident.clone(), &*typ.ty));
                                 }
-                                _ => abort!(typ.pat.span(), "Method {} had a parameter (#{}, where self is #0) which contained a complex pattern. This is not supported.", method_name, arg_index)
+                                _ => abort!(typ.pat.span(), "Method '{}' has a parameter which contains a complex pattern. This is not supported by savefile-abi.", method_name)
                             }
                         },
                         _ => abort!(arg.span(), "Unexpected error: method {} had a self parameter that wasn't the first parameter!", method_name)

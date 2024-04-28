@@ -5,7 +5,7 @@ use savefile_derive::savefile_abi_exportable;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
-    fn set(&mut self, x: Box<dyn Fn()>) -> u32;
+    fn get(&mut self) -> &'static str;
 }
 
 #[test]

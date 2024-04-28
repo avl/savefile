@@ -137,7 +137,7 @@ fn emit_closure_helpers(
 pub(crate) enum ArgType {
     PlainData(Type),
     Reference(Box<ArgType>, bool /*ismut (only traits objects can be mut here)*/),
-    Str,
+    Str(bool/*static*/),
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
     Trait(Ident, bool /*ismut self*/),
@@ -170,7 +170,7 @@ pub(crate) fn parse_box_type(
         abort!(path.span(), "Savefile does not support types named 'Box', unless they are the standard type Box, and it must be specified as 'Box', without any namespace");
     }
     if is_reference {
-        abort!(path.span(), "Method {}, argument {}. Savefile does not support references to Boxes. Just supply a reference to the inner type: {}", method_name, arg_name, typ.to_token_stream());
+        abort!(path.span(), "Method '{}', argument {}. Savefile does not support references to Boxes. Just supply a reference to the inner type: {}", method_name, arg_name, typ.to_token_stream());
     }
 
     let last_seg = path.segments.iter().last().unwrap();
@@ -194,9 +194,9 @@ pub(crate) fn parse_box_type(
                         is_mut_ref,
                     ){
                         ArgType::Boxed(_) => {
-                            abort!(first_gen_arg.span(), "Method {}, argument {}. Savefile does not support a Box containing another Box: {}", method_name, arg_name, typ.to_token_stream())
+                            abort!(first_gen_arg.span(), "Method '{}', argument {}. Savefile does not support a Box containing another Box: {}", method_name, arg_name, typ.to_token_stream())
                         }
-                        ArgType::PlainData(_) | ArgType::Str => {
+                        ArgType::PlainData(_) | ArgType::Str(_) => {
                             return ArgType::PlainData(typ.clone()); //Box<plaintype> is itself a plaintype. So handle it as such. It can matter, if Box<T> implements Serializable, when T does not. (example: str)
                         }
                         ArgType::Slice(slicetype) => {
@@ -205,11 +205,11 @@ pub(crate) fn parse_box_type(
                                     return ArgType::Slice(slicetype);
                                 }
                                 _x =>
-                                    abort!(angargs.span(), "Method {}, argument {}. Savefile does not support a Box containing a slice of anything complex, like: {}", method_name, arg_name, typ.to_token_stream())
+                                    abort!(angargs.span(), "Method '{}', argument {}. Savefile does not support a Box containing a slice of anything complex, like: {}", method_name, arg_name, typ.to_token_stream())
                             }
                         }
                         ArgType::Reference(_, _) => {
-                            abort!(first_gen_arg.span(), "Method {}, argument {}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", method_name, arg_name, typ.to_token_stream());
+                            abort!(first_gen_arg.span(), "Method '{}', argument {}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", method_name, arg_name, typ.to_token_stream());
                         }
                         x@ArgType::Trait(_, _) |
                         x@ArgType::Fn(_, _, _, _) => {
@@ -220,7 +220,7 @@ pub(crate) fn parse_box_type(
                 _ => {
                     abort!(
                         typ.span(),
-                        "Method {}, argument {}, unsupported Box-type: {}",
+                        "Method '{}', argument {}, unsupported Box-type: {}",
                         method_name,
                         arg_name,
                         typ.to_token_stream()
@@ -231,7 +231,7 @@ pub(crate) fn parse_box_type(
         _ => {
             abort!(
                 typ.span(),
-                "Method {}, argument {}, unsupported Box-type: {}",
+                "Method '{}', argument {}, unsupported Box-type: {}",
                 method_name,
                 arg_name,
                 typ.to_token_stream()
@@ -258,16 +258,24 @@ fn parse_type(
             //argtype = ArgType::PlainData(typ.to_token_stream());
         }
         Type::Reference(typref) => {
+            let is_static_lifetime;
             if typref.lifetime.is_some() {
-                abort!(
-                    typref.lifetime.span(),
-                    "Method {}, argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
-                    method_name,
-                    arg_name
-                );
+                match &typref.lifetime {
+                    Some(lifetime) if lifetime.ident == "static" => {
+                        is_static_lifetime = true;
+                    }
+                    _ => abort!(
+                        typref.lifetime.span(),
+                        "Method '{}', argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
+                        method_name,
+                        arg_name
+                    )
+                }
+            } else {
+                is_static_lifetime = false;
             }
             if is_reference {
-                abort!(typ.span(), "Method {}, argument {}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", method_name, arg_name, typ.to_token_stream());
+                abort!(typ.span(), "Method '{}', argument {}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", method_name, arg_name, typ.to_token_stream());
             }
 
             let inner = parse_type(
@@ -280,8 +288,8 @@ fn parse_type(
                 true,
                 typref.mutability.is_some(),
             );
-            if let ArgType::Str = inner {
-                return ArgType::Str; //Str is a special case, it is always a reference
+            if let ArgType::Str(_) = inner {
+                return ArgType::Str(is_static_lifetime); //Str is a special case, it is always a reference
             }
             return ArgType::Reference(Box::new(inner), typref.mutability.is_some());
         }
@@ -295,14 +303,14 @@ fn parse_type(
             if !is_reference {
                 abort!(
                     slice.span(),
-                    "Method {}, argument {}: Slices must always be behind references. Try adding a '&' to the type: {}",
+                    "Method '{}', argument {}: Slices must always be behind references. Try adding a '&' to the type: {}",
                     method_name,
                     arg_name,
                     typ.to_token_stream()
                 );
             }
             if is_mut_ref {
-                abort!(typ.span(), "Method {}, argument {}: Mutable refernces are not supported by savefile-abi, except for FnMut-trait objects. {}", method_name, arg_name, typ.to_token_stream());
+                abort!(typ.span(), "Method '{}', argument {}: Mutable refernces are not supported by savefile-abi, except for FnMut-trait objects. {}", method_name, arg_name, typ.to_token_stream());
             }
             let argtype = parse_type(
                 version,
@@ -318,7 +326,7 @@ fn parse_type(
         }
         Type::TraitObject(trait_obj) => {
             if !is_reference {
-                abort!(trait_obj.span(), "Method {}, argument {}: Trait objects must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
+                abort!(trait_obj.span(), "Method '{}', argument {}: Trait objects must always be behind references. Try adding a '&' to the type: {}", method_name, arg_name, typ.to_token_stream());
             }
             if trait_obj.dyn_token.is_some() {
                 let type_bounds: Vec<_> = trait_obj
@@ -334,7 +342,7 @@ fn parse_type(
                         TypeParamBound::Lifetime(lt) => {
                             abort!(
                                 lt.span(),
-                                "Method {}, argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
+                                "Method '{}', argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
                                 method_name,
                                 arg_name
                             );
@@ -342,10 +350,10 @@ fn parse_type(
                     })
                     .collect();
                 if type_bounds.len() == 0 {
-                    abort!(trait_obj.bounds.span(), "Method {}, argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
+                    abort!(trait_obj.bounds.span(), "Method '{}', argument {}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", method_name, arg_name);
                 }
                 if type_bounds.len() > 1 {
-                    abort!(trait_obj.bounds.span(), "Method {}, argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
+                    abort!(trait_obj.bounds.span(), "Method '{}', argument {}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", method_name, arg_name, trait_obj);
                 }
                 let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
 
@@ -353,17 +361,17 @@ fn parse_type(
                     if bound.ident == "FnOnce" {
                         abort!(
                             bound.ident.span(),
-                            "Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?",
+                            "Method '{}', argument {}, FnOnce is not supported. Maybe you can use FnMut instead?",
                             method_name,
                             arg_name
                         );
                     }
                     if bound.ident == "Fn" && is_mut_ref {
-                        abort!(bound.ident.span(), "Method {}, argument {}: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead..", method_name, arg_name);
+                        abort!(bound.ident.span(), "Method '{}', argument {}: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead..", method_name, arg_name);
                     }
 
                     if bound.ident == "FnMut" && !is_mut_ref {
-                        abort!(bound.ident.span(), "Method {}, argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
+                        abort!(bound.ident.span(), "Method '{}', argument {}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", method_name, arg_name);
                     }
                     let fn_decl = bound.to_token_stream();
                     match &bound.arguments {
@@ -390,7 +398,7 @@ fn parse_type(
             } else {
                 abort!(
                     trait_obj.span(),
-                    "Method {}, argument {}, reference to trait objects without 'dyn' are not supported.",
+                    "Method '{}', argument {}, reference to trait objects without 'dyn' are not supported.",
                     method_name,
                     arg_name
                 );
@@ -408,7 +416,7 @@ fn parse_type(
                         "Savefile does not support the type 'str' (but it does support '&str')."
                     );
                 }
-                return ArgType::Str;
+                return ArgType::Str(false); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
             } else if last_seg.ident == "Box" {
                 if is_reference {
                     abort!(last_seg.ident.span(), "Savefile does not support reference to Box. This is also generally not very useful, just use a regular reference for arguments.");
@@ -431,7 +439,7 @@ fn parse_type(
         _ => {
             abort!(
                 typ.span(),
-                "Method {}, argument {}, type is unsupported by savefile-abi: {}",
+                "Method '{}', argument {}, type is unsupported by savefile-abi: {}",
                 method_name,
                 arg_name,
                 typ.to_token_stream()
@@ -441,7 +449,7 @@ fn parse_type(
     if is_mut_ref {
         abort!(
             typ.span(),
-            "Method {}, argument {}: Mutable references are not supported by savefile-abi (except for trait objects)",
+            "Method '{}', argument {}: Mutable references are not supported by savefile-abi (except for trait objects)",
             method_name,
             arg_name
         );
@@ -536,7 +544,7 @@ impl ArgType {
                         _ => None,
                     },
                     ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
-                    ArgType::Str => None,
+                    ArgType::Str(_) => None,
                     ArgType::Reference(..) => None,
                     ArgType::Slice(_) => None,
                 };
@@ -576,7 +584,7 @@ impl ArgType {
                     known_size_align_of_pointer1: None, //Pointer to pointer not even supported
                 }
             }
-            ArgType::Str => {
+            ArgType::Str(_) => {
                 TypeInstruction {
                     //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
                     callee_trampoline_temp_variable_declaration1: quote! {},
@@ -883,7 +891,7 @@ pub(super) fn generate_method_definitions(
             &mut *name_generator,
             extra_definitions,
             false,
-            false,
+            false
         );
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
@@ -975,6 +983,13 @@ pub(super) fn generate_method_definitions(
             abort!(
                 ret_type.span(),
                 "Method '{}': savefile-abi does not support methods returning references.",
+                method_name
+            );
+        }
+        if let ArgType::Str(false) = &parsed_ret_type {
+            abort!(
+                ret_type.span(),
+                "Method '{}': savefile-abi does not support methods returning &str. Use \"String\" or \"&'static str\" instead",
                 method_name
             );
         }

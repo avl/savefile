@@ -32,4 +32,6 @@ jobs:
       run: cargo +stable build -p savefile-min-build
     - name: compile_tests (stable)
       run: cd compile_tests && cargo +stable test
+    - name: Miri (nightly)
+      run: cd savefile-test && cargo +nightly miri test
 

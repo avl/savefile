@@ -35,6 +35,8 @@ pub trait TestInterface {
     fn tuple_add3(&self, a: (u32, u32, u32), b: (u32, u32, u32)) -> (u32, u32, u32);
 
     fn boxes(&self, a: Box<u32>) -> Box<u32>;
+
+    fn get_static_str(&self) -> &'static str;
 }
 
 #[derive(Default)]
@@ -112,6 +114,10 @@ impl TestInterface for TestInterfaceImpl {
     fn count_chars_str(&self, x: &str) -> usize {
         x.len()
     }
+
+    fn get_static_str(&self) -> &'static str {
+        "hello world"
+    }
 }
 
 savefile_abi_export!(TestInterfaceImpl, TestInterface);
@@ -133,6 +139,7 @@ fn test_basic_call_abi() {
 
     assert_eq!(conn.count_chars(&"hejsan".to_string()), 6);
     assert_eq!(conn.count_chars_str("hejsan"), 6);
+    assert_eq!(conn.get_static_str(), "hello world");
 }
 
 #[test]
