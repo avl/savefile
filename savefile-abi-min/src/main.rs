@@ -27,7 +27,7 @@ pub fn call_add(adder: &AbiConnection<dyn AdderInterface>, a: u32, b: u32) -> u3
     adder.add_simple(a, b)
 }
 #[no_mangle]
-pub extern fn call_do_nothing(adder: &AbiConnection<dyn AdderInterface>) {
+pub extern "C" fn call_do_nothing(adder: &AbiConnection<dyn AdderInterface>) {
     adder.do_nothing();
 }
 

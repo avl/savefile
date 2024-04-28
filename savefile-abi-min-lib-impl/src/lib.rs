@@ -35,7 +35,6 @@ impl AdderInterface for AdderImplementation {
         x + y
     }
 
-    fn do_nothing(&self) {
-    }
+    fn do_nothing(&self) {}
 }
 savefile_abi_export!(AdderImplementation, AdderInterface);

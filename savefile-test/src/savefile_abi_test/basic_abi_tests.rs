@@ -100,8 +100,8 @@ impl TestInterface for TestInterfaceImpl {
 
     fn string_arrays_add(&self, a: &[String], b: &[String]) -> Vec<String> {
         let mut ret = vec![];
-        for (a1,b1) in a.iter().zip(b.iter()) {
-            ret.push(a1.to_string() +  b1);
+        for (a1, b1) in a.iter().zip(b.iter()) {
+            ret.push(a1.to_string() + b1);
         }
         ret
     }
@@ -133,7 +133,6 @@ fn test_basic_call_abi() {
 
     assert_eq!(conn.count_chars(&"hejsan".to_string()), 6);
     assert_eq!(conn.count_chars_str("hejsan"), 6);
-
 }
 
 #[test]
@@ -146,7 +145,6 @@ fn test_slices() {
 
     let t = conn.string_arrays_add(&["hello ".to_string()], &["world".to_string()]);
     assert_eq!(t, vec!["hello world"]);
-
 }
 
 #[test]
@@ -202,7 +200,6 @@ fn test_abi_removed_with_custom_default() {
     let roundtripped: u32 = Deserializer::bare_deserialize(&mut Cursor::new(&data), 0).unwrap();
     assert_eq!(roundtripped, 42);
 }
-
 
 #[cfg(feature = "nightly")]
 #[cfg(not(miri))]

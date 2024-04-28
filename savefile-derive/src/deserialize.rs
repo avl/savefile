@@ -1,8 +1,8 @@
 use common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo, RemovedType};
 use get_enum_size;
 use proc_macro2::{Literal, TokenStream};
-use syn::DeriveInput;
 use syn::spanned::Spanned;
+use syn::DeriveInput;
 
 fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
     let span = proc_macro2::Span::call_site();
@@ -53,12 +53,18 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             quote_spanned! { span => Default::default() }
         };
         if field_from_version > field_to_version {
-            abort!(field.field_span, "Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0");
+            abort!(
+                field.field_span,
+                "Version range is reversed. This is not allowed. Version must be range like 0..2, not like 2..0"
+            );
         }
 
         let src = if field_from_version == 0 && field_to_version == std::u32::MAX && !verinfo.ignore {
             if is_removed.is_removed() {
-                abort!(field_type.span(), "The Removed type may only be used for fields which have an old version.");
+                abort!(
+                    field_type.span(),
+                    "The Removed type may only be used for fields which have an old version."
+                );
                 //TODO: Better message, tell user how to do this annotation
             };
             quote_spanned! { span =>

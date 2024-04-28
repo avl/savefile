@@ -18,7 +18,6 @@ extern crate test;
 #[macro_use]
 extern crate savefile_derive;
 
-
 extern crate bit_set;
 extern crate bit_vec;
 extern crate byteorder;
@@ -829,6 +828,7 @@ use arrayvec::ArrayString;
 use quickcheck::{Arbitrary, Gen};
 use rustc_hash::{FxHashMap, FxHashSet};
 use savefile::{diff_schema, save_compressed, VecOrStringLayout};
+use savefile_abi::AbiConnection;
 use smallvec::alloc::collections::BTreeMap;
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -840,7 +840,6 @@ use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, 
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use savefile_abi::AbiConnection;
 
 #[test]
 pub fn test_atomic() {
@@ -1612,16 +1611,13 @@ fn test_good_enum() {
     assert!(unsafe { GoodEnum::repr_c_optimization_safe(0) }.is_yes())
 }
 
-
 #[savefile_abi_exportable(version = 0)]
 pub trait TestAddInterface {
-    fn simple_add(&self, x:u32, y:u32) -> u32;
+    fn simple_add(&self, x: u32, y: u32) -> u32;
 }
 
 pub fn simple_add_call(conn: &AbiConnection<dyn TestAddInterface>, x: u32, y: u32) -> u32 {
-
-    (*conn).simple_add(x,y)
-
+    (*conn).simple_add(x, y)
 }
 pub struct TestAddInterfaceImpl {}
 impl TestAddInterface for TestAddInterfaceImpl {

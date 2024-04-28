@@ -1,48 +1,42 @@
-
+use common::{compile_time_check_reprc, compile_time_size};
+use proc_macro2::{Ident, Literal, Span, TokenStream};
+use quote::ToTokens;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
-use proc_macro2::{Ident, Literal, Span, TokenStream};
-use quote::{ToTokens};
-use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound,  TypeTuple};
 use syn::punctuated::Punctuated;
-use common::{compile_time_check_reprc, compile_time_size};
 use syn::spanned::Spanned;
+use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound, TypeTuple};
 
-
-const POINTER_SIZE:usize = std::mem::size_of::<*const ()>();
+const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
-const FAT_POINTER_SIZE:usize = 2*POINTER_SIZE;
+const FAT_POINTER_SIZE: usize = 2 * POINTER_SIZE;
 #[allow(unused)]
-const FAT_POINTER_ALIGNMENT:usize = POINTER_SIZE;
+const FAT_POINTER_ALIGNMENT: usize = POINTER_SIZE;
 
-const MEGA_FAT_POINTER: (usize,usize) = (FAT_POINTER_SIZE + POINTER_SIZE, POINTER_SIZE);
-const FAT_POINTER:(usize,usize) = (2*POINTER_SIZE,POINTER_SIZE);
+const MEGA_FAT_POINTER: (usize, usize) = (FAT_POINTER_SIZE + POINTER_SIZE, POINTER_SIZE);
+const FAT_POINTER: (usize, usize) = (2 * POINTER_SIZE, POINTER_SIZE);
 
-#[derive(PartialEq,Eq,Debug,Clone,Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub(crate) struct FnWrapperKey {
     fnkind: Ident,
     ret: Type,
     args: Vec<Type>,
     ismut: bool,
-    owning: bool
+    owning: bool,
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ClosureWrapperNames {
     trait_name: Ident,
     wrapper_struct_name: Ident,
 }
 fn get_type(ret_type: &ReturnType) -> Type {
     match ret_type {
-        ReturnType::Default => {
-            Type::Tuple(TypeTuple{
-                paren_token: Default::default(),
-                elems: Punctuated::new()
-            })
-        }
-        ReturnType::Type(_, typ) => {
-            (**typ).clone()
-        }
+        ReturnType::Default => Type::Tuple(TypeTuple {
+            paren_token: Default::default(),
+            elems: Punctuated::new(),
+        }),
+        ReturnType::Type(_, typ) => (**typ).clone(),
     }
 }
 
@@ -55,23 +49,27 @@ fn emit_closure_helpers(
     ismut: bool,
     extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     fnkind: &Ident, //Fn or FnMut
-    owning: bool
+    owning: bool,
 ) -> ClosureWrapperNames /*wrapper name*/ {
-
     let key = FnWrapperKey {
-        fnkind:fnkind.clone(), ismut, owning,
+        fnkind: fnkind.clone(),
+        ismut,
+        owning,
         args: args.iter().cloned().collect(),
-        ret: get_type(&return_type)
+        ret: get_type(&return_type),
     };
-    if let Some((names,_)) = extra_definitions.get(&key) {
+    if let Some((names, _)) = extra_definitions.get(&key) {
         return names.clone();
     }
     let cnt = ID_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let temp_trait_name = Ident::new(&format!("__{}_{}", cnt, if owning {"owning_"} else {""}), Span::call_site());
+    let temp_trait_name = Ident::new(
+        &format!("__{}_{}", cnt, if owning { "owning_" } else { "" }),
+        Span::call_site(),
+    );
     let temp_trait_name_wrapper = Ident::new(&format!("{}wrapper", temp_trait_name), Span::call_site());
     let names = ClosureWrapperNames {
         wrapper_struct_name: temp_trait_name_wrapper.clone(),
-        trait_name: temp_trait_name.clone()
+        trait_name: temp_trait_name.clone(),
     };
 
     let mut formal_parameter_declarations = vec![];
@@ -146,7 +144,7 @@ pub(crate) enum ArgType {
     Fn(
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
         Vec<Type>,   /*arg types*/
-        ReturnType, //Ret-type
+        ReturnType,  //Ret-type
         bool,        /*ismut (FnMut)*/
     ),
 }
@@ -157,14 +155,18 @@ pub(crate) struct MethodDefinitionComponents {
     pub(crate) caller_method_trampoline: TokenStream,
 }
 
-pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_name: &str, typ: &Type,
-                  name_generator: &mut impl FnMut() -> String,
-                  extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
-                  is_reference: bool,
-                  is_mut_ref: bool,
-) -> ArgType
-{
-    if path.segments.len()!=1 {
+pub(crate) fn parse_box_type(
+    version: u32,
+    path: &Path,
+    method_name: &Ident,
+    arg_name: &str,
+    typ: &Type,
+    name_generator: &mut impl FnMut() -> String,
+    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    is_reference: bool,
+    is_mut_ref: bool,
+) -> ArgType {
+    if path.segments.len() != 1 {
         abort!(path.span(), "Savefile does not support types named 'Box', unless they are the standard type Box, and it must be specified as 'Box', without any namespace");
     }
     if is_reference {
@@ -180,8 +182,7 @@ pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_
             }
 
             match first_gen_arg {
-                GenericArgument::Type(angargs) =>
-                {
+                GenericArgument::Type(angargs) => {
                     match parse_type(
                         version,
                         arg_name,
@@ -215,19 +216,25 @@ pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_
                             ArgType::Boxed(Box::new(x))
                         }
                     }
-                },
+                }
                 _ => {
-                    abort!(typ.span(),
+                    abort!(
+                        typ.span(),
                         "Method {}, argument {}, unsupported Box-type: {}",
-                        method_name, arg_name, typ.to_token_stream()
+                        method_name,
+                        arg_name,
+                        typ.to_token_stream()
                     );
                 }
             }
         }
         _ => {
-            abort!(typ.span(),
+            abort!(
+                typ.span(),
                 "Method {}, argument {}, unsupported Box-type: {}",
-                method_name, arg_name, typ.to_token_stream()
+                method_name,
+                arg_name,
+                typ.to_token_stream()
             );
         }
     }
@@ -252,9 +259,11 @@ fn parse_type(
         }
         Type::Reference(typref) => {
             if typref.lifetime.is_some() {
-                abort!(typref.lifetime.span(),
+                abort!(
+                    typref.lifetime.span(),
                     "Method {}, argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
-                    method_name, arg_name
+                    method_name,
+                    arg_name
                 );
             }
             if is_reference {
@@ -269,7 +278,8 @@ fn parse_type(
                 &mut *name_generator,
                 extra_definitions,
                 true,
-                typref.mutability.is_some());
+                typref.mutability.is_some(),
+            );
             if let ArgType::Str = inner {
                 return ArgType::Str; //Str is a special case, it is always a reference
             }
@@ -283,7 +293,8 @@ fn parse_type(
         }
         Type::Slice(slice) => {
             if !is_reference {
-                abort!(slice.span(),
+                abort!(
+                    slice.span(),
                     "Method {}, argument {}: Slices must always be behind references. Try adding a '&' to the type: {}",
                     method_name,
                     arg_name,
@@ -301,7 +312,7 @@ fn parse_type(
                 &mut *name_generator,
                 extra_definitions,
                 is_reference,
-                is_mut_ref
+                is_mut_ref,
             );
             return ArgType::Slice(Box::new(argtype));
         }
@@ -324,7 +335,8 @@ fn parse_type(
                             abort!(
                                 lt.span(),
                                 "Method {}, argument {}: Specifying lifetimes is not supported by Savefile-Abi.",
-                                method_name, arg_name
+                                method_name,
+                                arg_name
                             );
                         }
                     })
@@ -342,7 +354,8 @@ fn parse_type(
                         abort!(
                             bound.ident.span(),
                             "Method {}, argument {}, FnOnce is not supported. Maybe you can use FnMut instead?",
-                            method_name, arg_name
+                            method_name,
+                            arg_name
                         );
                     }
                     if bound.ident == "Fn" && is_mut_ref {
@@ -355,9 +368,8 @@ fn parse_type(
                     let fn_decl = bound.to_token_stream();
                     match &bound.arguments {
                         PathArguments::Parenthesized(pararg) => {
-
                             /*let temp_name =
-                                Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());*/
+                            Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());*/
                             return ArgType::Fn(
                                 fn_decl,
                                 pararg.inputs.iter().cloned().collect(),
@@ -366,7 +378,10 @@ fn parse_type(
                             );
                         }
                         _ => {
-                            abort!(bound.arguments.span(), "Fn/FnMut arguments must be enclosed in parenthesis")
+                            abort!(
+                                bound.arguments.span(),
+                                "Fn/FnMut arguments must be enclosed in parenthesis"
+                            )
                         }
                     }
                 } else {
@@ -376,27 +391,39 @@ fn parse_type(
                 abort!(
                     trait_obj.span(),
                     "Method {}, argument {}, reference to trait objects without 'dyn' are not supported.",
-                    method_name, arg_name
+                    method_name,
+                    arg_name
                 );
             }
         }
         Type::Path(path) => {
             let last_seg = path.path.segments.iter().last().expect("Missing path segments");
             if last_seg.ident == "str" {
-                if path.path.segments.len()!=1 {
+                if path.path.segments.len() != 1 {
                     abort!(path.path.segments.span(), "Savefile does not support types named 'str', unless they are the standard type str, and it must be specified as 'str', without any namespace");
                 }
                 if !is_reference {
-                    abort!(path.span(), "Savefile does not support the type 'str' (but it does support '&str').");
+                    abort!(
+                        path.span(),
+                        "Savefile does not support the type 'str' (but it does support '&str')."
+                    );
                 }
                 return ArgType::Str;
-            }
-            else
-            if last_seg.ident == "Box" {
+            } else if last_seg.ident == "Box" {
                 if is_reference {
                     abort!(last_seg.ident.span(), "Savefile does not support reference to Box. This is also generally not very useful, just use a regular reference for arguments.");
                 }
-                return parse_box_type(version,&path.path, method_name, arg_name, typ, name_generator, extra_definitions, is_reference, is_mut_ref);
+                return parse_box_type(
+                    version,
+                    &path.path,
+                    method_name,
+                    arg_name,
+                    typ,
+                    name_generator,
+                    extra_definitions,
+                    is_reference,
+                    is_mut_ref,
+                );
             } else {
                 rawtype = typ;
             }
@@ -405,12 +432,19 @@ fn parse_type(
             abort!(
                 typ.span(),
                 "Method {}, argument {}, type is unsupported by savefile-abi: {}",
-                method_name, arg_name, typ.to_token_stream()
+                method_name,
+                arg_name,
+                typ.to_token_stream()
             );
         }
     }
     if is_mut_ref {
-        abort!(typ.span(), "Method {}, argument {}: Mutable references are not supported by savefile-abi (except for trait objects)", method_name, arg_name);
+        abort!(
+            typ.span(),
+            "Method {}, argument {}: Mutable references are not supported by savefile-abi (except for trait objects)",
+            method_name,
+            arg_name
+        );
     }
     ArgType::PlainData(rawtype.clone())
 }
@@ -427,9 +461,9 @@ struct TypeInstruction {
     schema: TokenStream,
     arg_type1: TokenStream,
 
-    known_size_align1: Option<(usize,usize)>,
+    known_size_align1: Option<(usize, usize)>,
     /// The size and alignment of a pointer to this type
-    known_size_align_of_pointer1: Option<(usize,usize)>,
+    known_size_align_of_pointer1: Option<(usize, usize)>,
     /// The type that this parameter is primarily deserialized into, on the
     /// deserialized side (i.e, callee for arguments, caller for return value);
     deserialized_type: TokenStream,
@@ -445,30 +479,45 @@ fn mutsymbol(ismut: bool) -> TokenStream {
 }
 
 impl ArgType {
-    fn get_instruction(&self, version: u32, arg_index: Option<usize>, arg_orig_name: &str, arg_name: &TokenStream, nesting_level: u32, take_ownership: bool,
-        extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>
+    fn get_instruction(
+        &self,
+        version: u32,
+        arg_index: Option<usize>,
+        arg_orig_name: &str,
+        arg_name: &TokenStream,
+        nesting_level: u32,
+        take_ownership: bool,
+        extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     ) -> TypeInstruction {
-        let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name,nesting_level), Span::call_site());
+        let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name, nesting_level), Span::call_site());
 
         let layout_compatible = if let Some(arg_index) = arg_index {
             quote!(compatibility_mask&(1<<#arg_index) != 0)
         } else {
-            quote!( false )
+            quote!(false)
         };
         match self {
             ArgType::Reference(arg_type, is_mut) => {
-
                 //let mutsym = mutsymbol(*is_mut);
-                let TypeInstruction{
+                let TypeInstruction {
                     callee_trampoline_temp_variable_declaration1,
                     callee_trampoline_variable_deserializer1,
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1,
                     schema,
                     arg_type1,
-                    known_size_align1:_,
-                    known_size_align_of_pointer1, deserialized_type
-                } = arg_type.get_instruction(version, arg_index, arg_orig_name, arg_name, nesting_level+1, false, extra_definitions);
+                    known_size_align1: _,
+                    known_size_align_of_pointer1,
+                    deserialized_type,
+                } = arg_type.get_instruction(
+                    version,
+                    arg_index,
+                    arg_orig_name,
+                    arg_name,
+                    nesting_level + 1,
+                    false,
+                    extra_definitions,
+                );
 
                 let known_size_align1 = match &**arg_type {
                     ArgType::PlainData(plain) => {
@@ -482,24 +531,21 @@ impl ArgType {
                             None
                         }
                     }
-                    ArgType::Boxed(inner) => {
-                        match &**inner {
-                            ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
-                            _ => None,
-                        }
-                    }
-                    ArgType::Fn(..) | ArgType::Trait(..)  => Some(MEGA_FAT_POINTER),
+                    ArgType::Boxed(inner) => match &**inner {
+                        ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
+                        _ => None,
+                    },
+                    ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
                     ArgType::Str => None,
                     ArgType::Reference(..) => None,
                     ArgType::Slice(_) => None,
                 };
 
-                let (mutsymbol,read_raw_ptr) = if *is_mut {
-                    (quote!( mut ), quote!( read_raw_ptr_mut ))
+                let (mutsymbol, read_raw_ptr) = if *is_mut {
+                    (quote!(mut), quote!(read_raw_ptr_mut))
                 } else {
-                    (quote!( ), quote!( read_raw_ptr ))
+                    (quote!(), quote!(read_raw_ptr))
                 };
-
 
                 TypeInstruction {
                     callee_trampoline_temp_variable_declaration1: quote! {
@@ -507,7 +553,7 @@ impl ArgType {
                         let #mutsymbol #temp_arg_name;
                     },
                     deserialized_type,
-                    arg_type1: quote!( & arg_type1 ),
+                    arg_type1: quote!(&arg_type1),
                     callee_trampoline_variable_deserializer1: quote! {
                         if #layout_compatible {
                             unsafe { &#mutsymbol *(deserializer. #read_raw_ptr ::<#arg_type1>()?) }
@@ -534,7 +580,7 @@ impl ArgType {
                 TypeInstruction {
                     //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
                     callee_trampoline_temp_variable_declaration1: quote! {},
-                    deserialized_type: quote!{String},
+                    deserialized_type: quote! {String},
                     callee_trampoline_variable_deserializer1: quote! {
                         {
                             let ptr = deserializer.read_ptr()? as *const u8;
@@ -552,26 +598,33 @@ impl ArgType {
                         }
                     },
                     //caller_fn_arg1: quote! {#arg_name : &str},
-                    schema: quote!( Schema::Str ),
+                    schema: quote!(Schema::Str),
 
-                    arg_type1: quote!( str ),
+                    arg_type1: quote!(str),
                     known_size_align1: None,
                     known_size_align_of_pointer1: None,
                 }
             }
             ArgType::Slice(arg_type) => {
-                let TypeInstruction{
+                let TypeInstruction {
                     callee_trampoline_temp_variable_declaration1,
-                    callee_trampoline_variable_deserializer1:_,
+                    callee_trampoline_variable_deserializer1: _,
                     caller_arg_serializer_temp1,
-                    caller_arg_serializer1:_,
+                    caller_arg_serializer1: _,
                     schema,
                     arg_type1,
                     known_size_align1,
-                    known_size_align_of_pointer1:_,
-                    deserialized_type:_
-                } = arg_type.get_instruction(version, arg_index,arg_orig_name, arg_name, nesting_level+1, false, extra_definitions);
-
+                    known_size_align_of_pointer1: _,
+                    deserialized_type: _,
+                } = arg_type.get_instruction(
+                    version,
+                    arg_index,
+                    arg_orig_name,
+                    arg_name,
+                    nesting_level + 1,
+                    false,
+                    extra_definitions,
+                );
 
                 TypeInstruction {
                     //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
@@ -579,7 +632,7 @@ impl ArgType {
                         #callee_trampoline_temp_variable_declaration1
                         let #temp_arg_name;
                     },
-                    deserialized_type: quote!{Vec<_>},
+                    deserialized_type: quote! {Vec<_>},
                     callee_trampoline_variable_deserializer1: quote! {
                         {
                             #temp_arg_name = deserialize_slice_as_vec::<_,#arg_type1>(&mut deserializer)?;
@@ -593,46 +646,57 @@ impl ArgType {
                     //caller_fn_arg1: quote! {#arg_name : &[#arg_type]},
                     schema: quote!( Schema::Slice(std::boxed::Box::new(#schema)) ),
                     arg_type1: quote!( [#arg_type1] ),
-                    known_size_align1: if known_size_align1.is_some() {Some(FAT_POINTER)} else {None},
+                    known_size_align1: if known_size_align1.is_some() {
+                        Some(FAT_POINTER)
+                    } else {
+                        None
+                    },
                     known_size_align_of_pointer1: None,
                 }
             }
-            ArgType::PlainData(arg_type) => {
-                
-                TypeInstruction {
-                    deserialized_type: quote!{#arg_type},
-                    callee_trampoline_temp_variable_declaration1: quote!(),
-                    callee_trampoline_variable_deserializer1: quote! {
-                        <#arg_type as Deserialize>::deserialize(&mut deserializer)?
-                    },
-                    caller_arg_serializer_temp1: quote!(),
-                    caller_arg_serializer1: quote! {
-                        #arg_name.serialize(&mut serializer)
-                    },
-                    schema: quote!( <#arg_type as WithSchema>::schema(version) ),
-                    known_size_align1: if compile_time_check_reprc(arg_type) {
-                        compile_time_size(arg_type)
-                    } else { None },
-                    arg_type1: arg_type.to_token_stream(),
-                    known_size_align_of_pointer1: None,
-                }
-            }
+            ArgType::PlainData(arg_type) => TypeInstruction {
+                deserialized_type: quote! {#arg_type},
+                callee_trampoline_temp_variable_declaration1: quote!(),
+                callee_trampoline_variable_deserializer1: quote! {
+                    <#arg_type as Deserialize>::deserialize(&mut deserializer)?
+                },
+                caller_arg_serializer_temp1: quote!(),
+                caller_arg_serializer1: quote! {
+                    #arg_name.serialize(&mut serializer)
+                },
+                schema: quote!( <#arg_type as WithSchema>::schema(version) ),
+                known_size_align1: if compile_time_check_reprc(arg_type) {
+                    compile_time_size(arg_type)
+                } else {
+                    None
+                },
+                arg_type1: arg_type.to_token_stream(),
+                known_size_align_of_pointer1: None,
+            },
             ArgType::Boxed(inner_arg_type) => {
-                let TypeInstruction{
+                let TypeInstruction {
                     callee_trampoline_temp_variable_declaration1,
                     callee_trampoline_variable_deserializer1,
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1,
                     schema,
                     arg_type1,
-                    known_size_align1:_,
-                    known_size_align_of_pointer1:_, 
-                    deserialized_type
-                } = inner_arg_type.get_instruction(version, arg_index, arg_orig_name,&quote!( #arg_name ), nesting_level+1, true, extra_definitions);
+                    known_size_align1: _,
+                    known_size_align_of_pointer1: _,
+                    deserialized_type,
+                } = inner_arg_type.get_instruction(
+                    version,
+                    arg_index,
+                    arg_orig_name,
+                    &quote!( #arg_name ),
+                    nesting_level + 1,
+                    true,
+                    extra_definitions,
+                );
 
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
-                    deserialized_type: quote!{Box<#deserialized_type>},
+                    deserialized_type: quote! {Box<#deserialized_type>},
                     callee_trampoline_temp_variable_declaration1: quote! {
                         #callee_trampoline_temp_variable_declaration1
                     },
@@ -648,15 +712,18 @@ impl ArgType {
                 }
             }
             ArgType::Trait(trait_name, ismut) => {
-
                 let trait_type = trait_name;
 
                 let newsymbol = quote! {new_from_ptr};
 
-                let owning = if take_ownership {quote!( Owning::Owned )} else {quote!(Owning::NotOwned)};
+                let owning = if take_ownership {
+                    quote!(Owning::Owned)
+                } else {
+                    quote!(Owning::NotOwned)
+                };
 
                 TypeInstruction {
-                    deserialized_type: quote!{ AbiConnection<dyn #trait_type> },
+                    deserialized_type: quote! { AbiConnection<dyn #trait_type> },
                     callee_trampoline_temp_variable_declaration1: quote! {},
                     callee_trampoline_variable_deserializer1: quote! {
                         {
@@ -671,7 +738,7 @@ impl ArgType {
                     },
                     schema: quote!( Schema::Trait(#ismut, <dyn #trait_name as AbiExportable>::get_definition(version)) ),
                     arg_type1: quote!( dyn #trait_name ),
-                    known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
+                    known_size_align1: Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
                     known_size_align_of_pointer1: None,
                 }
             }
@@ -679,19 +746,18 @@ impl ArgType {
                 let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_orig_name), Span::call_site());
                 let temp_arg_ser_name = Ident::new(&format!("temp_ser_{}", arg_orig_name), Span::call_site());
 
-
                 let wrapper_names = emit_closure_helpers(
                     version,
                     args,
                     ret_type.clone(),
                     *ismut,
                     extra_definitions,
-                    &Ident::new(if *ismut {"FnMut"} else {"Fn"}, Span::call_site()),
-                    take_ownership
+                    &Ident::new(if *ismut { "FnMut" } else { "Fn" }, Span::call_site()),
+                    take_ownership,
                 );
 
                 let temp_trait_name_wrapper = wrapper_names.wrapper_struct_name;
-                let temp_trait_type= wrapper_names.trait_name;
+                let temp_trait_type = wrapper_names.trait_name;
                 //let temp_trait_name_wrapper = Ident::new(&format!("{}_wrapper", temp_trait_type), Span::call_site());
 
                 let mutsymbol = if *ismut {
@@ -721,14 +787,18 @@ impl ArgType {
                         id
                     })
                     .collect();
-                let owning = if take_ownership {quote!( Owning::Owned )} else {quote!(Owning::NotOwned)};
+                let owning = if take_ownership {
+                    quote!(Owning::Owned)
+                } else {
+                    quote!(Owning::NotOwned)
+                };
 
                 let arg_access = if take_ownership {
-                    quote!{
+                    quote! {
                         #arg_name
                     }
                 } else {
-                    quote!{
+                    quote! {
                         #arg_name as *#mutorconst _
                     }
                 };
@@ -743,7 +813,7 @@ impl ArgType {
                 };
 
                 TypeInstruction {
-                    deserialized_type: quote!{AbiConnection::<dyn #temp_trait_type>},
+                    deserialized_type: quote! {AbiConnection::<dyn #temp_trait_type>},
                     callee_trampoline_temp_variable_declaration1: quote! {
                         let #mutsymbol #temp_arg_name;
                         let #mutsymbol #temp_arg_name2;
@@ -755,7 +825,7 @@ impl ArgType {
                             #temp_arg_name2
                         }
                     },
-                    caller_arg_serializer_temp1: quote!{
+                    caller_arg_serializer_temp1: quote! {
                         let #mutsymbol #temp_arg_ser_name;
                     },
 
@@ -770,7 +840,7 @@ impl ArgType {
                     arg_type1: quote! {dyn #fndef },
                     schema: quote!( Schema::FnClosure(#ismut, <dyn #temp_trait_type as AbiExportable >::get_definition(version)) ),
                     //arg_type1: Default::default(),
-                    known_size_align1: Some((FAT_POINTER_SIZE+POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
+                    known_size_align1: Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
                     known_size_align_of_pointer1: None,
                 }
             }
@@ -817,34 +887,39 @@ pub(super) fn generate_method_definitions(
         );
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
-        let instruction = argtype.get_instruction(version, Some(arg_index), &arg_name.to_string(),&arg_name.to_token_stream(), 0, true, extra_definitions);
+        let instruction = argtype.get_instruction(
+            version,
+            Some(arg_index),
+            &arg_name.to_string(),
+            &arg_name.to_token_stream(),
+            0,
+            true,
+            extra_definitions,
+        );
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
         callee_trampoline_real_method_invocation_arguments.push(
-            quote! {#arg_name}
-            //instruction.callee_trampoline_real_method_invocation_argument1
+            quote! {#arg_name}, //instruction.callee_trampoline_real_method_invocation_argument1
         );
         callee_trampoline_temp_variable_declaration.push(instruction.callee_trampoline_temp_variable_declaration1);
 
         let deserializer_expression = instruction.callee_trampoline_variable_deserializer1;
 
-        callee_trampoline_variable_deserializer.push( quote!( #arg_name = #deserializer_expression ; ) );
+        callee_trampoline_variable_deserializer.push(quote!( #arg_name = #deserializer_expression ; ));
         let arg_serializer = instruction.caller_arg_serializer1;
-        caller_arg_serializers.push(
-            quote!{
-                #arg_serializer.expect("Failed while serializing");
-            }
-        );
-        caller_fn_arg_list.push(quote!( #arg_name: #typ ));//instruction.caller_fn_arg1);
+        caller_arg_serializers.push(quote! {
+            #arg_serializer.expect("Failed while serializing");
+        });
+        caller_fn_arg_list.push(quote!( #arg_name: #typ )); //instruction.caller_fn_arg1);
         let schema = instruction.schema;
         //let can_be_sent_as_ref = instruction.can_be_sent_as_ref;
-        metadata_arguments.push(quote!{
+        metadata_arguments.push(quote! {
                         AbiMethodArgument {
                             schema: #schema,
                         }
         });
         if let Some(total_size) = &mut compile_time_known_size {
-            if let Some((known_size,_known_align)) = instruction.known_size_align1 {
+            if let Some((known_size, _known_align)) = instruction.known_size_align1 {
                 *total_size += known_size;
             } else {
                 compile_time_known_size = None;
@@ -869,28 +944,49 @@ pub(super) fn generate_method_definitions(
     };
     let return_value_schema;
 
-
     let caller_return_type;
-    let ret_deserializer ;
+    let ret_deserializer;
     let ret_temp_decl;
     let ret_serialize;
 
     let result_default;
     let return_ser_temp;
     if no_return {
-        return_value_schema = quote!( <() as WithSchema>::schema(0) );
-        ret_deserializer = quote!( () ); //Zero-sized, no deserialize actually needed
-        ret_serialize = quote!( () );
-        caller_return_type = quote!( () );
+        return_value_schema = quote!(<() as WithSchema>::schema(0));
+        ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
+        ret_serialize = quote!(());
+        caller_return_type = quote!(());
         ret_temp_decl = quote!();
         return_ser_temp = quote!();
-        result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ); //Safe, does not need drop and does not allocate
+        result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) );
+    //Safe, does not need drop and does not allocate
     } else {
-        let parsed_ret_type = parse_type(version, "___retval",&ret_type,&method_name,name_generator,extra_definitions,false,false);
+        let parsed_ret_type = parse_type(
+            version,
+            "___retval",
+            &ret_type,
+            &method_name,
+            name_generator,
+            extra_definitions,
+            false,
+            false,
+        );
         if let ArgType::Reference(..) = &parsed_ret_type {
-            abort!(ret_type.span(), "Method '{}': savefile-abi does not support methods returning references.", method_name);
+            abort!(
+                ret_type.span(),
+                "Method '{}': savefile-abi does not support methods returning references.",
+                method_name
+            );
         }
-        let instruction = parsed_ret_type.get_instruction(version, None, "ret", &Ident::new("ret", Span::call_site()).to_token_stream(), 0, true, extra_definitions);
+        let instruction = parsed_ret_type.get_instruction(
+            version,
+            None,
+            "ret",
+            &Ident::new("ret", Span::call_site()).to_token_stream(),
+            0,
+            true,
+            extra_definitions,
+        );
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
         return_ser_temp = instruction.caller_arg_serializer_temp1;
@@ -903,7 +999,6 @@ pub(super) fn generate_method_definitions(
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() );
     };
 
-
     let arg_buffer;
     let data_as_ptr;
     let data_length;
@@ -914,19 +1009,17 @@ pub(super) fn generate_method_definitions(
         // for many more types. But we can at least do it for the most simple.
 
         let compile_time_known_size = compile_time_known_size + 4; //Space for 'version'
-        arg_buffer = quote!{
+        arg_buffer = quote! {
             let mut rawdata = [0u8;#compile_time_known_size];
             let mut data = Cursor::new(&mut rawdata[..]);
         };
-        data_as_ptr = quote!( rawdata[..].as_ptr() );
+        data_as_ptr = quote!(rawdata[..].as_ptr());
         data_length = quote!( #compile_time_known_size );
     } else {
         arg_buffer = quote!( let mut data = FlexBuffer::new(); );
-        data_as_ptr = quote!( data.as_ptr() as *const u8 );
-        data_length = quote!( data.len() );
-
+        data_as_ptr = quote!(data.as_ptr() as *const u8);
+        data_length = quote!(data.len());
     }
-
 
     let _ = caller_return_type;
 
@@ -999,38 +1092,36 @@ pub(super) fn generate_method_definitions(
         }
     };
 
-
-
     let handle_retval;
     if no_return {
         handle_retval = quote!();
     } else {
-
         let ret_buffer;
         let data_as_ptr;
         let data_length;
-        let known_size = compile_time_check_reprc(&ret_type).then_some(compile_time_size(&ret_type)).flatten();
-        if let Some((compile_time_known_size,_align)) = known_size {
+        let known_size = compile_time_check_reprc(&ret_type)
+            .then_some(compile_time_size(&ret_type))
+            .flatten();
+        if let Some((compile_time_known_size, _align)) = known_size {
             // If we have simple type such as u8, u16 etc, we can sometimes
             // know at compile-time what the size of the args will be.
             // If the rust-compiler offered 'introspection', we could do this
             // for many more types. But we can at least do it for the most simple.
 
             let compile_time_known_size = compile_time_known_size + 4; //Space for 'version'
-            ret_buffer = quote!{
-            let mut rawdata = [0u8;#compile_time_known_size];
-            let mut data = Cursor::new(&mut rawdata[..]);
-        };
-            data_as_ptr = quote!( rawdata[..].as_ptr() );
+            ret_buffer = quote! {
+                let mut rawdata = [0u8;#compile_time_known_size];
+                let mut data = Cursor::new(&mut rawdata[..]);
+            };
+            data_as_ptr = quote!(rawdata[..].as_ptr());
             data_length = quote!( #compile_time_known_size );
         } else {
             ret_buffer = quote!( let mut data = FlexBuffer::new(); );
-            data_as_ptr = quote!( data.as_ptr() as *const u8 );
-            data_length = quote!( data.len() );
-
+            data_as_ptr = quote!(data.as_ptr() as *const u8);
+            data_length = quote!(data.len());
         }
 
-        handle_retval = quote!{
+        handle_retval = quote! {
             #ret_buffer
             let mut serializer = Serializer {
                 writer: &mut data,

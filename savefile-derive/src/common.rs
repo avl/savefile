@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
-use syn::{Expr, GenericParam, Generics, Lit, Type, WhereClause};
 use syn::spanned::Spanned;
+use syn::{Expr, GenericParam, Generics, Lit, Type, WhereClause};
 
 pub(crate) fn get_extra_where_clauses(
     gen2: &Generics,
@@ -221,11 +221,17 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                     serialized_type: version_type.to_string(),
                                 };
                                 if deser_types.iter().any(overlap(&item)) {
-                                    abort!(litstr2.span(), "#savefile_versions_as attributes may not specify overlapping ranges");
+                                    abort!(
+                                        litstr2.span(),
+                                        "#savefile_versions_as attributes may not specify overlapping ranges"
+                                    );
                                 }
                                 deser_types.push(item);
                             }
-                            _ => abort!(x.path.span(), "Unexpected datatype for value of attribute savefile_versions_as"),
+                            _ => abort!(
+                                x.path.span(),
+                                "Unexpected datatype for value of attribute savefile_versions_as"
+                            ),
                         }
                     }
 
@@ -239,7 +245,10 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 let (a, b) = (output[0].to_string(), output[1].to_string());
 
                                 if field_from_version.is_some() || field_to_version.is_some() {
-                                    abort!(litstr.span(), "There can only be one savefile_versions attribute on each field.")
+                                    abort!(
+                                        litstr.span(),
+                                        "There can only be one savefile_versions attribute on each field."
+                                    )
                                 }
                                 if a.trim() == "" {
                                     field_from_version = Some(0);
@@ -259,10 +268,16 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                                 if field_to_version.expect("Expected field_to_version")
                                     < field_from_version.expect("expected field_from_version")
                                 {
-                                    abort!(litstr.span(), "savefile_versions ranges must specify lower number first.");
+                                    abort!(
+                                        litstr.span(),
+                                        "savefile_versions ranges must specify lower number first."
+                                    );
                                 }
                             }
-                            _ => abort!(x.lit.span(), "Unexpected datatype for value of attribute savefile_versions"),
+                            _ => abort!(
+                                x.lit.span(),
+                                "Unexpected datatype for value of attribute savefile_versions"
+                            ),
                         }
                     }
                 }

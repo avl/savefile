@@ -810,7 +810,10 @@ pub enum AbiProtocol {
 }
 
 /// Parse the given RawAbiCallResult. If it concerns a success, then deserialize a return value using the given closure.
-pub fn parse_return_value_impl<T>(outcome: &RawAbiCallResult, deserialize_action: impl FnOnce(&mut Deserializer<Cursor<&[u8]>>) -> Result<T,SavefileError> ) -> Result<T, SavefileError> {
+pub fn parse_return_value_impl<T>(
+    outcome: &RawAbiCallResult,
+    deserialize_action: impl FnOnce(&mut Deserializer<Cursor<&[u8]>>) -> Result<T, SavefileError>,
+) -> Result<T, SavefileError> {
     match outcome {
         RawAbiCallResult::Success { data, len } => {
             let data = unsafe { std::slice::from_raw_parts(*data, *len) };
@@ -842,10 +845,18 @@ pub fn parse_return_value_impl<T>(outcome: &RawAbiCallResult, deserialize_action
 /// Parse an RawAbiCallResult instance into a Result<Box<dyn T>, SavefileError> .
 /// This is used on the caller side, and the type T will always be statically known.
 /// TODO: There's some duplicated code here, compare parse_return_value
-pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError> where T : AbiExportable + ?Sized {
-    parse_return_value_impl(outcome, |deserializer|{
-        let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
-        unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
+pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError>
+where
+    T: AbiExportable + ?Sized,
+{
+    parse_return_value_impl(outcome, |deserializer| {
+        let packaged = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+        unsafe {
+            Ok(Box::new(AbiConnection::<T>::from_raw_packaged(
+                packaged,
+                Owning::Owned,
+            )?))
+        }
     })
 }
 /// We never unload libraries which have been dynamically loaded, because of all the problems with
@@ -946,29 +957,30 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
 ) {
     let outcome = unsafe { &*outcome };
     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<T, SavefileError>>) };
-    result_receiver.write(
-        parse_return_value_impl(outcome, |deserializer|{
-            T::deserialize(deserializer)
-        })
-    );
+    result_receiver.write(parse_return_value_impl(outcome, |deserializer| {
+        T::deserialize(deserializer)
+    }));
 }
 
 /// Raw entry point for receiving return values from other shared libraries
 #[doc(hidden)]
-pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(
-    outcome: *const RawAbiCallResult,
-    result_receiver: *mut (),
-) where T: AbiExportable + ?Sized {
+pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(outcome: *const RawAbiCallResult, result_receiver: *mut ())
+where
+    T: AbiExportable + ?Sized,
+{
     let outcome = unsafe { &*outcome };
-    let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<Box<AbiConnection<T>>, SavefileError>>) };
-    result_receiver.write(
-        parse_return_value_impl(outcome, |deserializer|{
-            let packaged     = unsafe { PackagedTraitObject::deserialize(deserializer)? };
-            unsafe { Ok(Box::new(AbiConnection::<T>::from_raw_packaged(packaged, Owning::Owned)?)) }
-        })
-    );
+    let result_receiver =
+        unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<Box<AbiConnection<T>>, SavefileError>>) };
+    result_receiver.write(parse_return_value_impl(outcome, |deserializer| {
+        let packaged = unsafe { PackagedTraitObject::deserialize(deserializer)? };
+        unsafe {
+            Ok(Box::new(AbiConnection::<T>::from_raw_packaged(
+                packaged,
+                Owning::Owned,
+            )?))
+        }
+    }));
 }
-
 
 // Flex buffer is only used internally, and we don't need to provide
 // any of the regular convenience.
@@ -1025,20 +1037,25 @@ fn arg_layout_compatible(
                     .is_ok()
         }
         (Schema::Boxed(native_a), Schema::Boxed(native_b)) => {
-            let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective)
-            else {
+            let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective) else {
                 return false;
             };
-            arg_layout_compatible(&**native_a, &**native_b, &**effective_a2, &**effective_b2, effective_version)
+            arg_layout_compatible(
+                &**native_a,
+                &**native_b,
+                &**effective_a2,
+                &**effective_b2,
+                effective_version,
+            )
         }
         (Schema::Trait(s_a, _), Schema::Trait(s_b, _)) => {
             if s_a != s_b {
                 return false;
             }
             let (Schema::Trait(e_a2, effective_a2), Schema::Trait(e_b2, effective_b2)) = (a_effective, b_effective)
-                else {
-                    return false;
-                };
+            else {
+                return false;
+            };
             if e_a2 != e_b2 {
                 return false;
             }
@@ -1144,38 +1161,28 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 });
             }
             let mut mask = 0;
-            let mut check_diff = |effective1,effective2,native1,native2,index:Option<usize>|{
-
-                let effective_schema_diff = diff_schema(
-                    effective1,
-                    effective2,
-                    "".to_string(),
-                );
+            let mut check_diff = |effective1, effective2, native1, native2, index: Option<usize>| {
+                let effective_schema_diff = diff_schema(effective1, effective2, "".to_string());
                 if let Some(diff) = effective_schema_diff {
                     return Err(SavefileError::IncompatibleSchema {
-                        message:
-                            if let Some(index) = index {
-                                format!(
-                                    "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}: {}",
-                                    trait_name, &caller_native_method.name, index, diff)
-                            } else {
-                                format!(
-                                    "Incompatible ABI detected. Trait: {}, method: {}, return value differs: {}",
-                                    trait_name, &caller_native_method.name, diff)
-                            }
+                        message: if let Some(index) = index {
+                            format!(
+                                "Incompatible ABI detected. Trait: {}, method: {}, argument: #{}: {}",
+                                trait_name, &caller_native_method.name, index, diff
+                            )
+                        } else {
+                            format!(
+                                "Incompatible ABI detected. Trait: {}, method: {}, return value differs: {}",
+                                trait_name, &caller_native_method.name, diff
+                            )
+                        },
                     });
                 }
 
                 //let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
                 //let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
 
-                let comp = arg_layout_compatible(
-                    native1,
-                    native2,
-                    effective1,
-                    effective2,
-                    effective_version,
-                );
+                let comp = arg_layout_compatible(native1, native2, effective1, effective2, effective_version);
 
                 if comp {
                     if let Some(index) = index {
@@ -1185,14 +1192,12 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 Ok(())
             };
 
-
             for index in 0..caller_native_method.info.arguments.len() {
-
                 let effective1 = &caller_effective_method.info.arguments[index].schema;
                 let effective2 = &callee_effective_method.info.arguments[index].schema;
                 let native1 = &caller_native_method.info.arguments[index].schema;
                 let native2 = &callee_native_method.info.arguments[index].schema;
-                check_diff(effective1,effective2,native1,native2, Some(index))?;
+                check_diff(effective1, effective2, native1, native2, Some(index))?;
             }
 
             check_diff(
@@ -1200,8 +1205,8 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 &callee_effective_method.info.return_value,
                 &caller_native_method.info.return_value,
                 &callee_native_method.info.return_value,
-                None /*return value*/)?;
-
+                None, /*return value*/
+            )?;
 
             methods.push(AbiConnectionMethod {
                 method_name: caller_native_method.name,
@@ -1480,7 +1485,6 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
 /// # Safety
 /// The 'AbiProtocol' protocol must only contain valid data.
 pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
-
     match flag {
         AbiProtocol::RegularCall {
             trait_object,
@@ -1520,7 +1524,7 @@ pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
             match result {
                 Ok(()) => {}
                 Err(err) => {
-                    let msg:&str;
+                    let msg: &str;
                     let temp;
                     if let Some(err) = err.downcast_ref::<&str>() {
                         msg = err;
@@ -1618,7 +1622,7 @@ pub unsafe fn abi_entry<T: AbiExportableImplementation>(flag: AbiProtocol) {
             match result {
                 Ok(_) => {}
                 Err(err) => {
-                    let msg:&str;
+                    let msg: &str;
                     let temp;
                     if let Some(err) = err.downcast_ref::<&str>() {
                         msg = err;
