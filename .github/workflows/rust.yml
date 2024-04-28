@@ -19,7 +19,7 @@ jobs:
     - name: Install nightly
       run: rustup toolchain install nightly && rustup toolchain install stable
     - name: Miri (nightly)
-      run: rustup component add miri && cd savefile-test && cargo +nightly miri test
+      run: rustup component add --toolchain nightly miri && cd savefile-test && cargo +nightly miri test
     - name: Build (nightly)
       run: cargo +nightly build --workspace 
     - name: Run tests (nightly)
