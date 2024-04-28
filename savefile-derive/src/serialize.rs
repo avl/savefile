@@ -4,6 +4,7 @@ use syn::DeriveInput;
 use common::{get_extra_where_clauses, parse_attr_tag, FieldInfo};
 use get_enum_size;
 use implement_fields_serialize;
+use syn::spanned::Spanned;
 
 pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
     let name = input.ident;
@@ -73,6 +74,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             .enumerate()
                             .map(|(field_index, field)| FieldInfo {
                                 ident: Some(field.ident.clone().expect("Expected identifier[4]")),
+                                field_span: field.ident.as_ref().unwrap().span(),
                                 index: field_index as u32,
                                 ty: &field.ty,
                                 attrs: &field.attrs,
@@ -95,6 +97,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             .iter()
                             .enumerate()
                             .map(|(idx, field)| FieldInfo {
+                                field_span: field.ty.span(),
                                 ident: Some(syn::Ident::new(
                                     // We bind the tuple field to a real name, like x0, x1 etc.
                                     &("x".to_string() + &idx.to_string()),
@@ -162,6 +165,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                         .enumerate()
                         .map(|(field_index, field)| FieldInfo {
                             ident: Some(field.ident.clone().expect("Identifier[5]")),
+                            field_span: field.ident.as_ref().unwrap().span(),
                             ty: &field.ty,
                             index: field_index as u32,
                             attrs: &field.attrs,
@@ -178,6 +182,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                         .iter()
                         .enumerate()
                         .map(|(field_index, field)| FieldInfo {
+                            field_span: field.ty.span(),
                             ident: None,
                             ty: &field.ty,
                             index: field_index as u32,
@@ -213,7 +218,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
             }
         }
         _ => {
-            panic!("Unsupported data type");
+            abort_call_site!("Unsupported data type");
         }
     };
 

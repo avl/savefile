@@ -88,6 +88,10 @@ The dataformat for schemas has changed, but in a backward compatible way.
 
 Version 0.17.0-beta.11 is, as can be seen from the name, a beta. There will be bugs.
 
+Another thing in 0.17.0: We're starting to use 'release-plz' to manage releases.
+Hopefully this will make the releases more professional, with correct git tags, git releases etc.
+
+
 ### Upgrade guide from 0.16 -> 0.17
 
 1: Schemas have been expanded. 
@@ -103,6 +107,10 @@ what the rust project calls it)
 encode the discriminant. Set to 1 for enums which will never have more than 256 fields. Set to 2 for bigger
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
+
+## 0.17.0-beta.13
+
+Major improvements. Better diagnostics. Support for returning Box<Fn(..)>.
 
 ## 0.17.0-beta.10
 

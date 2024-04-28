@@ -1019,7 +1019,7 @@ pub enum SavefileError {
 impl From<Utf8Error> for SavefileError {
     fn from(value: Utf8Error) -> Self {
         SavefileError::InvalidUtf8 {
-            msg: format!("{:?}", value)
+            msg: format!("{:?}", value),
         }
     }
 }
@@ -2374,13 +2374,12 @@ pub struct Field {
 }
 
 impl Field {
-
     /// Create a new instance of field, with the given name and type
     pub fn new(name: String, value: Box<Schema>) -> Field {
         Field {
             name,
             value,
-            offset: None
+            offset: None,
         }
     }
     /// Create a new instance of field, with the given name and type.
@@ -2388,12 +2387,8 @@ impl Field {
     ///
     /// # Safety
     /// The offset *must* be the correct offset of the field within its struct.
-    pub unsafe fn unsafe_new(name: String, value: Box<Schema>, offset: Option<usize>) -> Field  {
-        Field {
-            name,
-            value,
-            offset
-        }
+    pub unsafe fn unsafe_new(name: String, value: Box<Schema>, offset: Option<usize>) -> Field {
+        Field { name, value, offset }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
     pub fn layout_compatible(&self, other: &Field) -> bool {
@@ -2465,9 +2460,10 @@ impl SchemaStruct {
     /// * fields: The fields of the struct
     pub fn new(dbg_name: String, fields: Vec<Field>) -> SchemaStruct {
         SchemaStruct {
-            dbg_name, fields,
+            dbg_name,
+            fields,
             size: None,
-            alignment: None
+            alignment: None,
         }
     }
     /// * dbg_name: The name of the struct
@@ -2476,14 +2472,19 @@ impl SchemaStruct {
     ///   Otherwise, the size of the struct in memory (std::mem::size_of::<TheStruct>()).
     /// * alignment: If None, the memory layout of the struct is unspecified.
     ///   Otherwise, the alignment of the struct (std::mem::align_of::<TheStruct>()).
-    pub fn new_unsafe(dbg_name: String, fields: Vec<Field>, size: Option<usize>, alignment: Option<usize>) -> SchemaStruct {
+    pub fn new_unsafe(
+        dbg_name: String,
+        fields: Vec<Field>,
+        size: Option<usize>,
+        alignment: Option<usize>,
+    ) -> SchemaStruct {
         SchemaStruct {
-            dbg_name, fields,
+            dbg_name,
+            fields,
             size,
-            alignment
+            alignment,
         }
     }
-
 
     fn layout_compatible(&self, other: &SchemaStruct) -> bool {
         if self.fields.len() != other.fields.len() {
@@ -2600,7 +2601,7 @@ impl SchemaEnum {
             discriminant_size,
             has_explicit_repr: false,
             size: None,
-            alignment: None
+            alignment: None,
         }
     }
     /// Create a new SchemaEnum instance.
@@ -2621,8 +2622,14 @@ impl SchemaEnum {
     /// # Safety
     /// The argument 'has_explicit_repr' must only be true if the enum in fact has a #[repr(uX)] attribute.
     /// The size and alignment must be correct for the type.
-    pub fn new_unsafe(dbg_name: String, variants: Vec<Variant>, discriminant_size: u8,
-        has_explicit_repr: bool, size: Option<usize>, alignment: Option<usize>) -> SchemaEnum {
+    pub fn new_unsafe(
+        dbg_name: String,
+        variants: Vec<Variant>,
+        discriminant_size: u8,
+        has_explicit_repr: bool,
+        size: Option<usize>,
+        alignment: Option<usize>,
+    ) -> SchemaEnum {
         SchemaEnum {
             dbg_name,
             variants,
@@ -2708,7 +2715,6 @@ pub enum SchemaPrimitive {
 }
 impl SchemaPrimitive {
     fn layout_compatible(&self, other: &SchemaPrimitive) -> bool {
-
         if let (SchemaPrimitive::schema_string(layout1), SchemaPrimitive::schema_string(layout2)) = (self, other) {
             if *layout1 == VecOrStringLayout::Unknown || *layout2 == VecOrStringLayout::Unknown {
                 return false;
@@ -3087,18 +3093,16 @@ impl Schema {
             Schema::Custom(_) => "custom",
             Schema::Boxed(_) => "box",
             Schema::FnClosure(_, _) => "fntrait",
-            Schema::Slice(_) => {"slice"}
-            Schema::Str => {"str"}
-            Schema::Reference(_) => {"reference"}
-            Schema::Trait(_, _) => {"trait"}
+            Schema::Slice(_) => "slice",
+            Schema::Str => "str",
+            Schema::Reference(_) => "reference",
+            Schema::Trait(_, _) => "trait",
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
     pub fn layout_compatible(&self, b_native: &Schema) -> bool {
         match (self, b_native) {
-            (Schema::Struct(a), Schema::Struct(b)) => {
-                a.layout_compatible(b)
-            },
+            (Schema::Struct(a), Schema::Struct(b)) => a.layout_compatible(b),
             (Schema::Enum(a), Schema::Enum(b)) => a.layout_compatible(b),
             (Schema::Primitive(a), Schema::Primitive(b)) => a.layout_compatible(b),
             (Schema::Vector(a, a_standard_layout), Schema::Vector(b, b_standard_layout)) => {
@@ -3125,9 +3129,7 @@ impl Schema {
                 // if boxed traits are contained in a data structure
                 false
             }
-            (Schema::Reference(a), Schema::Reference(b)) => {
-                a.layout_compatible(&*b)
-            }
+            (Schema::Reference(a), Schema::Reference(b)) => a.layout_compatible(&*b),
             _ => false,
         }
     }
@@ -3150,8 +3152,8 @@ impl Schema {
     pub fn new_tuple2<T1: WithSchema, T2: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "2-Tuple".to_string(),
-            size: Some(std::mem::size_of::<(T1,T2)>()),
-            alignment: Some(std::mem::align_of::<(T1,T2)>()),
+            size: Some(std::mem::size_of::<(T1, T2)>()),
+            alignment: Some(std::mem::align_of::<(T1, T2)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -3170,8 +3172,8 @@ impl Schema {
     pub fn new_tuple3<T1: WithSchema, T2: WithSchema, T3: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "3-Tuple".to_string(),
-            size: Some(std::mem::size_of::<(T1,T2,T3)>()),
-            alignment: Some(std::mem::align_of::<(T1,T2,T3)>()),
+            size: Some(std::mem::size_of::<(T1, T2, T3)>()),
+            alignment: Some(std::mem::align_of::<(T1, T2, T3)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -3195,8 +3197,8 @@ impl Schema {
     pub fn new_tuple4<T1: WithSchema, T2: WithSchema, T3: WithSchema, T4: WithSchema>(version: u32) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "4-Tuple".to_string(),
-            size: Some(std::mem::size_of::<(T1,T2,T3,T4)>()),
-            alignment: Some(std::mem::align_of::<(T1,T2,T3,T4)>()),
+            size: Some(std::mem::size_of::<(T1, T2, T3, T4)>()),
+            alignment: Some(std::mem::align_of::<(T1, T2, T3, T4)>()),
             fields: vec![
                 Field {
                     name: "0".to_string(),
@@ -3379,23 +3381,18 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             return None;
         }
         (Schema::Str, Schema::Str) => {
-
             return None;
         }
         (Schema::Boxed(a), Schema::Boxed(b)) => {
-
             return diff_schema(&**a, &**b, path);
         }
         (Schema::Reference(a), Schema::Reference(b)) => {
-
             return diff_schema(&**a, &**b, path);
         }
         (Schema::Slice(a), Schema::Slice(b)) => {
-
             return diff_schema(&**a, &**b, path);
         }
-        (Schema::Trait(amut, a), Schema::Trait(bmut, b)) |
-        (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
+        (Schema::Trait(amut, a), Schema::Trait(bmut, b)) | (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
             if amut != bmut {
                 if *amut {
                     return Some(format!(
@@ -3410,7 +3407,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                     ));
                 }
             }
-            return diff_abi_def(a,b, path);
+            return diff_abi_def(a, b, path);
         }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
@@ -3433,9 +3430,7 @@ fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String) ->
                     bmet.info.arguments.len()
                 ));
             }
-            for (arg_index, (a_arg, b_arg)) in
-            amet.info.arguments.iter().zip(bmet.info.arguments.iter()).enumerate()
-            {
+            for (arg_index, (a_arg, b_arg)) in amet.info.arguments.iter().zip(bmet.info.arguments.iter()).enumerate() {
                 if let Some(diff) = diff_schema(
                     &a_arg.schema,
                     &b_arg.schema,
@@ -3811,8 +3806,8 @@ impl Arbitrary for SchemaStruct {
                 .map(|_| <_ as Arbitrary>::arbitrary(g))
                 .collect(),
             dbg_name: <_ as Arbitrary>::arbitrary(g),
-            size:  <_ as Arbitrary>::arbitrary(g),
-            alignment:  <_ as Arbitrary>::arbitrary(g),
+            size: <_ as Arbitrary>::arbitrary(g),
+            alignment: <_ as Arbitrary>::arbitrary(g),
         }
     }
 }
@@ -3955,19 +3950,13 @@ impl Deserialize for Schema {
                 <_ as Deserialize>::deserialize(deserializer)?,
                 <_ as Deserialize>::deserialize(deserializer)?,
             ),
-            12 => {
-                Schema::Slice(Box::new(<_ as Deserialize>::deserialize(deserializer)?))
-            }
+            12 => Schema::Slice(Box::new(<_ as Deserialize>::deserialize(deserializer)?)),
             13 => Schema::Str,
-            14 => {
-                Schema::Reference(Box::new(<_ as Deserialize>::deserialize(deserializer)?))
-            }
-            15 => {
-                Schema::Trait(
-                    <_ as Deserialize>::deserialize(deserializer)?,
-                    <_ as Deserialize>::deserialize(deserializer)?
-                )
-            }
+            14 => Schema::Reference(Box::new(<_ as Deserialize>::deserialize(deserializer)?)),
+            15 => Schema::Trait(
+                <_ as Deserialize>::deserialize(deserializer)?,
+                <_ as Deserialize>::deserialize(deserializer)?,
+            ),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),
@@ -5562,8 +5551,8 @@ pub const fn calculate_slice_memory_layout<T>() -> VecOrStringLayout {
     if std::mem::size_of::<&[T]>() != 16 || std::mem::size_of::<RawSliceInspector>() != 16 {
         VecOrStringLayout::Unknown
     } else {
-        let test_slice:&[T] = &[];
-        let insp: RawSliceInspector = unsafe { std::mem::transmute_copy::<&[T],RawSliceInspector>(&test_slice) };
+        let test_slice: &[T] = &[];
+        let insp: RawSliceInspector = unsafe { std::mem::transmute_copy::<&[T], RawSliceInspector>(&test_slice) };
         insp.get_layout()
     }
 }
@@ -6260,7 +6249,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::ptr::{NonNull};
+use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
 
