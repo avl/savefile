@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn global_func<'a>(&self, x: &'a u32) -> u32;
-//~^ 14:35: 14:37: Method global_func, argument x: Specifying lifetimes is not supported by Savefile-Abi.
+//~^ 14:20: 14:22: savefile-abi does not support methods with lifetimes.
 }
 
 fn main() {}

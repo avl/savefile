@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn example_func(&self, x: &mut dyn Fn());
-//~^ 14:40: 14:42: Method example_func, argument x: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead.
+//~^ 14:40: 14:42: Method 'example_func', argument x: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead.
 }
 
 fn main() {}

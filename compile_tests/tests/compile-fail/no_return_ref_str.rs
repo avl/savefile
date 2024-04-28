@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn get_str(&self) -> &str;
-//~^ 14:34: 14:35: Method 'get': savefile-abi does not support methods returning &str.
+//~^ 14:26: 14:27: Method 'get_str': savefile-abi does not support methods returning &str. Use "String" or "&'static str" instead
 }
 
 fn main() {}
