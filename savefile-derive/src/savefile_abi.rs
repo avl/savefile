@@ -6,7 +6,7 @@ use quote::{ToTokens};
 use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound,  TypeTuple};
 use syn::punctuated::Punctuated;
 use common::{compile_time_check_reprc, compile_time_size};
-
+use syn::spanned::Spanned;
 
 
 const POINTER_SIZE:usize = std::mem::size_of::<*const ()>();
@@ -172,7 +172,7 @@ pub(crate) fn parse_box_type(version:u32, path: &Path, method_name: &Ident, arg_
         PathArguments::AngleBracketed(ang) => {
             let first_gen_arg = ang.args.iter().next().expect("Missing generic args of Box");
             if ang.args.len() != 1 {
-                panic!("Method {}, argument {}. Savefile requires Box arguments to have exactly one generic argument, a requirement not satisfied by type: {}", method_name, arg_name, typ.to_token_stream());
+                panic!("Method '{}', argument {}. Savefile requires Box arguments to have exactly one generic argument, a requirement not satisfied by type: {}", method_name, arg_name, typ.to_token_stream());
             }
             if is_reference {
                 panic!("Method {}, argument {}. Savefile does not support references to Boxes. Just supply a reference to the inner type: {}", method_name, arg_name, typ.to_token_stream());
@@ -938,6 +938,9 @@ pub(super) fn generate_method_definitions(
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) ); //Safe, does not need drop and does not allocate
     } else {
         let parsed_ret_type = parse_type(version, "___retval",&ret_type,&method_name,name_generator,extra_definitions,false,false);
+        if let ArgType::Reference(..) = &parsed_ret_type {
+            abort!(ret_type.span(), "Method '{}': SavefileAbi does not support methods returning references.", method_name);
+        }
         let instruction = parsed_ret_type.get_instruction(version, None, "ret", &Ident::new("ret", Span::call_site()).to_token_stream(), 0, true, extra_definitions);
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
@@ -979,6 +982,8 @@ pub(super) fn generate_method_definitions(
     let _ = caller_return_type;
 
     let caller_method_trampoline = quote! {
+        // TODO: Determine if we should use inline here or not? #[inline]
+        #[inline]
         fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
 

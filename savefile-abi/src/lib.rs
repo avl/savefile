@@ -1069,7 +1069,6 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
             panic!("Too many method arguments, max 64 are supported!");
         }
         for caller_native_method in caller_native_definition.methods.into_iter() {
-            println!("Checking {}", caller_native_method.name);
             let Some((callee_native_method_number, callee_native_method)) = callee_native_definition
                 .methods
                 .iter()

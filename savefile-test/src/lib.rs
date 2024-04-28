@@ -18,6 +18,7 @@ extern crate test;
 #[macro_use]
 extern crate savefile_derive;
 
+
 extern crate bit_set;
 extern crate bit_vec;
 extern crate byteorder;
@@ -839,6 +840,7 @@ use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, 
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use savefile_abi::AbiConnection;
 
 #[test]
 pub fn test_atomic() {
@@ -1546,14 +1548,14 @@ fn test_quickcheck_schema_roundtrip(a: Schema) -> bool {
     true
 }
 
-#[ignore]
+#[cfg(not(debug_assertions))]
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_schema_diff_different(a: Schema, b: Schema) -> bool {
     _ = diff_schema(&a, &b, "".into()); //Check this doesn't crash
     true
 }
-#[ignore]
+#[cfg(not(debug_assertions))]
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_schema_diff_same(a: Schema) -> bool {
@@ -1608,4 +1610,29 @@ pub enum GoodEnum {
 #[test]
 fn test_good_enum() {
     assert!(unsafe { GoodEnum::repr_c_optimization_safe(0) }.is_yes())
+}
+
+
+#[savefile_abi_exportable(version = 0)]
+pub trait TestAddInterface {
+    fn simple_add(&self, x:u32, y:u32) -> u32;
+}
+
+pub fn simple_add_call(conn: &AbiConnection<dyn TestAddInterface>, x: u32, y: u32) -> u32 {
+
+    (*conn).simple_add(x,y)
+
+}
+pub struct TestAddInterfaceImpl {}
+impl TestAddInterface for TestAddInterfaceImpl {
+    fn simple_add(&self, x: u32, y: u32) -> u32 {
+        x + y
+    }
+}
+#[test]
+fn dummy_test() {
+    let boxed: Box<dyn TestAddInterface> = Box::new(TestAddInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    let r = simple_add_call(&conn, 1, 2);
+    assert_eq!(r, 3);
 }

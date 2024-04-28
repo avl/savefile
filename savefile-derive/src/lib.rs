@@ -19,6 +19,9 @@ extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
 extern crate syn;
+#[macro_use]
+extern crate proc_macro_error;
+
 
 use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
@@ -212,6 +215,7 @@ mod deserialize;
 
 mod savefile_abi;
 
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn savefile_abi_exportable(
     attr: proc_macro::TokenStream,
@@ -450,6 +454,7 @@ pub fn savefile_abi_exportable(
 
     expanded.into()
 }
+#[proc_macro_error]
 #[proc_macro]
 pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = item.to_string();
@@ -490,6 +495,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     expanded.into()
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(
     Savefile,
     attributes(
@@ -543,6 +549,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     expanded.into()
 }
+#[proc_macro_error]
 #[proc_macro_derive(
     SavefileNoIntrospect,
     attributes(
@@ -590,6 +597,7 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
     expanded.into()
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(
     SavefileIntrospectOnly,
     attributes(
@@ -854,6 +862,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
         explicit_size: have_seen_explicit_size,
     }
 }
+#[proc_macro_error]
 #[proc_macro_derive(
     ReprC,
     attributes(

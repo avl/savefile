@@ -20,6 +20,11 @@ release = true
 
 
 [[package]]
+name= "compile_tests"
+publish = false
+release = false
+
+[[package]]
 name= "savefile-test"
 publish = false
 release = false

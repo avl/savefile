@@ -24,5 +24,5 @@ proc-macro = true
 quote = "1.0"
 syn = { version = "1.0" , features = ["full","extra-traits"]}
 proc-macro2 = { version = "1.0", features = ["nightly"] }
-
+proc-macro-error = "1.0"
 

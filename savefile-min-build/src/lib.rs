@@ -11,6 +11,11 @@ use savefile_derive::savefile_abi_exportable;
 
 
 
+#[savefile_abi_exportable(version = 0)]
+pub trait TestAddInterface {
+    fn simple_add(&self, x:u32, y:u32) -> u32;
+}
+
 
 
 /*

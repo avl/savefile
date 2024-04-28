@@ -214,8 +214,6 @@ fn bench_simple_call(b: &mut Bencher) {
     b.iter(move || conn.do_nothing())
 }
 
-
-
 #[cfg(feature = "nightly")]
 #[cfg(not(miri))]
 #[bench]
