@@ -29,4 +29,9 @@ jobs:
     - name: Run tests (stable)
       run: cargo +stable test --workspace 
     - name: Build min-deps (stable)
-      run: cargo +stable build -p savefile-min-build 
+      run: cargo +stable build -p savefile-min-build
+    - name: compile_tests (stable)
+      run: cd compile_tests cargo +stable test
+    - name: compile_tests (nightly)
+      run: cd compile_tests cargo +nightly test
+
