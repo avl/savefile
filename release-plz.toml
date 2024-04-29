@@ -1,5 +1,5 @@
 [workspace]
-git_release_enable = false
+#git_release_enable = false
 
 [[package]]
 name= "savefile"
