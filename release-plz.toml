@@ -17,7 +17,6 @@ name= "savefile-abi"
 publish = true
 release = true
 
-
 [[package]]
 name= "savefile-test"
 publish = false
