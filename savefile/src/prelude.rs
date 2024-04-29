@@ -5,7 +5,7 @@ pub use {
     super::Deserializer, super::Field, super::Introspect, super::IntrospectItem, super::IntrospectedElementKey,
     super::IntrospectionResult, super::Introspector, super::IntrospectorNavCommand, super::IsReprC, super::Removed,
     super::ReprC, super::SavefileError, super::Schema, super::SchemaEnum, super::SchemaPrimitive, super::SchemaStruct,
-    super::Serialize, super::Serializer, super::Variant, super::WithSchema,
+    super::Serialize, super::Serializer, super::Variant, super::WithSchema, super::WithSchemaContext,
 };
 
 pub use byteorder::{LittleEndian, ReadBytesExt};

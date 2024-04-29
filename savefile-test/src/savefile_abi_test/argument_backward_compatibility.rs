@@ -1,5 +1,5 @@
 use savefile::prelude::AbiRemoved;
-use savefile::SavefileError;
+use savefile::{SavefileError, WithSchemaContext};
 use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
 use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
@@ -98,7 +98,7 @@ pub fn test_backward_compatibility() -> Result<(), SavefileError> {
 #[test]
 pub fn test_arg_argument_metadata() {
     use savefile::WithSchema;
-    let schema = v2::ArgArgument::schema(0);
+    let schema = v2::ArgArgument::schema(0, &mut WithSchemaContext::new());
     println!("Schema: {:#?}", schema);
     assert!(!schema.layout_compatible(&schema)); //Versions containing removed items should never be considered layout compatible (since their schema type is not identical to the memory type)
 }

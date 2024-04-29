@@ -1,5 +1,5 @@
 [workspace]
-git_release_enable = false
+#git_release_enable = false
 
 [[package]]
 name= "savefile"
@@ -17,11 +17,6 @@ release = true
 name= "savefile-abi"
 publish = true
 release = true
-
-[[package]]
-name= "compile_tests"
-publish = false
-release = false
 
 [[package]]
 name= "savefile-test"

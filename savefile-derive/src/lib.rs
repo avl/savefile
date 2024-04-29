@@ -253,7 +253,7 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
         use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
@@ -1574,7 +1574,7 @@ fn implement_withschema(
                     "The Removed type can only be used for removed fields. Use the savefile_version attribute."
                 );
             }
-            fields.push(quote_spanned!( span => #fields1.push(unsafe{#Field::unsafe_new(#name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset)} )));
+            fields.push(quote_spanned!( span => #fields1.push(unsafe{#Field::unsafe_new(#name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version, context)), #offset)} )));
         } else {
             let mut version_mappings = Vec::new();
             let offset = if field_to_version != u32::MAX {
@@ -1589,7 +1589,7 @@ fn implement_withschema(
                 // We don't supply offset in this case, deserialized type doesn't match field type
                 version_mappings.push(quote!{
                     if #local_version >= #dt_from && local_version <= #dt_to {
-                        #fields1.push(#Field ::new( #name_str.to_string(), std::boxed::Box::new(<#dt_field_type as #WithSchema>::schema(#local_version))) );
+                        #fields1.push(#Field ::new( #name_str.to_string(), std::boxed::Box::new(<#dt_field_type as #WithSchema>::schema(#local_version, context))) );
                     }
                 });
             }
@@ -1598,7 +1598,7 @@ fn implement_withschema(
                 #(#version_mappings)*
 
                 if #local_version >= #field_from_version && #local_version <= #field_to_version {
-                    #fields1.push(unsafe{#Field ::unsafe_new( #name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version)), #offset )} );
+                    #fields1.push(unsafe{#Field ::unsafe_new( #name_str.to_string(), std::boxed::Box::new(<#field_type as #WithSchema>::schema(#local_version, context)), #offset )} );
                 }
                 ));
         }
@@ -1831,7 +1831,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
                     #[allow(unused_mut)]
                     #[allow(unused_comparisons, unused_variables)]
-                    fn schema(version:u32) -> #Schema {
+                    fn schema(version:u32, context: &mut _savefile::prelude::WithSchemaContext) -> #Schema {
                         let local_version = version;
 
                         #Schema::Enum (
@@ -1912,7 +1912,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
                     #[allow(unused_comparisons)]
                     #[allow(unused_mut, unused_variables)]
-                    fn schema(version:u32) -> #Schema {
+                    fn schema(version:u32, context: &mut _savefile::prelude::WithSchemaContext) -> #Schema {
                         let local_version = version;
                         let mut fields1 = Vec::new();
                         #(#fields;)* ;

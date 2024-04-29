@@ -460,6 +460,8 @@ pub fn assert_roundtrip_to_new_version<
 
 mod enum_variant_versioning;
 
+mod cycles;
+
 #[test]
 pub fn test_array_string() {
     use arrayvec::ArrayString;
