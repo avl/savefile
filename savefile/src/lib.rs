@@ -663,7 +663,7 @@ This can be fixed with manual padding:
  }
  use savefile::prelude::*;
  impl WithSchema for MyPathBuf {
-     fn schema(_version: u32) -> Schema {
+     fn schema(_version: u32, context: &mut WithSchemaContext) -> Schema {
          Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
      }
  }
@@ -1255,7 +1255,7 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
 }
 
 impl WithSchema for PathBuf {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
@@ -1282,8 +1282,8 @@ impl Introspect for PathBuf {
 }
 
 impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<'a, T: 'a + ToOwned + ?Sized> ReprC for Cow<'a, T> {}
@@ -1785,7 +1785,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
             writer,
             version,
             data,
-            Some(T::schema(version)),
+            Some(T::schema(version, &mut WithSchemaContext::new())),
             with_compression,
         )?)
     }
@@ -2014,7 +2014,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
     /// Don't use this method directly, use the [crate::load] function
     /// instead.
     pub fn load<T: WithSchema + Deserialize>(reader: &mut TR, version: u32) -> Result<T, SavefileError> {
-        Deserializer::<_>::load_impl::<T>(reader, version, Some(|version| T::schema(version)))
+        Deserializer::<_>::load_impl::<T>(reader, version, Some(|version| T::schema(version, &mut WithSchemaContext::new())))
     }
 
     /// Deserialize an object of type T from the given reader.
@@ -2232,6 +2232,62 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
     Serializer::save_noschema::<T>(&mut f, version, data)
 }
 
+
+/// Context object used to keep track of recursion.
+/// Datastructures which cannot contain recursion do not need to concern themselves with
+/// this. Recursive data structures in rust require the use of Box, Vec, Arc or similar.
+/// The most common of these datatypes from std are supported by savefile, and will guard
+/// against recursion in a well-defined way.
+/// As a user of Savefile, you only need to use this if you are implementing Savefile for
+/// container or smart-pointer type.
+#[derive(Default)]
+pub struct WithSchemaContext {
+    seen_types: HashMap<TypeId, usize/*depth*/>,
+}
+
+impl WithSchemaContext {
+    /// Create a new empty WithSchemaContext.
+    /// This is useful for calling ::schema at the top-level.
+    pub fn new() -> WithSchemaContext {
+        Default::default()
+    }
+}
+
+impl WithSchemaContext {
+    /// Use this when returning the schema of a type that can be part of a recursion.
+    /// For example, given a hypothetical user-implemented type MyBox, do
+    ///
+    /// ```rust
+    /// use savefile::{Schema, WithSchema, WithSchemaContext};
+    /// #[transparent]
+    /// struct MyBox<T> {
+    ///    content: *const T
+    /// }
+    /// impl<T> WithSchema for MyBox<T> {
+    ///     fn schema(version: u32, context: &mut WithSchemaContext, context: &mut WithSchemaContext) -> Schema {
+    ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(T::schema(version, context)))
+    ///     }
+    ///
+    /// }
+    /// ```
+    pub fn possible_recursion<T:'static>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
+        let typeid = TypeId::of::<T>();
+        let prevlen = self.seen_types.len();
+        match self.seen_types.entry(typeid) {
+            Entry::Occupied(occ) => {
+                let present_value_depth = *occ.get();
+                return Schema::Recursion( prevlen - present_value_depth );
+            }
+            Entry::Vacant(vac) => {
+                vac.insert(prevlen);
+            }
+        }
+        let ret = (cb)(self);
+        self.seen_types.remove(&typeid);
+        ret
+    }
+}
+
 /// This trait must be implemented by all data structures you wish to be able to save.
 /// It must encode the schema for the datastructure when saved using the given version number.
 /// When files are saved, the schema is encoded into the file.
@@ -2241,7 +2297,7 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
 /// can be disabled).
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
-    fn schema(version: u32) -> Schema;
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema;
 }
 
 /// This trait must be implemented for all data structures you wish to be
@@ -2640,6 +2696,7 @@ impl SchemaEnum {
         }
     }
     fn layout_compatible(&self, other: &SchemaEnum) -> bool {
+
         if self.has_explicit_repr == false || other.has_explicit_repr == false {
             return false;
         }
@@ -2825,7 +2882,7 @@ impl Deserialize for AbiMethodArgument {
 }
 
 impl WithSchema for AbiMethodArgument {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -2848,7 +2905,7 @@ pub struct AbiMethodInfo {
 }
 impl ReprC for AbiMethodInfo {}
 impl WithSchema for AbiMethodInfo {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -2881,7 +2938,7 @@ pub struct AbiMethod {
 }
 impl ReprC for AbiMethod {}
 impl WithSchema for AbiMethod {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -2912,7 +2969,7 @@ pub struct AbiTraitDefinition {
 }
 impl ReprC for AbiTraitDefinition {}
 impl WithSchema for AbiTraitDefinition {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3065,6 +3122,13 @@ pub enum Schema {
     /// Their memory layout is considered to depend on all method signatures,
     /// and the layouts of all argument types and all return types.
     FnClosure(bool /*mut self*/, AbiTraitDefinition),
+    /// The datastructure is recursive, and the datatype now continues from
+    /// the element that is 'depth' layers higher in the schema tree.
+    /// Note, the 'depth' only counts possible recursion points, i.e, objects
+    /// such as 'Box', 'Vec' etc. This works, since the schema will only ever match
+    /// if it is identical in memory and file, and because of this, counting
+    /// only the recursion points is non-ambiguous.
+    Recursion(usize/*depth*/)
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3080,23 +3144,24 @@ impl Introspect for Schema {
 impl Schema {
     /// Get a short description of the major type of this schema.
     /// 'struct', 'enum' etc.
-    pub fn top_level_description(&self) -> &'static str {
+    pub fn top_level_description(&self) -> String {
         match self {
-            Schema::Struct(_) => "struct",
-            Schema::Enum(_) => "enum",
-            Schema::Primitive(_) => "primitive",
-            Schema::Vector(_, _) => "vector",
-            Schema::Array(_) => "array",
-            Schema::SchemaOption(_) => "option",
-            Schema::Undefined => "undefined",
-            Schema::ZeroSize => "zerosize",
-            Schema::Custom(_) => "custom",
-            Schema::Boxed(_) => "box",
-            Schema::FnClosure(_, _) => "fntrait",
-            Schema::Slice(_) => "slice",
-            Schema::Str => "str",
-            Schema::Reference(_) => "reference",
-            Schema::Trait(_, _) => "trait",
+            Schema::Struct(_) => "struct".into(),
+            Schema::Enum(_) => "enum".into(),
+            Schema::Primitive(_) => "primitive".into(),
+            Schema::Vector(_, _) => "vector".into(),
+            Schema::Array(_) => "array".into(),
+            Schema::SchemaOption(_) => "option".into(),
+            Schema::Undefined => "undefined".into(),
+            Schema::ZeroSize => "zerosize".into(),
+            Schema::Custom(_) => "custom".into(),
+            Schema::Boxed(_) => "box".into(),
+            Schema::FnClosure(_, _) => "fntrait".into(),
+            Schema::Slice(_) => "slice".into(),
+            Schema::Str => "str".into(),
+            Schema::Reference(_) => "reference".into(),
+            Schema::Trait(_, _) => "trait".into(),
+            Schema::Recursion(depth) => {format!("<recursion {}>",depth)}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3124,18 +3189,21 @@ impl Schema {
                 // Closures are not supported in any other position
                 false
             }
-            (Schema::Boxed(_a), Schema::Boxed(_b)) => {
-                // Boxed traits can never "just be serialized". We always have to serialize
-                // if boxed traits are contained in a data structure
-                false
+            (Schema::Boxed(a), Schema::Boxed(b)) => {
+                // The memory layout of boxes is guaranteed in practice (just a pointer)
+                // Trait pointers (which are fat) could conceivably differ, but we don't
+                // actually rely on memory layout compatibility for them, and this expression
+                // will also return false (since Schema::Trait 'layout_compatible' always returns false).
+                a.layout_compatible(&*b)
             }
             (Schema::Reference(a), Schema::Reference(b)) => a.layout_compatible(&*b),
+            (Schema::Slice(a), Schema::Slice(b)) => a.layout_compatible(&*b),
             _ => false,
         }
     }
     /// Create a 1-element tuple
-    pub fn new_tuple1<T1: WithSchema>(version: u32) -> Schema {
-        let schema = Box::new(T1::schema(version));
+    pub fn new_tuple1<T1: WithSchema>(version: u32, context: &mut WithSchemaContext) -> Schema {
+        let schema = Box::new(T1::schema(version, context));
         Schema::Struct(SchemaStruct {
             dbg_name: "1-Tuple".to_string(),
             size: Some(std::mem::size_of::<(T1,)>()),
@@ -3149,7 +3217,7 @@ impl Schema {
     }
 
     /// Create a 2-element tuple
-    pub fn new_tuple2<T1: WithSchema, T2: WithSchema>(version: u32) -> Schema {
+    pub fn new_tuple2<T1: WithSchema, T2: WithSchema>(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "2-Tuple".to_string(),
             size: Some(std::mem::size_of::<(T1, T2)>()),
@@ -3157,19 +3225,19 @@ impl Schema {
             fields: vec![
                 Field {
                     name: "0".to_string(),
-                    value: Box::new(T1::schema(version)),
+                    value: Box::new(T1::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2), 0)),
                 },
                 Field {
                     name: "1".to_string(),
-                    value: Box::new(T2::schema(version)),
+                    value: Box::new(T2::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2), 1)),
                 },
             ],
         })
     }
     /// Create a 3-element tuple
-    pub fn new_tuple3<T1: WithSchema, T2: WithSchema, T3: WithSchema>(version: u32) -> Schema {
+    pub fn new_tuple3<T1: WithSchema, T2: WithSchema, T3: WithSchema>(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "3-Tuple".to_string(),
             size: Some(std::mem::size_of::<(T1, T2, T3)>()),
@@ -3177,24 +3245,24 @@ impl Schema {
             fields: vec![
                 Field {
                     name: "0".to_string(),
-                    value: Box::new(T1::schema(version)),
+                    value: Box::new(T1::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3), 0)),
                 },
                 Field {
                     name: "1".to_string(),
-                    value: Box::new(T2::schema(version)),
+                    value: Box::new(T2::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3), 1)),
                 },
                 Field {
                     name: "2".to_string(),
-                    value: Box::new(T3::schema(version)),
+                    value: Box::new(T3::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3), 2)),
                 },
             ],
         })
     }
     /// Create a 4-element tuple
-    pub fn new_tuple4<T1: WithSchema, T2: WithSchema, T3: WithSchema, T4: WithSchema>(version: u32) -> Schema {
+    pub fn new_tuple4<T1: WithSchema, T2: WithSchema, T3: WithSchema, T4: WithSchema>(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "4-Tuple".to_string(),
             size: Some(std::mem::size_of::<(T1, T2, T3, T4)>()),
@@ -3202,22 +3270,22 @@ impl Schema {
             fields: vec![
                 Field {
                     name: "0".to_string(),
-                    value: Box::new(T1::schema(version)),
+                    value: Box::new(T1::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3, T4), 0)),
                 },
                 Field {
                     name: "1".to_string(),
-                    value: Box::new(T2::schema(version)),
+                    value: Box::new(T2::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3, T4), 1)),
                 },
                 Field {
                     name: "2".to_string(),
-                    value: Box::new(T3::schema(version)),
+                    value: Box::new(T3::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3, T4), 2)),
                 },
                 Field {
                     name: "3".to_string(),
-                    value: Box::new(T4::schema(version)),
+                    value: Box::new(T4::schema(version, context)),
                     offset: Some(offset_of_tuple!((T1, T2, T3, T4), 3)),
                 },
             ],
@@ -3241,6 +3309,7 @@ impl Schema {
             Schema::Str => None,
             Schema::Reference(_) => None,
             Schema::Trait(_, _) => None,
+            Schema::Recursion(_) => None,
         }
     }
 }
@@ -3409,6 +3478,16 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             }
             return diff_abi_def(a, b, path);
         }
+        (Schema::Recursion(adepth), Schema::Recursion(bdepth)) => {
+            if adepth == bdepth {
+                return None; //Ok
+            } else {
+                return Some(format!(
+                    "At location [{}]: Application protocol uses recursion up {} levels, but foreign format uses {}.",
+                    path, adepth, bdepth
+                ));
+            }
+        }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
 
@@ -3445,7 +3524,7 @@ fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String) ->
 }
 
 impl WithSchema for Field {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3473,7 +3552,7 @@ impl Deserialize for Field {
     }
 }
 impl WithSchema for Variant {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3530,13 +3609,13 @@ impl Deserialize for SchemaArray {
     }
 }
 impl WithSchema for SchemaArray {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
 
 impl WithSchema for SchemaStruct {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3573,7 +3652,7 @@ impl Deserialize for SchemaStruct {
 }
 
 impl WithSchema for SchemaPrimitive {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3607,7 +3686,7 @@ impl Serialize for SchemaPrimitive {
     }
 }
 impl WithSchema for VecOrStringLayout {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3666,7 +3745,7 @@ impl Deserialize for SchemaPrimitive {
 }
 
 impl WithSchema for SchemaEnum {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3849,7 +3928,7 @@ impl Arbitrary for Schema {
 }
 
 impl WithSchema for Schema {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
@@ -3921,6 +4000,11 @@ impl Serialize for Schema {
                 b.serialize(serializer)?;
                 Ok(())
             }
+            Schema::Recursion(depth) => {
+                serializer.write_u8(16)?;
+                serializer.write_usize(*depth)?;
+                Ok(())
+            }
         }
     }
 }
@@ -3957,6 +4041,7 @@ impl Deserialize for Schema {
                 <_ as Deserialize>::deserialize(deserializer)?,
                 <_ as Deserialize>::deserialize(deserializer)?,
             ),
+            16 => Schema::Recursion(<_ as Deserialize>::deserialize(deserializer)?),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt schema, schema variant {} encountered", c),
@@ -3969,7 +4054,7 @@ impl Deserialize for Schema {
 }
 
 impl WithSchema for String {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
     }
 }
@@ -4064,8 +4149,8 @@ impl<T: Introspect> Introspect for std::sync::Mutex<T> {
 }
 
 impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<T> ReprC for std::sync::Mutex<T> {}
@@ -4084,8 +4169,8 @@ impl<T: Deserialize> Deserialize for std::sync::Mutex<T> {
 
 #[cfg(feature = "parking_lot")]
 impl<T: WithSchema> WithSchema for Mutex<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 
@@ -4215,8 +4300,8 @@ impl<T: Introspect> Introspect for RwLock<T> {
 
 #[cfg(feature = "parking_lot")]
 impl<T: WithSchema> WithSchema for RwLock<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 
@@ -4374,7 +4459,7 @@ impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
     }
 }
 impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
@@ -4383,12 +4468,12 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
+                        value: Box::new(K::schema(version, context)),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
+                        value: Box::new(V::schema(version, context)),
                         offset: None,
                     },
                 ],
@@ -4424,8 +4509,8 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
 
 impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K, S> {}
 impl<K: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(K::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(K::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 impl<K: Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
@@ -4449,7 +4534,7 @@ impl<K: Deserialize + Eq + Hash, S: ::std::hash::BuildHasher + Default> Deserial
 }
 
 impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashMap<K, V, S> {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
@@ -4458,12 +4543,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
+                        value: Box::new(K::schema(version, context)),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
+                        value: Box::new(V::schema(version, context)),
                         offset: None,
                     },
                 ],
@@ -4499,7 +4584,7 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher + D
 
 #[cfg(feature = "indexmap")]
 impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for IndexMap<K, V, S> {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "KeyValuePair".to_string(),
@@ -4508,12 +4593,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version)),
+                        value: Box::new(K::schema(version, context)),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version)),
+                        value: Box::new(V::schema(version, context)),
                         offset: None,
                     },
                 ],
@@ -4657,7 +4742,7 @@ impl<K: Eq + Hash, S: ::std::hash::BuildHasher> ReprC for IndexSet<K, S> {}
 
 #[cfg(feature = "indexmap")]
 impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
                 dbg_name: "Key".to_string(),
@@ -4665,7 +4750,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
                 alignment: None,
                 fields: vec![Field {
                     name: "key".to_string(),
-                    value: Box::new(K::schema(version)),
+                    value: Box::new(K::schema(version, context)),
                     offset: None,
                 }],
             })),
@@ -4748,8 +4833,8 @@ impl<T> Removed<T> {
     }
 }
 impl<T: WithSchema> WithSchema for Removed<T> {
-    fn schema(version: u32) -> Schema {
-        <T>::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        <T>::schema(version, context)
     }
 }
 
@@ -4810,8 +4895,8 @@ impl<T: Default, D: ValueConstructor<T>> AbiRemoved<T, D> {
 }
 
 impl<T: WithSchema, D: ValueConstructor<T>> WithSchema for AbiRemoved<T, D> {
-    fn schema(version: u32) -> Schema {
-        <T>::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        <T>::schema(version, context)
     }
 }
 
@@ -4855,7 +4940,7 @@ impl<T> Introspect for PhantomData<T> {
     }
 }
 impl<T> WithSchema for std::marker::PhantomData<T> {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::ZeroSize
     }
 }
@@ -4912,8 +4997,8 @@ impl<T: Introspect> Introspect for Option<T> {
 }
 
 impl<T: WithSchema> WithSchema for Option<T> {
-    fn schema(version: u32) -> Schema {
-        Schema::SchemaOption(Box::new(T::schema(version)))
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::SchemaOption(Box::new(T::schema(version, context)))
     }
 }
 impl<T> ReprC for Option<T> {} //Sadly, Option does not allow the #"reprC"-optimization
@@ -4962,7 +5047,7 @@ impl<T: Introspect, R: Introspect> Introspect for Result<T, R> {
 }
 
 impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Enum(SchemaEnum {
             dbg_name: "Result".to_string(),
             size: None,
@@ -4973,7 +5058,7 @@ impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
                     discriminant: 0,
                     fields: vec![Field {
                         name: "ok".to_string(),
-                        value: Box::new(T::schema(version)),
+                        value: Box::new(T::schema(version, context)),
                         offset: None,
                     }],
                 },
@@ -4982,7 +5067,7 @@ impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
                     discriminant: 0,
                     fields: vec![Field {
                         name: "err".to_string(),
-                        value: Box::new(R::schema(version)),
+                        value: Box::new(R::schema(version, context)),
                         offset: None,
                     }],
                 },
@@ -5024,7 +5109,7 @@ compile_error!("savefile bit-vec feature does not support big-endian machines");
 
 #[cfg(feature = "bit-vec")]
 impl WithSchema for bit_vec::BitVec {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitVec".to_string(),
             size: None,
@@ -5032,18 +5117,18 @@ impl WithSchema for bit_vec::BitVec {
             fields: vec![
                 Field {
                     name: "num_bits".to_string(),
-                    value: Box::new(usize::schema(version)),
+                    value: Box::new(usize::schema(version, context)),
                     offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
-                    value: Box::new(usize::schema(version)),
+                    value: Box::new(usize::schema(version, context)),
                     offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
                     value: Box::new(Schema::Vector(
-                        Box::new(u8::schema(version)),
+                        Box::new(u8::schema(version, context)),
                         VecOrStringLayout::Unknown,
                     )),
                     offset: None,
@@ -5119,7 +5204,7 @@ impl Deserialize for bit_vec::BitVec<u32> {
 
 #[cfg(feature = "bit-set")]
 impl WithSchema for bit_set::BitSet {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitSet".to_string(),
             size: None,
@@ -5127,18 +5212,18 @@ impl WithSchema for bit_set::BitSet {
             fields: vec![
                 Field {
                     name: "num_bits".to_string(),
-                    value: Box::new(usize::schema(version)),
+                    value: Box::new(usize::schema(version, context)),
                     offset: None,
                 },
                 Field {
                     name: "num_bytes".to_string(),
-                    value: Box::new(usize::schema(version)),
+                    value: Box::new(usize::schema(version, context)),
                     offset: None,
                 },
                 Field {
                     name: "buffer".to_string(),
                     value: Box::new(Schema::Vector(
-                        Box::new(u8::schema(version)),
+                        Box::new(u8::schema(version, context)),
                         VecOrStringLayout::Unknown,
                     )),
                     offset: None,
@@ -5207,8 +5292,8 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 
 impl<T> ReprC for BinaryHeap<T> {}
 impl<T: WithSchema> WithSchema for BinaryHeap<T> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
@@ -5259,8 +5344,8 @@ impl<T: smallvec::Array> WithSchema for smallvec::SmallVec<T>
 where
     T::Item: WithSchema,
 {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::Item::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::Item::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 #[cfg(feature = "smallvec")]
@@ -5327,13 +5412,13 @@ fn regular_serialize_vec<T: Serialize>(
 }
 
 impl<T: WithSchema> WithSchema for Box<[T]> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: WithSchema> WithSchema for Arc<[T]> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 impl<T: Introspect> Introspect for Box<[T]> {
@@ -5369,7 +5454,7 @@ impl<T: Introspect> Introspect for Arc<[T]> {
 }
 
 impl WithSchema for Arc<str> {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
@@ -5455,7 +5540,7 @@ impl<T: Deserialize + ReprC> Deserialize for Box<[T]> {
     }
 }
 impl<'a> WithSchema for &'a str {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
@@ -5469,8 +5554,8 @@ impl<'a> Serialize for &'a str {
 }
 
 impl<'a, T: WithSchema> WithSchema for &'a [T] {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), calculate_slice_memory_layout::<T>())
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), calculate_slice_memory_layout::<T>())
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
@@ -5588,8 +5673,8 @@ fn calculate_string_memory_layout() -> VecOrStringLayout {
     return unsafe { std::mem::transmute(is_std) };
 }
 impl<T: WithSchema> WithSchema for Vec<T> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), calculate_vec_memory_layout::<T>())
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), calculate_vec_memory_layout::<T>())
     }
 }
 
@@ -5715,8 +5800,8 @@ impl<T: Introspect> Introspect for VecDeque<T> {
 }
 
 impl<T: WithSchema> WithSchema for VecDeque<T> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(T::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 
@@ -5843,9 +5928,9 @@ impl ReprC for () {
 }
 
 impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
-    fn schema(version: u32) -> Schema {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
-            item_type: Box::new(T::schema(version)),
+            item_type: Box::new(T::schema(version, context)),
             count: N,
         })
     }
@@ -5921,8 +6006,8 @@ impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
 
 impl<T1> ReprC for Range<T1> {}
 impl<T1: WithSchema> WithSchema for Range<T1> {
-    fn schema(version: u32) -> Schema {
-        Schema::new_tuple2::<T1, T1>(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::new_tuple2::<T1, T1>(version, context)
     }
 }
 impl<T1: Serialize> Serialize for Range<T1> {
@@ -6010,8 +6095,8 @@ impl<T1: ReprC, T2: ReprC, T3: ReprC, T4: ReprC> ReprC for (T1, T2, T3, T4) {
 }
 
 impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3) {
-    fn schema(version: u32) -> Schema {
-        Schema::new_tuple3::<T1, T2, T3>(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::new_tuple3::<T1, T2, T3>(version, context)
     }
 }
 impl<T1: Serialize, T2: Serialize, T3: Serialize> Serialize for (T1, T2, T3) {
@@ -6032,8 +6117,8 @@ impl<T1: Deserialize, T2: Deserialize, T3: Deserialize> Deserialize for (T1, T2,
 }
 
 impl<T1: WithSchema, T2: WithSchema> WithSchema for (T1, T2) {
-    fn schema(version: u32) -> Schema {
-        Schema::new_tuple2::<T1, T2>(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::new_tuple2::<T1, T2>(version, context)
     }
 }
 impl<T1: Serialize, T2: Serialize> Serialize for (T1, T2) {
@@ -6049,8 +6134,8 @@ impl<T1: Deserialize, T2: Deserialize> Deserialize for (T1, T2) {
 }
 
 impl<T1: WithSchema> WithSchema for (T1,) {
-    fn schema(version: u32) -> Schema {
-        Schema::new_tuple1::<T1>(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::new_tuple1::<T1>(version, context)
     }
 }
 impl<T1: Serialize> Serialize for (T1,) {
@@ -6069,7 +6154,7 @@ impl<const C: usize> ReprC for arrayvec::ArrayString<C> {}
 
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> WithSchema for arrayvec::ArrayString<C> {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
@@ -6112,8 +6197,8 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
 
 #[cfg(feature = "arrayvec")]
 impl<V: WithSchema, const C: usize> WithSchema for arrayvec::ArrayVec<V, C> {
-    fn schema(version: u32) -> Schema {
-        Schema::Vector(Box::new(V::schema(version)), VecOrStringLayout::Unknown)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(Box::new(V::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 
@@ -6188,18 +6273,19 @@ impl<V: Deserialize + ReprC, const C: usize> Deserialize for arrayvec::ArrayVec<
 }
 
 use std::ops::{Deref, Range};
-impl<T: WithSchema> WithSchema for Box<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+impl<T: WithSchema + 'static> WithSchema for Box<T> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        context.possible_recursion::<T>(|context|T::schema(version, context))
+
     }
 }
 impl<T> ReprC for Box<T> {}
-impl<T: Serialize> Serialize for Box<T> {
+impl<T: Serialize+'static> Serialize for Box<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize> Deserialize for Box<T> {
+impl<T: Deserialize + 'static> Deserialize for Box<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Box::new(T::deserialize(deserializer)?))
     }
@@ -6209,8 +6295,8 @@ use std::rc::Rc;
 
 impl<T> ReprC for Rc<T> {}
 impl<T: WithSchema> WithSchema for Rc<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<T: Serialize> Serialize for Rc<T> {
@@ -6226,8 +6312,8 @@ impl<T: Deserialize> Deserialize for Rc<T> {
 
 impl<T> ReprC for Arc<T> {}
 impl<T: WithSchema> WithSchema for Arc<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<T: Serialize> Serialize for Arc<T> {
@@ -6245,6 +6331,7 @@ use bzip2::Compression;
 use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
@@ -6258,8 +6345,8 @@ use memoffset::offset_of_tuple;
 
 impl<T> ReprC for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<T: Serialize> Serialize for RefCell<T> {
@@ -6279,8 +6366,8 @@ impl<T: ReprC> ReprC for Cell<T> {
     }
 }
 impl<T: WithSchema> WithSchema for Cell<T> {
-    fn schema(version: u32) -> Schema {
-        T::schema(version)
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        T::schema(version, context)
     }
 }
 impl<T: Serialize + Copy> Serialize for Cell<T> {
@@ -6296,7 +6383,7 @@ impl<T: Deserialize> Deserialize for Cell<T> {
 }
 
 impl WithSchema for () {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::ZeroSize
     }
 }
@@ -6478,52 +6565,52 @@ impl Introspect for AtomicIsize {
 }
 
 impl WithSchema for AtomicBool {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_bool)
     }
 }
 impl WithSchema for AtomicU8 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u8)
     }
 }
 impl WithSchema for AtomicI8 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i8)
     }
 }
 impl WithSchema for AtomicU16 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u16)
     }
 }
 impl WithSchema for AtomicI16 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i16)
     }
 }
 impl WithSchema for AtomicU32 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u32)
     }
 }
 impl WithSchema for AtomicI32 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i32)
     }
 }
 impl WithSchema for AtomicU64 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u64)
     }
 }
 impl WithSchema for AtomicI64 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i64)
     }
 }
 impl WithSchema for AtomicUsize {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
             8 => Schema::Primitive(SchemaPrimitive::schema_u64),
@@ -6532,7 +6619,7 @@ impl WithSchema for AtomicUsize {
     }
 }
 impl WithSchema for AtomicIsize {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
             8 => Schema::Primitive(SchemaPrimitive::schema_i64),
@@ -6542,67 +6629,67 @@ impl WithSchema for AtomicIsize {
 }
 
 impl WithSchema for bool {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_bool)
     }
 }
 impl WithSchema for u8 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u8)
     }
 }
 impl WithSchema for i8 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i8)
     }
 }
 impl WithSchema for u16 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u16)
     }
 }
 impl WithSchema for i16 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i16)
     }
 }
 impl WithSchema for u32 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u32)
     }
 }
 impl WithSchema for i32 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i32)
     }
 }
 impl WithSchema for u64 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u64)
     }
 }
 impl WithSchema for u128 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u128)
     }
 }
 impl WithSchema for i128 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i128)
     }
 }
 impl WithSchema for i64 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i64)
     }
 }
 impl WithSchema for char {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_char)
     }
 }
 impl WithSchema for usize {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
             8 => Schema::Primitive(SchemaPrimitive::schema_u64),
@@ -6611,7 +6698,7 @@ impl WithSchema for usize {
     }
 }
 impl WithSchema for isize {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
             8 => Schema::Primitive(SchemaPrimitive::schema_i64),
@@ -6620,12 +6707,12 @@ impl WithSchema for isize {
     }
 }
 impl WithSchema for f32 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_f32)
     }
 }
 impl WithSchema for f64 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_f64)
     }
 }
@@ -7100,7 +7187,7 @@ impl Serialize for Canary1 {
 }
 impl ReprC for Canary1 {}
 impl WithSchema for Canary1 {
-    fn schema(_version: u32) -> Schema {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)
     }
 }

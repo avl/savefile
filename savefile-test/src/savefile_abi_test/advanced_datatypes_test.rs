@@ -12,6 +12,7 @@ pub trait AdvancedTestInterface {
     fn clone_hashmap(&self, x: &HashMap<String, String>) -> HashMap<String, String>;
 
     fn return_trait_object(&self) -> Box<dyn SimpleInterface>;
+    fn test_slices(&mut self, slice: &[u32]) -> u32;
 
     fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32>;
     fn return_boxed_closure2(&self) -> Box<dyn Fn()>;
@@ -52,9 +53,22 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
         Box::new(|| {})
     }
 
+    fn test_slices(&mut self, slice: &[u32]) -> u32 {
+        slice.iter().copied().sum()
+    }
+
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32 {
         x(&|y| y())
     }
+}
+
+#[test]
+fn abi_test_slice() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    assert!( conn.get_arg_passable_by_ref("test_slices", 0) );
+    assert_eq!(conn.test_slices(&[1,2,3,4]), 10);
 }
 
 #[test]

@@ -1174,7 +1174,7 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 });
             }
             let mut mask = 0;
-            let mut check_diff = |effective1, effective2, native1, native2, index: Option<usize>| {
+            let mut verify_compatibility = |effective1, effective2, native1, native2, index: Option<usize>| {
                 let effective_schema_diff = diff_schema(effective1, effective2, "".to_string());
                 if let Some(diff) = effective_schema_diff {
                     return Err(SavefileError::IncompatibleSchema {
@@ -1192,9 +1192,6 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                     });
                 }
 
-                //let caller_isref = caller_native_method.info.arguments[index].can_be_sent_as_ref;
-                //let callee_isref = callee_native_method.info.arguments[index].can_be_sent_as_ref;
-
                 let comp = arg_layout_compatible(native1, native2, effective1, effective2, effective_version);
 
                 if comp {
@@ -1210,10 +1207,10 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
                 let effective2 = &callee_effective_method.info.arguments[index].schema;
                 let native1 = &caller_native_method.info.arguments[index].schema;
                 let native2 = &callee_native_method.info.arguments[index].schema;
-                check_diff(effective1, effective2, native1, native2, Some(index))?;
+                verify_compatibility(effective1, effective2, native1, native2, Some(index))?;
             }
 
-            check_diff(
+            verify_compatibility(
                 &caller_effective_method.info.return_value,
                 &callee_effective_method.info.return_value,
                 &caller_native_method.info.return_value,
@@ -1320,6 +1317,23 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
         owning: Owning,
     ) -> Result<AbiConnection<T>, SavefileError> {
         Self::from_raw(packed.entry, packed.trait_object, owning)
+    }
+
+    /// Check if the given argument 'arg' in method 'method' is memory compatible such that
+    /// it will be sent as a reference, not copied. This will depend on the memory layout
+    /// of the code being called into. It will not change during the lifetime of an
+    /// AbiConnector, but it may change if the target library is recompiled.
+    pub fn get_arg_passable_by_ref(&self, method: &str, arg: usize) -> bool {
+        if let Some(found) = self.template.methods.iter().find(|var|var.method_name == method) {
+            let abi_method: &AbiConnectionMethod = found;
+            if arg >= abi_method.caller_info.arguments.len() {
+                panic!("Method '{}' has only {} arguments, so there is no argument #{}", method, abi_method.caller_info.arguments.len(), arg);
+            }
+            (abi_method.compatibility_mask & (1 << (arg as u64))) != 0
+        } else {
+            let arg_names : Vec<_> =  self.template.methods.iter().map(|x|x.method_name.as_str()).collect();
+            panic!("Trait has no method with name '{}'. Available methods: {}", method, arg_names.join(", "));
+        }
     }
 
     /// This routine is mostly for tests.

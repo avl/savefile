@@ -107,6 +107,18 @@ what the rust project calls it)
 encode the discriminant. Set to 1 for enums which will never have more than 256 fields. Set to 2 for bigger
 enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 
+1.5: The WithSchema::schema function now takes a context object. You can just pass this through for
+most data types. Only smart pointers, containers, Box etc need ot use this, to guard against 
+recursion. See documentation of WithSchemaContext.
+
+1.6: Several savefile trait implementations have now gained 'static-bounds. For example,
+Box<T>, Vec<T> and many more now require T:'static. There was no such bound before, but
+since references cannot be deserialized, it was still typically not possible to deserialize
+anything containing a reference. In principle, someone could have implemented Deserialize
+for some type, leaking memory and returning an instance with a non-static lifetime. However,
+this is a very niche use, and it seems much more likely that deserializing types with arbitrary
+lifetimes is an error. Please file an issue if you have an use-case for deserializing types
+with lifetimes.
 
 ## 0.17.0-beta.13
 

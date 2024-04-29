@@ -24,6 +24,7 @@ pub trait TestInterface {
 
     fn do_mut_nothing(&mut self);
 
+    fn deref_u32(&self, x: &u32) -> u32;
     fn count_chars(&self, x: &String) -> usize;
     fn count_chars_str(&self, x: &str) -> usize;
 
@@ -118,6 +119,10 @@ impl TestInterface for TestInterfaceImpl {
     fn get_static_str(&self) -> &'static str {
         "hello world"
     }
+
+    fn deref_u32(&self, x: &u32) -> u32 {
+        *x
+    }
 }
 
 savefile_abi_export!(TestInterfaceImpl, TestInterface);
@@ -139,7 +144,11 @@ fn test_basic_call_abi() {
 
     assert_eq!(conn.count_chars(&"hejsan".to_string()), 6);
     assert_eq!(conn.count_chars_str("hejsan"), 6);
+    assert!(conn.get_arg_passable_by_ref("count_chars", 0));
     assert_eq!(conn.get_static_str(), "hello world");
+
+    assert_eq!(conn.deref_u32(&42), 42);
+    assert!(conn.get_arg_passable_by_ref("deref_u32", 0));
 }
 
 #[test]
