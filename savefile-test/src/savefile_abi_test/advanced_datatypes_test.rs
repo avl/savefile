@@ -13,8 +13,9 @@ pub trait AdvancedTestInterface {
 
     fn return_trait_object(&self) -> Box<dyn SimpleInterface>;
 
-    fn return_boxed_closure(&self) -> Box<dyn Fn() -> ()>;
-    fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32 )->u32) -> u32) -> u32;
+    fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32>;
+    fn return_boxed_closure2(&self) -> Box<dyn Fn()>;
+    fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32;
 }
 struct SimpleImpl;
 
@@ -44,15 +45,15 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
         Box::new(SimpleImpl)
     }
 
-    fn return_boxed_closure(&self) -> Box<dyn Fn()> {
+    fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32> {
+        Box::new(|| 42)
+    }
+    fn return_boxed_closure2(&self) -> Box<dyn Fn()> {
         Box::new(|| {})
     }
 
-    fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32 )->u32) -> u32) -> u32
-    {
-        x(&|y|{
-            y()
-        })
+    fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32 {
+        x(&|y| y())
     }
 }
 
@@ -62,21 +63,38 @@ fn test_trait_object_in_return_position() {
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let ret = conn.return_trait_object();
-    assert_eq!( ret.do_call(42), 42);
-    assert_eq!( ret.do_call(42), 42);
+    assert_eq!(ret.do_call(42), 42);
+    assert_eq!(ret.do_call(42), 42);
+}
+#[test]
+fn test_return_boxed_closure() {
+    let closure;
+    let closure2;
+    {
+        let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+        let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
+        closure = conn.return_boxed_closure();
+        closure2 = conn.return_boxed_closure2();
+        assert_eq!(closure(), 42);
+    }
+    assert_eq!(closure(), 42);
+    closure2();
 }
 
 #[test]
 fn test_call_many_callbacks() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
-    assert_eq!(conn.many_callbacks(&mut |x|{
-        x(&||{
-            println!("In the inner sanctum!");
-            42
-        })
-    }), 42);
+    assert_eq!(
+        conn.many_callbacks(&mut |x| {
+            x(&|| {
+                println!("In the inner sanctum!");
+                42
+            })
+        }),
+        42
+    );
 }
 #[test]
 fn test_advanced_abi2() {

@@ -1,0 +1,19 @@
+[workspace]
+
+[package]
+name = "compile_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+savefile = { path = "../savefile", features = ["derive"], default-features = false }
+savefile-abi = { path = "../savefile-abi" }
+savefile-derive = {path = "../savefile-derive"}
+
+
+[dev-dependencies]
+compiletest_rs = { version = "0.10", features = [ "tmp" ] }
+
+[features]
+rustc = ["compiletest_rs/rustc"]
+assembly = []

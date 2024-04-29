@@ -7,10 +7,13 @@ members = [
     "savefile-abi-min", 
     "savefile-abi", 
     "savefile-abi-min-lib", 
-    "savefile-abi-min-lib-impl",
+    "savefile-abi-min-lib-impl"
 ]
+exclude = ["compile_tests"]
+
 resolver = "2"
 
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
+

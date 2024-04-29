@@ -6,11 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0-beta.13](https://github.com/avl/savefile/compare/savefile-v0.17.0-beta.12...savefile-v0.17.0-beta.13) - 2024-04-27
+
+### Added
+- savefile-abi2
+
+These CHANGELOG-files are experimental.
+
 ## [0.17.0-beta.12](https://github.com/avl/savefile/compare/savefile-v0.17.0-beta.11...savefile-v0.17.0-beta.12) - 2024-04-27
 
 ### Other
-- miri passes
-- wip
-- wip
-- Work on safety
-- Fix formatting
+- Unspecified work
