@@ -54,8 +54,8 @@ fn load_player() -> Player {
     load_file("save.bin", 0).unwrap()
 }
 
-fn main() {
-	let player = Player { name: "Steve".to_string(), strength: 42,
+fn main() { 
+    let player = Player { name: "Steve".to_string(), strength: 42,
         inventory: vec!(
             "wallet".to_string(),
             "car keys".to_string(),
