@@ -2259,13 +2259,13 @@ impl WithSchemaContext {
     ///
     /// ```rust
     /// use savefile::{Schema, WithSchema, WithSchemaContext};
-    /// #[transparent]
+    /// #[repr(transparent)]
     /// struct MyBox<T> {
     ///    content: *const T
     /// }
-    /// impl<T> WithSchema for MyBox<T> {
-    ///     fn schema(version: u32, context: &mut WithSchemaContext, context: &mut WithSchemaContext) -> Schema {
-    ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(T::schema(version, context)))
+    /// impl<T:WithSchema + 'static> WithSchema for MyBox<T> {
+    ///     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+    ///         context.possible_recursion::<T>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
     ///     }
     ///
     /// }
@@ -4458,7 +4458,7 @@ impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
         self.len()
     }
 }
-impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
+impl<K: WithSchema+'static, V: WithSchema+'static> WithSchema for BTreeMap<K, V> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -4468,12 +4468,12 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<K>(|context|K::schema(version, context))),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<V>(|context|V::schema(version, context))),
                         offset: None,
                     },
                 ],
@@ -4483,7 +4483,7 @@ impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
     }
 }
 impl<K, V> ReprC for BTreeMap<K, V> {}
-impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
+impl<K: Serialize+'static, V: Serialize+'static> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
         for (k, v) in self {
@@ -4493,7 +4493,7 @@ impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
         Ok(())
     }
 }
-impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
+impl<K: Deserialize + Ord+'static, V: Deserialize+'static> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let mut ret = BTreeMap::new();
         let count = <usize as Deserialize>::deserialize(deserializer)?;
@@ -4508,12 +4508,12 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
 }
 
 impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K, S> {}
-impl<K: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
+impl<K: WithSchema+'static, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(K::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<K>(|context|K::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
-impl<K: Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
+impl<K: Serialize+'static, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for item in self {
@@ -4522,7 +4522,7 @@ impl<K: Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
         Ok(())
     }
 }
-impl<K: Deserialize + Eq + Hash, S: ::std::hash::BuildHasher + Default> Deserialize for HashSet<K, S> {
+impl<K: Deserialize + Eq + Hash+'static, S: ::std::hash::BuildHasher + Default> Deserialize for HashSet<K, S> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
         let mut ret = HashSet::with_capacity_and_hasher(cnt, S::default());
@@ -4533,7 +4533,7 @@ impl<K: Deserialize + Eq + Hash, S: ::std::hash::BuildHasher + Default> Deserial
     }
 }
 
-impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashMap<K, V, S> {
+impl<K: WithSchema + Eq + Hash+'static, V: WithSchema+'static, S: ::std::hash::BuildHasher> WithSchema for HashMap<K, V, S> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -4543,12 +4543,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<K>(|context|K::schema(version, context))),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<K>(|context|V::schema(version, context))),
                         offset: None,
                     },
                 ],
@@ -4558,7 +4558,7 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
     }
 }
 impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
-impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
+impl<K: Serialize + Eq + Hash+'static, V: Serialize+'static, S: ::std::hash::BuildHasher> Serialize for HashMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
@@ -4569,7 +4569,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
     }
 }
 
-impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher + Default> Deserialize
+impl<K: Deserialize + Eq + Hash+'static, V: Deserialize+'static, S: ::std::hash::BuildHasher + Default> Deserialize
     for HashMap<K, V, S>
 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
@@ -4583,7 +4583,7 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher + D
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema for IndexMap<K, V, S> {
+impl<K: WithSchema + Eq + Hash+'static, V: WithSchema+'static, S: ::std::hash::BuildHasher> WithSchema for IndexMap<K, V, S> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -4593,12 +4593,12 @@ impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> With
                 fields: vec![
                     Field {
                         name: "key".to_string(),
-                        value: Box::new(K::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<K>(|context|K::schema(version, context))),
                         offset: None,
                     },
                     Field {
                         name: "value".to_string(),
-                        value: Box::new(V::schema(version, context)),
+                        value: Box::new(context.possible_recursion::<K>(|context|V::schema(version, context))),
                         offset: None,
                     },
                 ],
@@ -4695,7 +4695,7 @@ where
 impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for IndexMap<K, V, S> {}
 
 #[cfg(feature = "indexmap")]
-impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
+impl<K: Serialize + Eq + Hash+'static, V: Serialize+'static, S: ::std::hash::BuildHasher> Serialize for IndexMap<K, V, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for (k, v) in self.iter() {
@@ -4707,7 +4707,7 @@ impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serial
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
+impl<K: Deserialize + Eq + Hash+'static, V: Deserialize+'static> Deserialize for IndexMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexMap::with_capacity(l);
@@ -4741,7 +4741,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
 impl<K: Eq + Hash, S: ::std::hash::BuildHasher> ReprC for IndexSet<K, S> {}
 
 #[cfg(feature = "indexmap")]
-impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
+impl<K: WithSchema + Eq + Hash+'static, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -4750,7 +4750,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
                 alignment: None,
                 fields: vec![Field {
                     name: "key".to_string(),
-                    value: Box::new(K::schema(version, context)),
+                    value: Box::new(context.possible_recursion::<K>(|context|K::schema(version, context))),
                     offset: None,
                 }],
             })),
@@ -4760,7 +4760,7 @@ impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for Inde
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
+impl<K: Serialize + Eq + Hash+'static, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for k in self.iter() {
@@ -4771,7 +4771,7 @@ impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexS
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
+impl<K: Deserialize + Eq + Hash+'static> Deserialize for IndexSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexSet::with_capacity(l);
@@ -5291,12 +5291,12 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 }
 
 impl<T> ReprC for BinaryHeap<T> {}
-impl<T: WithSchema> WithSchema for BinaryHeap<T> {
+impl<T: WithSchema+'static> WithSchema for BinaryHeap<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
-impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
+impl<T: Serialize + Ord+'static> Serialize for BinaryHeap<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
@@ -5306,7 +5306,7 @@ impl<T: Serialize + Ord> Serialize for BinaryHeap<T> {
         Ok(())
     }
 }
-impl<T: Deserialize + Ord> Deserialize for BinaryHeap<T> {
+impl<T: Deserialize + Ord+'static> Deserialize for BinaryHeap<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = BinaryHeap::with_capacity(l);
@@ -5340,19 +5340,19 @@ where
 }
 
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array> WithSchema for smallvec::SmallVec<T>
+impl<T: smallvec::Array+'static> WithSchema for smallvec::SmallVec<T>
 where
     T::Item: WithSchema,
 {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::Item::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::Item::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
 #[cfg(feature = "smallvec")]
 impl<T: smallvec::Array> ReprC for smallvec::SmallVec<T> {}
 
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array> Serialize for smallvec::SmallVec<T>
+impl<T: smallvec::Array+'static> Serialize for smallvec::SmallVec<T>
 where
     T::Item: Serialize,
 {
@@ -5366,7 +5366,7 @@ where
     }
 }
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array> Deserialize for smallvec::SmallVec<T>
+impl<T: smallvec::Array+'static> Deserialize for smallvec::SmallVec<T>
 where
     T::Item: Deserialize,
 {
@@ -5411,14 +5411,14 @@ fn regular_serialize_vec<T: Serialize>(
     }
 }
 
-impl<T: WithSchema> WithSchema for Box<[T]> {
+impl<T: WithSchema+'static> WithSchema for Box<[T]> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
-impl<T: WithSchema> WithSchema for Arc<[T]> {
+impl<T: WithSchema+'static> WithSchema for Arc<[T]> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
 impl<T: Introspect> Introspect for Box<[T]> {
@@ -5493,7 +5493,7 @@ impl Deserialize for Arc<str> {
     }
 }
 
-impl<T: Serialize + ReprC> Serialize for Box<[T]> {
+impl<T: Serialize + ReprC+'static> Serialize for Box<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5511,7 +5511,7 @@ impl<T: Serialize + ReprC> Serialize for Box<[T]> {
 }
 impl<T: ReprC> ReprC for Box<[T]> {}
 
-impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
+impl<T: Serialize + ReprC+'static> Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5529,12 +5529,12 @@ impl<T: Serialize + ReprC> Serialize for Arc<[T]> {
 }
 impl<T: ReprC> ReprC for Arc<[T]> {}
 
-impl<T: Deserialize + ReprC> Deserialize for Arc<[T]> {
+impl<T: Deserialize + ReprC+'static> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
-impl<T: Deserialize + ReprC> Deserialize for Box<[T]> {
+impl<T: Deserialize + ReprC+'static> Deserialize for Box<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
@@ -5553,13 +5553,13 @@ impl<'a> Serialize for &'a str {
     }
 }
 
-impl<'a, T: WithSchema> WithSchema for &'a [T] {
+impl<'a, T: WithSchema+'static> WithSchema for &'a [T] {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), calculate_slice_memory_layout::<T>())
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), calculate_slice_memory_layout::<T>())
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<'a, T: Serialize + ReprC> Serialize for &'a [T] {
+impl<'a, T: Serialize + ReprC+'static> Serialize for &'a [T] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5579,7 +5579,7 @@ impl<'a, T: Serialize + ReprC> Serialize for &'a [T] {
 
 /// Deserialize a slice into a Vec
 /// Unsized slices cannot be deserialized into unsized slices.
-pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + ReprC>(
+pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + ReprC+'static>(
     deserializer: &mut Deserializer<R>,
 ) -> Result<Vec<T>, SavefileError> {
     Vec::deserialize(deserializer)
@@ -5672,9 +5672,9 @@ fn calculate_string_memory_layout() -> VecOrStringLayout {
     STRING_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
     return unsafe { std::mem::transmute(is_std) };
 }
-impl<T: WithSchema> WithSchema for Vec<T> {
+impl<T: WithSchema+'static> WithSchema for Vec<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), calculate_vec_memory_layout::<T>())
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), calculate_vec_memory_layout::<T>())
     }
 }
 
@@ -5694,7 +5694,7 @@ impl<T: Introspect> Introspect for Vec<T> {
     }
 }
 
-impl<T: Serialize + ReprC> Serialize for Vec<T> {
+impl<T: Serialize + ReprC+'static> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5731,7 +5731,7 @@ fn regular_deserialize_vec<T: Deserialize>(
     Ok(ret)
 }
 
-impl<T: Deserialize + ReprC> Deserialize for Vec<T> {
+impl<T: Deserialize + ReprC+'static> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             Ok(regular_deserialize_vec(deserializer)?)
@@ -5799,20 +5799,20 @@ impl<T: Introspect> Introspect for VecDeque<T> {
     }
 }
 
-impl<T: WithSchema> WithSchema for VecDeque<T> {
+impl<T: WithSchema+'static> WithSchema for VecDeque<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        Schema::Vector(Box::new(T::schema(version, context)), VecOrStringLayout::Unknown)
+        Schema::Vector(Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))), VecOrStringLayout::Unknown)
     }
 }
 
 impl<T> ReprC for VecDeque<T> {}
-impl<T: Serialize> Serialize for VecDeque<T> {
+impl<T: Serialize+'static> Serialize for VecDeque<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vecdeque(self, serializer)
     }
 }
 
-impl<T: Deserialize> Deserialize for VecDeque<T> {
+impl<T: Deserialize+'static> Deserialize for VecDeque<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vecdeque(deserializer)?)
     }
@@ -5927,10 +5927,10 @@ impl ReprC for () {
     }
 }
 
-impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
+impl<T: WithSchema+'static, const N: usize> WithSchema for [T; N] {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
-            item_type: Box::new(T::schema(version, context)),
+            item_type: Box::new(context.possible_recursion::<T>(|context|T::schema(version, context))),
             count: N,
         })
     }
@@ -5955,7 +5955,7 @@ impl<T: ReprC, const N: usize> ReprC for [T; N] {
         T::repr_c_optimization_safe(version)
     }
 }
-impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
+impl<T: Serialize + ReprC+'static, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5973,7 +5973,7 @@ impl<T: Serialize + ReprC, const N: usize> Serialize for [T; N] {
     }
 }
 
-impl<T: Deserialize + ReprC, const N: usize> Deserialize for [T; N] {
+impl<T: Deserialize + ReprC+'static, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
@@ -6294,34 +6294,34 @@ impl<T: Deserialize + 'static> Deserialize for Box<T> {
 use std::rc::Rc;
 
 impl<T> ReprC for Rc<T> {}
-impl<T: WithSchema> WithSchema for Rc<T> {
+impl<T: WithSchema+'static> WithSchema for Rc<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        T::schema(version, context)
+        context.possible_recursion::<T>(|context|T::schema(version, context))
     }
 }
-impl<T: Serialize> Serialize for Rc<T> {
+impl<T: Serialize+'static> Serialize for Rc<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize> Deserialize for Rc<T> {
+impl<T: Deserialize+'static> Deserialize for Rc<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Rc::new(T::deserialize(deserializer)?))
     }
 }
 
 impl<T> ReprC for Arc<T> {}
-impl<T: WithSchema> WithSchema for Arc<T> {
+impl<T: WithSchema+'static> WithSchema for Arc<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-        T::schema(version, context)
+        context.possible_recursion::<T>(|context|T::schema(version, context))
     }
 }
-impl<T: Serialize> Serialize for Arc<T> {
+impl<T: Serialize+'static> Serialize for Arc<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize> Deserialize for Arc<T> {
+impl<T: Deserialize+'static> Deserialize for Arc<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Arc::new(T::deserialize(deserializer)?))
     }
