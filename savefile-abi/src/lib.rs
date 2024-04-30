@@ -314,6 +314,7 @@ use std::path::Path;
 use std::ptr::null;
 use std::sync::{Mutex, MutexGuard};
 use std::{ptr, slice};
+use std::any::TypeId;
 
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
@@ -852,7 +853,7 @@ pub fn parse_return_value_impl<T>(
 /// Parse an RawAbiCallResult instance into a Result<Box<dyn T>, SavefileError> .
 /// This is used on the caller side, and the type T will always be statically known.
 /// TODO: There's some duplicated code here, compare parse_return_value
-pub fn parse_return_boxed_trait<T>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError>
+pub fn parse_return_boxed_trait<T:'static>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError>
 where
     T: AbiExportable + ?Sized,
 {
@@ -874,7 +875,7 @@ static ENTRY_CACHE: Mutex<
 > = Mutex::new(None);
 
 static ABI_CONNECTION_TEMPLATES: Mutex<
-    Option<HashMap<unsafe extern "C" fn(flag: AbiProtocol), AbiConnectionTemplate>>,
+    Option<HashMap<(TypeId,unsafe extern "C" fn(flag: AbiProtocol)), AbiConnectionTemplate>>,
 > = Mutex::new(None);
 
 struct Guard<'a, K: Hash + Eq, V> {
@@ -971,7 +972,7 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
 
 /// Raw entry point for receiving return values from other shared libraries
 #[doc(hidden)]
-pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(outcome: *const RawAbiCallResult, result_receiver: *mut ())
+pub unsafe extern "C" fn abi_boxed_trait_receiver<T:'static>(outcome: *const RawAbiCallResult, result_receiver: *mut ())
 where
     T: AbiExportable + ?Sized,
 {
@@ -1075,7 +1076,7 @@ fn arg_layout_compatible(
     }
 }
 
-impl<T: AbiExportable + ?Sized> AbiConnection<T> {
+impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
     /// Analyse the difference in definitions between the two sides,
     /// and create an AbiConnection
     #[allow(clippy::too_many_arguments)]
@@ -1397,7 +1398,11 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
     ) -> Result<AbiConnection<T>, SavefileError> {
         let mut templates = Guard::lock(&ABI_CONNECTION_TEMPLATES);
 
-        let template = match templates.entry(remote_entry) {
+        let typeid = TypeId::of::<T>();
+        // In principle, it would be enough to key 'templates' based on 'remote_entry'.
+        // However, if we do, and the user ever uses AbiConnection<T> with the _wrong_ entry point,
+        // we risk poisoning the cache with erroneous data. 
+        let template = match templates.entry((typeid,remote_entry)) {
             Entry::Occupied(template) => template.get().clone(),
             Entry::Vacant(vacant) => {
                 let own_version = T::get_latest_version();

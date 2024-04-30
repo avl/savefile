@@ -1,3 +1,7 @@
+use std::hint::black_box;
+use test::Bencher;
+use rand::Rng;
+
 mod savefile_test_bad_schema {
     use savefile::prelude::*;
 
@@ -168,4 +172,55 @@ mod savefile_benchmark_no_reprc {
             decoded
         })
     }
+}
+
+#[derive(Savefile,PartialEq,Default)]
+pub struct Vector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+#[derive(Savefile,PartialEq,Default)]
+pub struct Triangle {
+    pub v0: Vector3,
+    pub v1: Vector3,
+    pub v2: Vector3,
+    pub normal: Vector3,
+}
+
+#[derive(Savefile,PartialEq)]
+pub struct Mesh {
+    pub triangles: Vec<Triangle>,
+}
+#[cfg(test)]
+pub fn generate_mesh() -> Mesh {
+
+    let mut mesh = Mesh {
+        triangles: vec![]
+    };
+    const TRIANGLES: usize = 125_000;
+    for _ in 0..TRIANGLES {
+        mesh.triangles.push(Triangle::default())
+    }
+
+    mesh
+}
+#[cfg(feature = "nightly")]
+#[bench]
+fn bench_ext_triangle(b: &mut Bencher) {
+    let mesh = generate_mesh();
+    let mut encoded: Vec<u8> = Vec::new();
+    b.iter(move || {
+        savefile::save_noschema(black_box(&mut encoded), 0, black_box(&mesh)).unwrap();
+    })
+}
+#[test]
+fn test_triangle() {
+    use savefile::ReprC;
+    assert!( unsafe { Triangle::repr_c_optimization_safe(0).is_yes() } );
+    let mesh = generate_mesh();
+
+    let mut encoded = Vec::new();
+    encoded.clear();
+    savefile::save_noschema(black_box(&mut encoded), 0, black_box(&mesh)).unwrap();
 }
