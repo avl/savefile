@@ -1401,7 +1401,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
         let typeid = TypeId::of::<T>();
         // In principle, it would be enough to key 'templates' based on 'remote_entry'.
         // However, if we do, and the user ever uses AbiConnection<T> with the _wrong_ entry point,
-        // we risk poisoning the cache with erroneous data. 
+        // we risk poisoning the cache with erroneous data.
         let template = match templates.entry((typeid,remote_entry)) {
             Entry::Occupied(template) => template.get().clone(),
             Entry::Vacant(vacant) => {

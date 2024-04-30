@@ -1,4 +1,5 @@
 use std::hint::black_box;
+#[cfg(feature = "nightly")]
 use test::Bencher;
 use rand::Rng;
 
