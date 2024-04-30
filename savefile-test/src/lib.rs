@@ -60,7 +60,6 @@ use std::io::Cursor;
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0, true)
 }
-
 pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E, version: u32, schema: bool) {
     let mut f = Cursor::new(Vec::new());
     {
@@ -1330,6 +1329,40 @@ pub fn test_cow_borrowed() {
     let borrow = "world".to_string();
     let x: Cow<String> = Cow::Borrowed(&borrow);
     assert_roundtrip(x);
+}
+#[test]
+pub fn test_cow_str_ref() {
+    let borrow = "world".to_string();
+    let x: Cow<str> = Cow::Borrowed(&borrow);
+    assert_roundtrip(x);
+}
+#[test]
+pub fn test_cow_str_owned() {
+    let st = "world".to_string();
+    let x: Cow<str> = Cow::Owned(st);
+    assert_roundtrip(x);
+}
+
+#[test]
+pub fn test_verify_cow_deserialize_not_borrowed() {
+    let mut f = Cursor::new(Vec::new());
+    {
+        let borrow = "Daisy".to_string();
+        let x: Cow<String> = Cow::Borrowed(&borrow);
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            Serializer::save(&mut bufw, 0, &x, false).unwrap();
+        }
+        bufw.flush().unwrap();
+    }
+    f.set_position(0);
+    {
+        let roundtripped:Cow<String> = Deserializer::load(&mut f, 0).unwrap();
+        match roundtripped {
+            Cow::Borrowed(_) => {panic!("Roundtripped Cow should not be borrowed!")}
+            Cow::Owned(_) => {}
+        }
+    }
 }
 
 #[derive(Savefile, Debug, PartialEq)]

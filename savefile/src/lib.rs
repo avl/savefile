@@ -863,6 +863,7 @@ extern crate serde_derive;
 use core::str::Utf8Error;
 #[cfg(feature = "serde_derive")]
 use serde_derive::{Deserialize, Serialize};
+use std::any::TypeId;
 
 #[cfg(feature = "quickcheck")]
 extern crate quickcheck;
@@ -1297,7 +1298,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> Deserialize for Cow<'a, T>
 where
     T::Owned: Deserialize,
 {
-    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Cow<'a, T>, SavefileError> {
         Ok(Cow::Owned(<T as ToOwned>::Owned::deserialize(deserializer)?))
     }
 }
@@ -2243,7 +2244,6 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
 /// against recursion in a well-defined way.
 /// As a user of Savefile, you only need to use this if you are implementing Savefile for
 /// container or smart-pointer type.
-#[derive(Default)]
 pub struct WithSchemaContext {
     seen_types: HashMap<TypeId, usize /*depth*/>,
 }
@@ -2252,7 +2252,8 @@ impl WithSchemaContext {
     /// Create a new empty WithSchemaContext.
     /// This is useful for calling ::schema at the top-level.
     pub fn new() -> WithSchemaContext {
-        Default::default()
+        let seen_types = HashMap::new();
+        WithSchemaContext { seen_types }
     }
 }
 
@@ -2268,11 +2269,14 @@ impl WithSchemaContext {
     /// }
     /// impl<T:WithSchema + 'static> WithSchema for MyBox<T> {
     ///     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-    ///         context.possible_recursion::<T>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
+    ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
     ///     }
-    ///
     /// }
     /// ```
+    ///
+    /// If recursion is detected (traversing to exactly MyBox<T> twice, in the above example), the method
+    /// 'possible_recursion' will return Schema::Recursion, stopping the Schema instance from becoming infinitely big.
+    ///
     pub fn possible_recursion<T: 'static>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
         let typeid = TypeId::of::<T>();
         let prevlen = self.seen_types.len();
@@ -2300,7 +2304,15 @@ impl WithSchemaContext {
 /// can be disabled).
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
+    /// The WithSchemaContext can be used to guard against recursive data structures.
+    /// See documentation of WithSchemaContext.
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema;
+}
+
+/// Create a new WithSchemaContext, and then call 'schema' on type T.
+/// This is a useful convenience method.
+pub fn get_schema<T: WithSchema + 'static>(version: u32) -> Schema {
+    T::schema(version, &mut WithSchemaContext::new())
 }
 
 /// This trait must be implemented for all data structures you wish to be
@@ -2349,6 +2361,18 @@ impl Introspect for NullIntrospectable {
         0
     }
 }
+
+impl<'a> IntrospectItem<'a> for str {
+    fn key(&self) -> &str {
+        self
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        &THE_NULL_INTROSPECTABLE
+    }
+}
+
+
 impl<'a> IntrospectItem<'a> for String {
     fn key(&self) -> &str {
         self
@@ -2646,14 +2670,14 @@ impl SchemaEnum {
     /// Arguments:
     ///
     /// * dbg_name - Name of the enum type.
-    /// * variants - The variants of the enum
     /// * discriminant_size:
     ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
     ///   Valid values are 1, 2 or 4.
     ///   Otherwise, this is the number of bytes needed to represent the discriminant.
     ///   In either case, this is the size of the enum in the disk-format.
+    /// * variants - The variants of the enum
     ///
-    pub fn new(dbg_name: String, variants: Vec<Variant>, discriminant_size: u8) -> SchemaEnum {
+    pub fn new(dbg_name: String, discriminant_size: u8, variants: Vec<Variant>) -> SchemaEnum {
         SchemaEnum {
             dbg_name,
             variants,
@@ -3648,8 +3672,8 @@ impl Deserialize for SchemaStruct {
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
-            size: <_ as Deserialize>::deserialize(deserializer)?,
-            alignment: <_ as Deserialize>::deserialize(deserializer)?,
+            size: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
+            alignment: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
             fields: {
                 let mut ret = Vec::new();
                 for _ in 0..l {
@@ -4022,7 +4046,8 @@ impl Serialize for Schema {
 impl ReprC for Schema {}
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let schema = match deserializer.read_u8()? {
+        let x = deserializer.read_u8()?;
+        let schema = match x {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
@@ -4062,13 +4087,26 @@ impl Deserialize for Schema {
         Ok(schema)
     }
 }
+impl WithSchema for str {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
+    }
+}
 
 impl WithSchema for String {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
     }
 }
+impl Introspect for str {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
 
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+        None
+    }
+}
 impl Introspect for String {
     fn introspect_value(&self) -> String {
         self.to_string()
@@ -4083,8 +4121,16 @@ impl Serialize for String {
         serializer.write_string(self)
     }
 }
+impl Serialize for str {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_string(self)
+    }
+}
 
 impl ReprC for String {}
+
+impl ReprC for str {}
+
 
 impl Deserialize for String {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<String, SavefileError> {
@@ -6369,7 +6415,7 @@ impl<T: Deserialize + 'static> Deserialize for Arc<T> {
 }
 #[cfg(feature = "bzip2")]
 use bzip2::Compression;
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;

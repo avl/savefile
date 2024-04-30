@@ -707,7 +707,7 @@ impl ArgType {
                 caller_arg_serializer1: quote! {
                     #arg_name.serialize(&mut serializer)
                 },
-                schema: quote!( <#arg_type as WithSchema>::schema(version, context) ),
+                schema: quote!( get_schema::<#arg_type>(version) ),
                 known_size_align1: if compile_time_check_reprc(arg_type) {
                     compile_time_size(arg_type)
                 } else {
@@ -996,7 +996,7 @@ pub(super) fn generate_method_definitions(
     let result_default;
     let return_ser_temp;
     if no_return {
-        return_value_schema = quote!(<() as WithSchema>::schema(0, &mut WithSchemaContext::new()));
+        return_value_schema = quote!(get_schema::<()>(0));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
         ret_serialize = quote!(());
         caller_return_type = quote!(());

@@ -57,3 +57,7 @@ methods:
               has_explicit_repr: false
               size: 1
               alignment: 1
+  - name: function_existing_in_v2
+    info:
+      return_value: ZeroSize
+      arguments: []

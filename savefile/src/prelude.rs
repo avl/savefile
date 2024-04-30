@@ -1,11 +1,12 @@
 pub use {
-    super::deserialize_slice_as_vec, super::introspect_item, super::load, super::load_file, super::load_file_noschema,
-    super::load_from_mem, super::load_noschema, super::save, super::save_file, super::save_file_noschema,
-    super::save_noschema, super::save_to_mem, super::AbiRemoved, super::Canary1, super::Deserialize,
-    super::Deserializer, super::Field, super::Introspect, super::IntrospectItem, super::IntrospectedElementKey,
-    super::IntrospectionResult, super::Introspector, super::IntrospectorNavCommand, super::IsReprC, super::Removed,
-    super::ReprC, super::SavefileError, super::Schema, super::SchemaEnum, super::SchemaPrimitive, super::SchemaStruct,
-    super::Serialize, super::Serializer, super::Variant, super::WithSchema, super::WithSchemaContext,
+    super::deserialize_slice_as_vec, super::get_schema, super::introspect_item, super::load, super::load_file,
+    super::load_file_noschema, super::load_from_mem, super::load_noschema, super::save, super::save_file,
+    super::save_file_noschema, super::save_noschema, super::save_to_mem, super::AbiRemoved, super::Canary1,
+    super::Deserialize, super::Deserializer, super::Field, super::Introspect, super::IntrospectItem,
+    super::IntrospectedElementKey, super::IntrospectionResult, super::Introspector, super::IntrospectorNavCommand,
+    super::IsReprC, super::Removed, super::ReprC, super::SavefileError, super::Schema, super::SchemaEnum,
+    super::SchemaPrimitive, super::SchemaStruct, super::Serialize, super::Serializer, super::Variant,
+    super::WithSchema, super::WithSchemaContext,
 };
 
 pub use byteorder::{LittleEndian, ReadBytesExt};

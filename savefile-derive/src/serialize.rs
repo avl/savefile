@@ -41,10 +41,6 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
-            //let variant_count = enum1.variants.len();
-            /*if variant_count >= 256 {
-                panic!("This library is not capable of serializing enums with 256 variants or more. Our deepest apologies, we thought no-one would ever create such an enum!");
-            }*/
             let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
