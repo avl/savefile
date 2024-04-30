@@ -1,6 +1,7 @@
 extern crate savefile_abi;
 extern crate savefile_derive;
 
+#[cfg(test)]
 use savefile_abi::AbiConnection;
 use savefile_derive::savefile_abi_exportable;
 

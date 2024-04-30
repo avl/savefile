@@ -861,6 +861,7 @@ extern crate serde;
 extern crate serde_derive;
 
 use core::str::Utf8Error;
+use std::any::TypeId;
 #[cfg(feature = "serde_derive")]
 use serde_derive::{Deserialize, Serialize};
 
@@ -2240,7 +2241,6 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
 /// against recursion in a well-defined way.
 /// As a user of Savefile, you only need to use this if you are implementing Savefile for
 /// container or smart-pointer type.
-#[derive(Default)]
 pub struct WithSchemaContext {
     seen_types: HashMap<TypeId, usize/*depth*/>,
 }
@@ -2249,7 +2249,10 @@ impl WithSchemaContext {
     /// Create a new empty WithSchemaContext.
     /// This is useful for calling ::schema at the top-level.
     pub fn new() -> WithSchemaContext {
-        Default::default()
+        let seen_types = HashMap::new();
+        WithSchemaContext {
+            seen_types
+        }
     }
 }
 
@@ -2265,7 +2268,7 @@ impl WithSchemaContext {
     /// }
     /// impl<T:WithSchema + 'static> WithSchema for MyBox<T> {
     ///     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
-    ///         context.possible_recursion::<T>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
+    ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
     ///     }
     ///
     /// }
@@ -2299,6 +2302,13 @@ pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema;
 }
+
+/// Create a new WithSchemaContext, and then call 'schema' on type T.
+/// This is a useful convenience method.
+pub fn get_schema<T:WithSchema+'static>(version: u32) -> Schema {
+    T::schema(version, &mut WithSchemaContext::new())
+}
+
 
 /// This trait must be implemented for all data structures you wish to be
 /// able to serialize. To actually serialize data: create a [Serializer],
@@ -2643,14 +2653,14 @@ impl SchemaEnum {
     /// Arguments:
     ///
     /// * dbg_name - Name of the enum type.
-    /// * variants - The variants of the enum
     /// * discriminant_size:
     ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
     ///   Valid values are 1, 2 or 4.
     ///   Otherwise, this is the number of bytes needed to represent the discriminant.
     ///   In either case, this is the size of the enum in the disk-format.
+    /// * variants - The variants of the enum
     ///
-    pub fn new(dbg_name: String, variants: Vec<Variant>, discriminant_size: u8) -> SchemaEnum {
+    pub fn new(dbg_name: String, discriminant_size: u8, variants: Vec<Variant>) -> SchemaEnum {
         SchemaEnum {
             dbg_name,
             variants,
@@ -6328,7 +6338,7 @@ impl<T: Deserialize+'static> Deserialize for Arc<T> {
 }
 #[cfg(feature = "bzip2")]
 use bzip2::Compression;
-use std::any::{Any, TypeId};
+use std::any::{Any};
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
