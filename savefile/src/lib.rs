@@ -1298,7 +1298,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> Deserialize for Cow<'a, T>
 where
     T::Owned: Deserialize,
 {
-    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Cow<'a, T>, SavefileError> {
         Ok(Cow::Owned(<T as ToOwned>::Owned::deserialize(deserializer)?))
     }
 }
@@ -2271,7 +2271,6 @@ impl WithSchemaContext {
     ///     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
     ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
     ///     }
-    ///
     /// }
     /// ```
     ///
@@ -2362,6 +2361,18 @@ impl Introspect for NullIntrospectable {
         0
     }
 }
+
+impl<'a> IntrospectItem<'a> for str {
+    fn key(&self) -> &str {
+        self
+    }
+
+    fn val(&self) -> &dyn Introspect {
+        &THE_NULL_INTROSPECTABLE
+    }
+}
+
+
 impl<'a> IntrospectItem<'a> for String {
     fn key(&self) -> &str {
         self
@@ -3661,8 +3672,8 @@ impl Deserialize for SchemaStruct {
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
-            size: <_ as Deserialize>::deserialize(deserializer)?,
-            alignment: <_ as Deserialize>::deserialize(deserializer)?,
+            size: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
+            alignment: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
             fields: {
                 let mut ret = Vec::new();
                 for _ in 0..l {
@@ -4035,7 +4046,8 @@ impl Serialize for Schema {
 impl ReprC for Schema {}
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let schema = match deserializer.read_u8()? {
+        let x = deserializer.read_u8()?;
+        let schema = match x {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
@@ -4075,13 +4087,26 @@ impl Deserialize for Schema {
         Ok(schema)
     }
 }
+impl WithSchema for str {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
+    }
+}
 
 impl WithSchema for String {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
     }
 }
+impl Introspect for str {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
 
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+        None
+    }
+}
 impl Introspect for String {
     fn introspect_value(&self) -> String {
         self.to_string()
@@ -4096,8 +4121,16 @@ impl Serialize for String {
         serializer.write_string(self)
     }
 }
+impl Serialize for str {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_string(self)
+    }
+}
 
 impl ReprC for String {}
+
+impl ReprC for str {}
+
 
 impl Deserialize for String {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<String, SavefileError> {

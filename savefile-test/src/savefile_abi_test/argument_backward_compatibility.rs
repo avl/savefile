@@ -4,6 +4,7 @@ use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
 use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
 use savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
+use savefile_abi_test::basic_abi_tests::CowSmuggler;
 use savefile_derive::Savefile;
 
 mod v1 {
@@ -23,6 +24,7 @@ mod v1 {
     pub trait ArgInterfaceV1 {
         fn sums(&self, a: Argument, b: Argument) -> u32;
         fn enum_arg(&self, a: EnumArgument) -> String;
+        fn function_existing_in_v1(&self);
     }
     #[derive(Default)]
     pub struct Implementation1 {}
@@ -36,6 +38,8 @@ mod v1 {
                 EnumArgument::Variant1 => "Variant1".into(),
                 EnumArgument::Variant2 => "Variant2".into(),
             }
+        }
+        fn function_existing_in_v1(&self) {
         }
     }
 }
@@ -71,6 +75,7 @@ mod v2 {
                 EnumArgument::Variant3 => "Variant3".into(),
             }
         }
+        fn function_existing_in_v2(&self);
     }
 
     #[derive(Default)]
@@ -78,6 +83,9 @@ mod v2 {
     impl ArgInterfaceV2 for Implementation2 {
         fn sums(&self, a: ArgArgument, b: ArgArgument) -> u32 {
             a.data3 + a.data2 + b.data2 + b.data3
+        }
+
+        fn function_existing_in_v2(&self) {
         }
     }
 }
@@ -180,4 +188,44 @@ pub fn test_caller_has_newer_version_and_uses_enum_that_callee_doesnt_have() {
     .unwrap();
 
     assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant3), "Variant3".to_string());
+}
+
+#[test]
+#[should_panic(expected = "'function_existing_in_v2' does not exist in implementation.")]
+pub fn test_caller_has_newer_version_calling_non_existing_function() {
+    let iface1: Box<dyn ArgInterfaceV1> = Box::new(Implementation1 {});
+    let conn1 = unsafe {
+        AbiConnection::<dyn ArgInterfaceV2>::from_boxed_trait_for_test(
+            <dyn ArgInterfaceV1 as AbiExportable>::ABI_ENTRY,
+            iface1,
+        )
+    }
+        .unwrap();
+    conn1.function_existing_in_v2();
+}
+
+#[test]
+#[should_panic(expected = "'function_existing_in_v1' does not exist in implementation.")]
+pub fn test_caller_has_older_version_calling_non_existing_function() {
+    let iface2: Box<dyn ArgInterfaceV2> = Box::new(Implementation2 {});
+    let conn = unsafe {
+        AbiConnection::<dyn ArgInterfaceV1>::from_boxed_trait_for_test(
+            <dyn ArgInterfaceV2 as AbiExportable>::ABI_ENTRY,
+            iface2,
+        )
+    }
+        .unwrap();
+    conn.function_existing_in_v1();
+}
+#[test]
+fn test_calling_function_that_is_later_removed() {
+    let boxed: Box<dyn ArgInterfaceV1> = Box::new(Implementation1{});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    conn.function_existing_in_v1();
+}
+#[test]
+fn test_calling_function_that_is_added_in_later_version() {
+    let boxed: Box<dyn ArgInterfaceV2> = Box::new(Implementation2{});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    conn.function_existing_in_v2();
 }

@@ -114,11 +114,17 @@ recursion. See documentation of WithSchemaContext.
 1.6: Several savefile trait implementations have now gained 'static-bounds. For example,
 Box<T>, Vec<T> and many more now require T:'static. There was no such bound before, but
 since references cannot be deserialized, it was still typically not possible to deserialize
-anything containing a reference. In principle, someone could have implemented Deserialize
-for some type, leaking memory and returning an instance with a non-static lifetime. However,
-this is a very niche use, and it seems much more likely that deserializing types with arbitrary
-lifetimes is an error. Please file an issue if you have an use-case for deserializing types
-with lifetimes.
+anything containing a reference. 
+
+It turns out there is a usecase for serializing objects with lifetimes: Things like
+Cow<str> can be useful. Everything the deserializer produces must still have 'static lifetime in
+practice, because of how the Deserialize trait is defined (there's no other lifetime the
+return value can have).
+
+Serializing things with lifetimes is still possible, the only place where 'static is required
+is the contents of containers such as Box, Vec etc. The reason is that the new recursion
+support needs to be able to create TypeIds, and this is only possible for objects with
+'static lifetime.
 
 ## 0.17.0-beta.13
 
