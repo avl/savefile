@@ -233,10 +233,11 @@ This has a performance penalty, and may require heap allocation.
 
  * It supports trait objects as arguments, including FnMut() and Fn().
 
- * Boxed trait objects can be transferred across FFI-boundaries, passing ownership, while
-   still not invoking UB if the object is dropped on the other side of the FFI-boundary.
+ * Boxed trait objects, including Fn-traits, can be transferred across FFI-boundaries, passing
+   ownership, while still not invoking UB if the object is dropped on the other side of the
+   FFI-boundary.
 
- * It requires enums to be `#[repr(C,u8)]` in order to pass them by reference. Other enums
+ * It requires enums to be `#[repr(uX)]` in order to pass them by reference. Other enums
 will still work correctly, but will be serialized under the hood at a performance penalty.
 
  * It places severe restrictions on types of arguments, since they must be serializable
@@ -274,8 +275,9 @@ One thing to be aware of is that, at present, the AbiConnection::load_shared_lib
 is not marked as unsafe. However, if the .so-file given as argument is corrupt, using this
 method can cause any amount of UB. Thus, it could be argued that it should be marked unsafe.
 
-However, the same is true for _any_ rust shared library. We are simply reliant on the
-compiler and all dependencies we use being implemented correctly. Thus, it has been
+However, the same is true for _any_ shared library used by a rust program, including the
+system C-library. It is also true that rust programs rely on the rust
+compiler being implemented correctly. Thus, it has been
 judged that the issue of corrupt binary files is beyond the scope of safety for Savefile-Abi.
 
 As long as the shared library is a real Savefile-Abi shared library, it should be sound to use,
