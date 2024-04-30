@@ -1,6 +1,6 @@
 [package]
 name = "savefile-abi"
-version = "0.17.1"
+version = "0.17.0-beta.14"
 edition = "2021"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile-abi/"
