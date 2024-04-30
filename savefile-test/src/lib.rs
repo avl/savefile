@@ -60,7 +60,6 @@ use std::io::Cursor;
 pub fn assert_roundtrip<E: Serialize + Deserialize + Debug + PartialEq>(sample: E) {
     assert_roundtrip_version(sample, 0, true)
 }
-
 pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(sample: E, version: u32, schema: bool) {
     let mut f = Cursor::new(Vec::new());
     {

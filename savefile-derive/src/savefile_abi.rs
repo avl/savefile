@@ -137,7 +137,7 @@ fn emit_closure_helpers(
 pub(crate) enum ArgType {
     PlainData(Type),
     Reference(Box<ArgType>, bool /*ismut (only traits objects can be mut here)*/),
-    Str(bool/*static*/),
+    Str(bool /*static*/),
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
     Trait(Ident, bool /*ismut self*/),
@@ -167,7 +167,6 @@ pub(crate) fn parse_box_type(
     is_reference: bool,
     is_mut_ref: bool,
 ) -> ArgType {
-
     let location;
     if is_return_value {
         location = format!("In return value of method '{}'", method_name);
@@ -175,12 +174,16 @@ pub(crate) fn parse_box_type(
         location = format!("Method '{}', argument {}", method_name, arg_name);
     }
 
-
     if path.segments.len() != 1 {
         abort!(path.span(), "Savefile does not support types named 'Box', unless they are the standard type Box, and it must be specified as 'Box', without any namespace");
     }
     if is_reference {
-        abort!(path.span(), "{}. Savefile does not support references to Boxes. Just supply a reference to the inner type: {}", location, typ.to_token_stream());
+        abort!(
+            path.span(),
+            "{}. Savefile does not support references to Boxes. Just supply a reference to the inner type: {}",
+            location,
+            typ.to_token_stream()
+        );
     }
 
     let last_seg = path.segments.iter().last().unwrap();
@@ -203,29 +206,33 @@ pub(crate) fn parse_box_type(
                         extra_definitions,
                         true,
                         is_mut_ref,
-                    ){
+                    ) {
                         ArgType::Boxed(_) => {
-                            abort!(first_gen_arg.span(), "{}. Savefile does not support a Box containing another Box: {}", location, typ.to_token_stream())
+                            abort!(
+                                first_gen_arg.span(),
+                                "{}. Savefile does not support a Box containing another Box: {}",
+                                location,
+                                typ.to_token_stream()
+                            )
                         }
                         ArgType::PlainData(_) | ArgType::Str(_) => {
                             return ArgType::PlainData(typ.clone()); //Box<plaintype> is itself a plaintype. So handle it as such. It can matter, if Box<T> implements Serializable, when T does not. (example: str)
                         }
-                        ArgType::Slice(slicetype) => {
-                            match &*slicetype {
-                                ArgType::PlainData(_) => {
-                                    return ArgType::Slice(slicetype);
-                                }
-                                _x =>
-                                    abort!(angargs.span(), "{}. Savefile does not support a Box containing a slice of anything complex, like: {}", location, typ.to_token_stream())
+                        ArgType::Slice(slicetype) => match &*slicetype {
+                            ArgType::PlainData(_) => {
+                                return ArgType::Slice(slicetype);
                             }
-                        }
+                            _x => abort!(
+                                angargs.span(),
+                                "{}. Savefile does not support a Box containing a slice of anything complex, like: {}",
+                                location,
+                                typ.to_token_stream()
+                            ),
+                        },
                         ArgType::Reference(_, _) => {
                             abort!(first_gen_arg.span(), "{}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", location, typ.to_token_stream());
                         }
-                        x@ArgType::Trait(_, _) |
-                        x@ArgType::Fn(_, _, _, _) => {
-                            ArgType::Boxed(Box::new(x))
-                        }
+                        x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _) => ArgType::Boxed(Box::new(x)),
                     }
                 }
                 _ => {
@@ -285,7 +292,7 @@ fn parse_type(
                         typref.lifetime.span(),
                         "{}: Specifying lifetimes is not supported by Savefile-Abi.",
                         location,
-                    )
+                    ),
                 }
             } else {
                 is_static_lifetime = false;
@@ -326,7 +333,12 @@ fn parse_type(
                 );
             }
             if is_mut_ref {
-                abort!(typ.span(), "{}: Mutable refernces are not supported by savefile-abi, except for FnMut-trait objects. {}", location, typ.to_token_stream());
+                abort!(
+                    typ.span(),
+                    "{}: Mutable refernces are not supported by savefile-abi, except for FnMut-trait objects. {}",
+                    location,
+                    typ.to_token_stream()
+                );
             }
             let argtype = parse_type(
                 version,
@@ -343,7 +355,12 @@ fn parse_type(
         }
         Type::TraitObject(trait_obj) => {
             if !is_reference {
-                abort!(trait_obj.span(), "{}: Trait objects must always be behind references. Try adding a '&' to the type: {}", location, typ.to_token_stream());
+                abort!(
+                    trait_obj.span(),
+                    "{}: Trait objects must always be behind references. Try adding a '&' to the type: {}",
+                    location,
+                    typ.to_token_stream()
+                );
             }
             if trait_obj.dyn_token.is_some() {
                 let type_bounds: Vec<_> = trait_obj
@@ -369,7 +386,12 @@ fn parse_type(
                     abort!(trait_obj.bounds.span(), "{}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", location);
                 }
                 if type_bounds.len() > 1 {
-                    abort!(trait_obj.bounds.span(), "{}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}", location, trait_obj);
+                    abort!(
+                        trait_obj.bounds.span(),
+                        "{}, unsupported Box-type. Only &dyn Trait> is supported. Encountered multiple traits: {:?}",
+                        location,
+                        trait_obj
+                    );
                 }
                 let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
 
@@ -685,7 +707,7 @@ impl ArgType {
                 caller_arg_serializer1: quote! {
                     #arg_name.serialize(&mut serializer)
                 },
-                schema: quote!( <#arg_type as WithSchema>::schema(version, context) ),
+                schema: quote!( get_schema::<#arg_type>(version) ),
                 known_size_align1: if compile_time_check_reprc(arg_type) {
                     compile_time_size(arg_type)
                 } else {
@@ -896,7 +918,6 @@ pub(super) fn generate_method_definitions(
 
     let mut compile_time_known_size = Some(0);
     for (arg_index, (arg_name, typ)) in args.iter().enumerate() {
-
         let argtype = parse_type(
             version,
             &arg_name.to_string(),
@@ -906,7 +927,7 @@ pub(super) fn generate_method_definitions(
             &mut *name_generator,
             extra_definitions,
             false,
-            false
+            false,
         );
         callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
 
@@ -975,7 +996,7 @@ pub(super) fn generate_method_definitions(
     let result_default;
     let return_ser_temp;
     if no_return {
-        return_value_schema = quote!(<() as WithSchema>::schema(0, &mut WithSchemaContext::new()));
+        return_value_schema = quote!(get_schema::<()>(0));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
         ret_serialize = quote!(());
         caller_return_type = quote!(());
