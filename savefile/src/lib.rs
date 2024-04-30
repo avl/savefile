@@ -3672,8 +3672,8 @@ impl Deserialize for SchemaStruct {
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
-            size: <_ as Deserialize>::deserialize(deserializer)?,
-            alignment: <_ as Deserialize>::deserialize(deserializer)?,
+            size: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
+            alignment: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
             fields: {
                 let mut ret = Vec::new();
                 for _ in 0..l {
@@ -4046,7 +4046,8 @@ impl Serialize for Schema {
 impl ReprC for Schema {}
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let schema = match deserializer.read_u8()? {
+        let x = deserializer.read_u8()?;
+        let schema = match x {
             1 => Schema::Struct(SchemaStruct::deserialize(deserializer)?),
             2 => Schema::Enum(SchemaEnum::deserialize(deserializer)?),
             3 => Schema::Primitive(SchemaPrimitive::deserialize(deserializer)?),
