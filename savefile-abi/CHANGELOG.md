@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0-beta.15](https://github.com/avl/savefile/compare/savefile-abi-v0.17.0-beta.14...savefile-abi-v0.17.0-beta.15) - 2024-04-30
+
+### Fixed
+- AbiConnection cache could become corrupt if AbiConnection was used incorrectly
+- Improve documentation
+
 ## [0.17.0-beta.14](https://github.com/avl/savefile/compare/savefile-abi-v0.17.0-beta.13...savefile-abi-v0.17.0-beta.14) - 2024-04-30
 
 ### Other
