@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::{Cell, UnsafeCell};
 use std::io::Cursor;
 
@@ -261,4 +262,37 @@ fn bench_count_chars_str(b: &mut Bencher) {
         write!(s, "{}", i).unwrap();
     }
     b.iter(move || conn.count_chars_str(std::hint::black_box(&s)))
+}
+
+#[savefile_abi_exportable(version = 0)]
+pub trait CowSmuggler {
+    // Specifying &'static is supported. Otherwise, the lifetime
+    // becomes artificially short in this case (it becomes that of &self).
+    fn smuggle2(&mut self, x: Cow<str>) -> Cow<'static, str>;
+    // In this case, the lifetime of Cow is that of &mut self.
+    // (Rust lifetime elision rules).
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<str>;
+}
+impl CowSmuggler for () {
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<str> {
+        (*x).to_owned().into()
+    }
+    fn smuggle2(&mut self, x: Cow<str>) -> Cow<'static, str> {
+        (*x).to_owned().into()
+    }
+}
+
+#[test]
+fn test_cow_smuggler() {
+    let boxed: Box<dyn CowSmuggler> = Box::new(());
+    let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    assert_eq!(conn.smuggle("hej".into()), "hej");
+    assert_eq!(conn.smuggle("hej".to_string().into()), "hej");
+
+    assert_eq!(conn.smuggle2("hej".into()), "hej");
+    assert_eq!(conn.smuggle2("hej".to_string().into()), "hej");
+
+    let static_ret : Cow<'static, str> = conn.smuggle2("hej".into());
+    assert_eq!(static_ret, "hej");
+
 }
