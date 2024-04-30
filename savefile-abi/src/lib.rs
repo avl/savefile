@@ -468,12 +468,8 @@ pub struct TraitObject {
     vtable: *const (),
 }
 
-unsafe impl Sync for TraitObject {
-
-}
-unsafe impl Send for TraitObject {
-
-}
+unsafe impl Sync for TraitObject {}
+unsafe impl Send for TraitObject {}
 
 impl TraitObject {
     /// Returns a TraitObject with two null ptrs. This value must never be used,
@@ -617,12 +613,8 @@ pub struct AbiConnection<T: ?Sized> {
     #[doc(hidden)]
     pub phantom: PhantomData<*const T>,
 }
-unsafe impl<T:?Sized> Sync for AbiConnection<T>{
-
-}
-unsafe impl<T:?Sized> Send for AbiConnection<T>{
-
-}
+unsafe impl<T: ?Sized> Sync for AbiConnection<T> {}
+unsafe impl<T: ?Sized> Send for AbiConnection<T> {}
 
 /// A trait object together with its entry point
 #[repr(C)]
@@ -1324,15 +1316,24 @@ impl<T: AbiExportable + ?Sized> AbiConnection<T> {
     /// of the code being called into. It will not change during the lifetime of an
     /// AbiConnector, but it may change if the target library is recompiled.
     pub fn get_arg_passable_by_ref(&self, method: &str, arg: usize) -> bool {
-        if let Some(found) = self.template.methods.iter().find(|var|var.method_name == method) {
+        if let Some(found) = self.template.methods.iter().find(|var| var.method_name == method) {
             let abi_method: &AbiConnectionMethod = found;
             if arg >= abi_method.caller_info.arguments.len() {
-                panic!("Method '{}' has only {} arguments, so there is no argument #{}", method, abi_method.caller_info.arguments.len(), arg);
+                panic!(
+                    "Method '{}' has only {} arguments, so there is no argument #{}",
+                    method,
+                    abi_method.caller_info.arguments.len(),
+                    arg
+                );
             }
             (abi_method.compatibility_mask & (1 << (arg as u64))) != 0
         } else {
-            let arg_names : Vec<_> =  self.template.methods.iter().map(|x|x.method_name.as_str()).collect();
-            panic!("Trait has no method with name '{}'. Available methods: {}", method, arg_names.join(", "));
+            let arg_names: Vec<_> = self.template.methods.iter().map(|x| x.method_name.as_str()).collect();
+            panic!(
+                "Trait has no method with name '{}'. Available methods: {}",
+                method,
+                arg_names.join(", ")
+            );
         }
     }
 

@@ -36,7 +36,10 @@ use syn::__private::bool;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
+use syn::{
+    DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem,
+    Type, TypeGenerics, TypeParamBound, TypeTuple,
+};
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
     implicit_self: bool,
@@ -266,7 +269,10 @@ pub fn savefile_abi_exportable(
     let mut extra_definitions = HashMap::new();
 
     if parsed.generics.params.is_empty() == false {
-        abort!(parsed.generics.params.span(), "Savefile does not support generic traits.");
+        abort!(
+            parsed.generics.params.span(),
+            "Savefile does not support generic traits."
+        );
     }
     for supertrait in parsed.supertraits.iter() {
         match supertrait {
@@ -293,7 +299,10 @@ pub fn savefile_abi_exportable(
     }
 
     if parsed.generics.where_clause.is_some() {
-        abort!(parsed.generics.where_clause.span(), "Savefile does not support where-clauses for traits");
+        abort!(
+            parsed.generics.where_clause.span(),
+            "Savefile does not support where-clauses for traits"
+        );
     }
 
     for (method_number, item) in parsed.items.iter().enumerate() {
@@ -312,7 +321,10 @@ pub fn savefile_abi_exportable(
             }
             TraitItem::Method(method) => {
                 if method.sig.generics.where_clause.is_some() {
-                    abort!(method.sig.generics.where_clause.span(), "Savefile does not support where-clauses for methods");
+                    abort!(
+                        method.sig.generics.where_clause.span(),
+                        "Savefile does not support where-clauses for methods"
+                    );
                 }
                 let method_name = method.sig.ident.clone();
                 //let method_name_str = method.sig.ident.to_string();
@@ -392,13 +404,22 @@ pub fn savefile_abi_exportable(
                     }
                 }
                 if method.sig.asyncness.is_some() {
-                    abort!(method.sig.asyncness.span(), "savefile-abi does not support async methods.")
+                    abort!(
+                        method.sig.asyncness.span(),
+                        "savefile-abi does not support async methods."
+                    )
                 }
                 if method.sig.variadic.is_some() {
-                    abort!(method.sig.variadic.span(), "savefile-abi does not support variadic methods.")
+                    abort!(
+                        method.sig.variadic.span(),
+                        "savefile-abi does not support variadic methods."
+                    )
                 }
                 if method.sig.unsafety.is_some() {
-                    abort!(method.sig.unsafety.span(), "savefile-abi does not presently support unsafe methods.")
+                    abort!(
+                        method.sig.unsafety.span(),
+                        "savefile-abi does not presently support unsafe methods."
+                    )
                 }
                 if method.sig.abi.is_some() {
                     abort!(method.sig.abi.span(), "savefile-abi does not need (or support) 'extern \"C\"' or similar ABI-constructs. Just remove this keyword.")
@@ -406,12 +427,19 @@ pub fn savefile_abi_exportable(
                 if method.sig.generics.params.is_empty() == false {
                     for item in method.sig.generics.params.iter() {
                         match item {
-                            GenericParam::Type(typ) => abort!(typ.span(), "savefile-abi does not support generic methods."),
-                            GenericParam::Const(typ) => abort!(typ.span(), "savefile-abi does not support const-generic methods."),
+                            GenericParam::Type(typ) => {
+                                abort!(typ.span(), "savefile-abi does not support generic methods.")
+                            }
+                            GenericParam::Const(typ) => {
+                                abort!(typ.span(), "savefile-abi does not support const-generic methods.")
+                            }
                             _ => {}
                         }
                     }
-                    abort!(method.sig.generics.params.span(), "savefile-abi does not support methods with lifetimes.");
+                    abort!(
+                        method.sig.generics.params.span(),
+                        "savefile-abi does not support methods with lifetimes."
+                    );
                 }
 
                 let method_defs = crate::savefile_abi::generate_method_definitions(
@@ -446,9 +474,17 @@ pub fn savefile_abi_exportable(
                 );
             }
             TraitItem::Verbatim(v) => {
-                abort!(v.span(), "Unsupported item in trait definition: {}", v.to_token_stream());
+                abort!(
+                    v.span(),
+                    "Unsupported item in trait definition: {}",
+                    v.to_token_stream()
+                );
             }
-            x => abort!(x.span(), "Unsupported item in trait definition: {}", x.to_token_stream()),
+            x => abort!(
+                x.span(),
+                "Unsupported item in trait definition: {}",
+                x.to_token_stream()
+            ),
         }
     }
 
@@ -543,8 +579,6 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     let implementing_type = Ident::new(symbols[0], Span::call_site());
     let trait_type = Ident::new(symbols[1], Span::call_site());
     let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
-
-
 
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]

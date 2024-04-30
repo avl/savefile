@@ -67,8 +67,8 @@ fn abi_test_slice() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
-    assert!( conn.get_arg_passable_by_ref("test_slices", 0) );
-    assert_eq!(conn.test_slices(&[1,2,3,4]), 10);
+    assert!(conn.get_arg_passable_by_ref("test_slices", 0));
+    assert_eq!(conn.test_slices(&[1, 2, 3, 4]), 10);
 }
 
 #[test]
