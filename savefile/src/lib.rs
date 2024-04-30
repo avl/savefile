@@ -2274,6 +2274,10 @@ impl WithSchemaContext {
     ///
     /// }
     /// ```
+    ///
+    /// If recursion is detected (traversing to exactly MyBox<T> twice, in the above example), the method
+    /// 'possible_recursion' will return Schema::Recursion, stopping the Schema instance from becoming infinitely big.
+    ///
     pub fn possible_recursion<T: 'static>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
         let typeid = TypeId::of::<T>();
         let prevlen = self.seen_types.len();
@@ -2301,6 +2305,8 @@ impl WithSchemaContext {
 /// can be disabled).
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
+    /// The WithSchemaContext can be used to guard against recursive data structures.
+    /// See documentation of WithSchemaContext.
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema;
 }
 
