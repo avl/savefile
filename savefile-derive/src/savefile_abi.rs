@@ -707,7 +707,7 @@ impl ArgType {
                 caller_arg_serializer1: quote! {
                     #arg_name.serialize(&mut serializer)
                 },
-                schema: quote!( get_schema::<#arg_type>(version) ),
+                schema: quote!( <#arg_type as WithSchema>::schema(version, context) ),
                 known_size_align1: if compile_time_check_reprc(arg_type) {
                     compile_time_size(arg_type)
                 } else {
@@ -959,7 +959,7 @@ pub(super) fn generate_method_definitions(
         //let can_be_sent_as_ref = instruction.can_be_sent_as_ref;
         metadata_arguments.push(quote! {
                         AbiMethodArgument {
-                            schema: #schema,
+                            schema: { let mut context = WithSchemaContext::new(); let context = &mut context; #schema },
                         }
         });
         if let Some(total_size) = &mut compile_time_known_size {
@@ -996,7 +996,7 @@ pub(super) fn generate_method_definitions(
     let result_default;
     let return_ser_temp;
     if no_return {
-        return_value_schema = quote!(get_schema::<()>(0));
+        return_value_schema = quote!(<() as WithSchema>::schema(0, &mut WithSchemaContext::new()));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
         ret_serialize = quote!(());
         caller_return_type = quote!(());
@@ -1138,7 +1138,7 @@ pub(super) fn generate_method_definitions(
         AbiMethod {
             name: #method_name_str.to_string(),
             info: AbiMethodInfo {
-                return_value: #return_value_schema,
+                return_value: { let mut context = WithSchemaContext::new(); let context = &mut context; #return_value_schema},
                 arguments: vec![ #(#metadata_arguments,)* ],
             }
         }
