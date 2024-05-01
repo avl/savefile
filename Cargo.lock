@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "savefile"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-abi"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "byteorder",
  "libloading",
