@@ -19,7 +19,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
     let extra_where = get_extra_where_clauses(
         &generics,
         where_clause,
-        quote! {_savefile::prelude::Serialize + _savefile::prelude::ReprC},
+        quote! {_savefile::prelude::Serialize + _savefile::prelude::Packed},
     );
 
     let uses = quote_spanned! { defspan =>

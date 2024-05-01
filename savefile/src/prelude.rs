@@ -4,7 +4,7 @@ pub use {
     super::save_file_noschema, super::save_noschema, super::save_to_mem, super::AbiRemoved, super::Canary1,
     super::Deserialize, super::Deserializer, super::Field, super::Introspect, super::IntrospectItem,
     super::IntrospectedElementKey, super::IntrospectionResult, super::Introspector, super::IntrospectorNavCommand,
-    super::IsReprC, super::Removed, super::ReprC, super::SavefileError, super::Schema, super::SchemaEnum,
+    super::IsPacked, super::Removed, super::Packed, super::SavefileError, super::Schema, super::SchemaEnum,
     super::SchemaPrimitive, super::SchemaStruct, super::Serialize, super::Serializer, super::Variant,
     super::WithSchema, super::WithSchemaContext,
 };
@@ -19,7 +19,7 @@ pub use {super::AbiMethod, super::AbiMethodArgument, super::AbiMethodInfo, super
 pub use super::{load_encrypted_file, save_encrypted_file, CryptoReader, CryptoWriter};
 
 #[cfg(feature = "derive")]
-pub use savefile_derive::ReprC;
+pub use savefile_derive::Packed;
 #[cfg(feature = "derive")]
 pub use savefile_derive::Savefile;
 #[cfg(feature = "derive")]

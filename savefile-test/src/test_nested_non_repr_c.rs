@@ -15,8 +15,6 @@ struct Inner {
     x: u32,
 }
 
-#[cfg(feature = "nightly")]
-//The whole system to use a faster serialization/deserialization for Vec<T> where T:ReprC only works on nightly (since it depends on specialisation)
 #[test]
 #[cfg(debug_assertions)] //This test only works in debug builds
 fn test_misaligned1() {
@@ -31,8 +29,6 @@ struct Inner2 {
     misaligner: u8,
 }
 
-#[cfg(feature = "nightly")]
-//The whole system to use a faster serialization/deserialization for Vec<T> where T:ReprC only works on nightly (since it depends on specialisation)
 #[test]
 #[cfg(debug_assertions)] //This test only works in debug builds
 fn test_misaligned2() {

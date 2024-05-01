@@ -369,7 +369,7 @@ pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize /*size*/, usize /*a
                 if let Some(itemsize_align) = itemsize_align {
                     if itemsize_align != (cursize, curalign) {
                         // All items not the same size and have same alignment. Otherwise: Might be padding issues.
-                        return None; //It could conceivably still be reprC, safe, but we're conservative here.
+                        return None; //It could conceivably still be packed, but we're conservative here.
                     }
                 } else {
                     itemsize_align = Some((cursize, curalign));

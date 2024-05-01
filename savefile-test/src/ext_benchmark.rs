@@ -217,7 +217,7 @@ fn bench_ext_triangle(b: &mut Bencher) {
 }
 #[test]
 fn test_triangle() {
-    use savefile::ReprC;
+    use savefile::Packed;
     assert!( unsafe { Triangle::repr_c_optimization_safe(0).is_yes() } );
     let mesh = generate_mesh();
 
