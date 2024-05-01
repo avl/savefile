@@ -140,19 +140,6 @@ is the contents of containers such as Box, Vec etc. The reason is that the new r
 support needs to be able to create TypeIds, and this is only possible for objects with
 'static lifetime.
 
-## 0.17.0-beta.13
-
-Major improvements. Better diagnostics. Support for returning Box<Fn(..)>.
-
-## 0.17.0-beta.10
-
-Tentative support for fast serialization/deserialization of enums. May be buggy!
-
-## 0.17.0-beta.9
-
-Fixed bug where schema of slices was not serialized correctly. Introduced in 0.17, so 
-only present in beta releases.
-
 
 ## 0.16.5
 
