@@ -850,7 +850,7 @@ pub fn parse_return_value_impl<T>(
     }
 }
 
-/// Parse an RawAbiCallResult instance into a Result<Box<dyn T>, SavefileError> .
+/// Parse an RawAbiCallResult instance into a `Result<Box<dyn T>, SavefileError>` .
 /// This is used on the caller side, and the type T will always be statically known.
 /// TODO: There's some duplicated code here, compare parse_return_value
 pub fn parse_return_boxed_trait<T:'static>(outcome: &RawAbiCallResult) -> Result<Box<AbiConnection<T>>, SavefileError>
