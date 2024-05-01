@@ -79,6 +79,9 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.1
+
+Just minor improvements to documentation.
 
 ## 0.17.0
 

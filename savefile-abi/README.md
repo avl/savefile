@@ -4,13 +4,11 @@ Full docs: https://docs.rs/savefile-abi/latest/
 
 Savefile-abi is a crate that is primarily meant to help building binary plugins using Rust.
 
-Note! This is a work-in-progress.
-
 
 ```toml
-savefile-abi = "0.17.0-beta.11"
-savefile = "0.17.0-beta.11"
-savefile-derive = "0.17.0-beta.11"
+savefile-abi = "0.17"
+savefile = "0.17"
+savefile-derive = "0.17"
 ```
 
 # Example
@@ -74,7 +72,7 @@ fn main() {
     // Load the implementation of `dyn AdderInterface` that was published
     // using the `savefile_abi_export!` above.
     let connection = AbiConnection::<dyn AdderInterface>
-    ::load_shared_library("./ImplementationCrate.so").unwrap();
+      ::load_shared_library("./ImplementationCrate.so").unwrap();
 
     // The type `AbiConnection::<dyn AdderInterface>` implements
     // the `AdderInterface`-trait, so we can use it to call its methods.
