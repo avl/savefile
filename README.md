@@ -12,16 +12,13 @@ disk for persistent storage.
 
 Docs: https://docs.rs/savefile/latest/savefile/
 
+# Capabilities
 
-Savefile is not yet a very widely used project. However, although there may be bugs, 
-the intention is that the quality should be enough for production when it comes to
-the core savefile crate. Savefile-abi is presently more experimental.
-
-Cargo.toml:
-```toml
-savefile = "0.16"
-savefile-derive = "0.16"
-```
+ * **Easy to use** Most std datatypes are supported, and the derive macro can used for most user-types.
+ * **Reliable** - Savefile has an extensive test suite. 
+ * **Backward compatible** - Savefile supports schema-versioning, with built-in verification and detailed error messages on schema mismatch.
+ * **Fast** - Savefile can *safely* write many data types as raw bytes.
+ * **Safe** - Savefile can be used without requiring any unsafe code from the user.
 
 Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
 shared libraries, written in rust, to be used as binary plugins in rust-programs.
@@ -31,8 +28,14 @@ Savefile ABI is available in the latest beta-version ( `0.17.0-beta.11` )
 Docs: https://docs.rs/savefile-abi/latest/
 
 
-# Sample 
+# Usage
+Cargo.toml:
+```toml
+savefile = "0.17"
+savefile-derive = "0.17"
+```
 
+main.rs:
 ```rust
 extern crate savefile;
 use savefile::prelude::*;
@@ -56,7 +59,7 @@ fn load_player() -> Player {
     load_file("save.bin", 0).unwrap()
 }
 
-fn main() { 
+fn main() {
     let player = Player { name: "Steve".to_string(), strength: 42,
         inventory: vec!(
             "wallet".to_string(),
@@ -72,6 +75,7 @@ fn main() {
 
 ```
 
+See docs for more information, includign schema-versioning: https://docs.rs/savefile/latest/savefile/ .
 
 # Changelog
 
