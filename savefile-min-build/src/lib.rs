@@ -1,4 +1,4 @@
-#![allow(soft_unstable)]
+/*#![allow(soft_unstable)]
 #![feature(test)]
 extern crate alkahest;
 
@@ -128,4 +128,4 @@ fn stuff<T>() -> T {
 */
 #[test]
 fn dummy() {
-}
+}*/
