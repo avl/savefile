@@ -149,7 +149,7 @@ fn main() {
 # Behind the scenes
 
 For Savefile to be able to load and save a type T, that type must implement traits
-[crate::WithSchema], [crate::ReprC], [crate::Serialize] and [crate::Deserialize] .
+[crate::WithSchema], [crate::Packed], [crate::Serialize] and [crate::Deserialize] .
 The custom derive macro Savefile derives all of these.
 
 You can also implement these traits manually. Manual implementation can be good for:
@@ -162,7 +162,7 @@ initialization (like running arbitrary code during deserialization).
 
 Note that the four trait implementations for a particular type must be in sync.
 That is, the Serialize and Deserialize traits must follow the schema defined
-by the WithSchema trait for the type, and if the ReprC trait promises a packed
+by the WithSchema trait for the type, and if the Packed trait promises a packed
 layout, then the format produced by Serialize and Deserialze *must* exactly match
 the in-memory format.
 
@@ -182,9 +182,9 @@ a `Serializer`.
 
 The [crate::Deserialize] trait represents a type which knows how to read instances of itself from a `Deserializer`.
 
-## ReprC
+## Packed
 
-The [crate::ReprC] trait has an optional method that can be used to promise that the
+The [crate::Packed] trait has an optional method that can be used to promise that the
 in-memory format is identical to the savefile disk representation. If this is true,
 instances of the type can be serialized by simply writing all the bytes in one go,
 rather than having to visit individual fields. This can speed up saves significantly.
@@ -476,10 +476,10 @@ Rules for using the #\[savefile_versions] attribute:
  The above will be very fast, even if 'history' contains millions of position-instances.
 
 
- Savefile has a trait [crate::ReprC] that must be implemented for each T. The savefile-derive
+ Savefile has a trait [crate::Packed] that must be implemented for each T. The savefile-derive
  macro implements this automatically.
 
- This trait has an unsafe function [crate::ReprC::repr_c_optimization_safe] which answers the question:
+ This trait has an unsafe function [crate::Packed::repr_c_optimization_safe] which answers the question:
  - Is this type such that it can safely be copied byte-per-byte?
  Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
  a very fast, raw memory copy.
@@ -487,10 +487,10 @@ Rules for using the #\[savefile_versions] attribute:
  the Serialize trait does for the type.
 
 
- Most of the time, the user doesn't need to implement ReprC, as it can be derived automatically
+ Most of the time, the user doesn't need to implement Packed, as it can be derived automatically
  by the savefile derive macro.
 
- However, implementing it manually can be done, with care. You, as implementor of the `ReprC`
+ However, implementing it manually can be done, with care. You, as implementor of the `Packed`
  trait take full responsibility that all the following rules are upheld:
 
  * The type T is Copy
@@ -667,7 +667,7 @@ This can be fixed with manual padding:
          Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
      }
  }
- impl ReprC for MyPathBuf {
+ impl Packed for MyPathBuf {
  }
  impl Serialize for MyPathBuf {
      fn serialize<'a>(&self, serializer: &mut Serializer<impl std::io::Write>) -> Result<(), SavefileError> {
@@ -845,8 +845,8 @@ Maybe you get an error like:
 ```the function or associated item `deserialize` exists for struct `Vec<T>`, but its trait bounds were not satisfied```
 
 First, check that you've derived 'Savefile' for the type in question. If you've implemented the Savefile traits
-manually, check that you've implemented both ```[crate::prelude::Deserialize]``` and ```[crate::prelude::ReprC]```.
-Without ReprC, vectors cannot be deserialized, since savefile can't determine if they are safe to serialize
+manually, check that you've implemented both ```[crate::prelude::Deserialize]``` and ```[crate::prelude::Packed]```.
+Without Packed, vectors cannot be deserialized, since savefile can't determine if they are safe to serialize
 through simple copying of bytes.
 
 
@@ -1150,43 +1150,48 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
 }
 
 /// Marker used to promise that some type fulfills all rules
-/// for the "ReprC"-optimization.
+/// for the "Packed"-optimization.
 #[derive(Default, Debug)]
-pub struct IsReprC(bool);
+pub struct IsPacked(bool);
 
-impl std::ops::BitAnd<IsReprC> for IsReprC {
-    type Output = IsReprC;
+#[doc(hidden)]
+#[deprecated(since="0.17", note="The 'IsReprC' type has been renamed to 'IsPacked'.")]
+#[derive(Default, Debug)]
+pub struct IsReprC(());
+
+impl std::ops::BitAnd<IsPacked> for IsPacked {
+    type Output = IsPacked;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        IsReprC(self.0 && rhs.0)
+        IsPacked(self.0 && rhs.0)
     }
 }
 
-impl IsReprC {
+impl IsPacked {
     /// # Safety
     /// Must only ever be created and immediately returned from
-    /// ReprC::repr_c_optimization_safe. Any other use, such
+    /// Packed::repr_c_optimization_safe. Any other use, such
     /// that the value could conceivably be smuggled to
     /// a repr_c_optimization_safe-implementation is forbidden.
     ///
-    /// Also, see description of ReprC trait and repr_c_optimization_safe.
-    pub unsafe fn yes() -> IsReprC {
-        IsReprC(true)
+    /// Also, see description of Packed trait and repr_c_optimization_safe.
+    pub unsafe fn yes() -> IsPacked {
+        IsPacked(true)
     }
-    /// No, the type is not compatible with the "ReprC"-optimization.
+    /// No, the type is not compatible with the "Packed"-optimization.
     /// It cannot be just blitted.
     /// This is always safe, it just misses out on some optimizations.
-    pub fn no() -> IsReprC {
-        IsReprC(false)
+    pub fn no() -> IsPacked {
+        IsPacked(false)
     }
 
-    /// If this returns false, "ReprC"-Optimization is not allowed.
+    /// If this returns false, "Packed"-Optimization is not allowed.
     #[inline(always)]
     pub fn is_false(self) -> bool {
         !self.0
     }
 
-    /// If this returns true, "ReprC"-Optimization is allowed. Beware.
+    /// If this returns true, "Packed"-Optimization is allowed. Beware.
     #[inline(always)]
     pub fn is_yes(self) -> bool {
         self.0
@@ -1195,13 +1200,15 @@ impl IsReprC {
 
 /// This trait describes whether a type is such that it can just be blitted.
 /// See method repr_c_optimization_safe.
-pub trait ReprC {
+/// Note! The name Packed is a little misleading. A better name would be
+/// 'packed'
+pub trait Packed {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
     /// This may return true if and only if the given protocol version
     /// has a serialized format identical to the memory layout of the given protocol version.
     /// Note, the only memory layout existing is that of the most recent version, so
-    /// ReprC-optimization only works when disk-format is identical to memory version.
+    /// Packed-optimization only works when disk-format is identical to memory version.
     ///
     /// This can return true for types which have an in-memory layout that is packed
     /// and therefore identical to the layout that savefile will use on disk.
@@ -1213,21 +1220,31 @@ pub trait ReprC {
     /// * The type must be copy
     /// * The type must not contain any padding (if there is padding, backward compatibility will fail, since in fallback mode regular savefile-deserialize will be used, and it will not use padding)
     /// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
-    /// * All the constituent types of the type must also implement `ReprC` (correctly).
+    /// * All the constituent types of the type must also implement `Packed` (correctly).
     ///
-    /// Constructing an instance of 'IsReprC' with value 'true' is not safe. See
-    /// documentation of 'IsReprC'. The idea is that the ReprC-trait itself
+    /// Constructing an instance of 'IsPacked' with value 'true' is not safe. See
+    /// documentation of 'IsPacked'. The idea is that the Packed-trait itself
     /// can still be safe to implement, it just won't be possible to get hold of an
-    /// instance of IsReprC(true). To make it impossible to just
-    /// 'steal' such a value from some other thing implementing 'ReprC',
+    /// instance of IsPacked(true). To make it impossible to just
+    /// 'steal' such a value from some other thing implementing 'Packed',
     /// this method is marked unsafe (however, it can be left unimplemented,
-    /// making it still possible to safely implement ReprC).
+    /// making it still possible to safely implement Packed).
     ///
     /// # Safety
     /// The returned value must not be used, except by the Savefile-framework.
     /// It must *not* be forwarded anywhere else.
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::no()
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::no()
+    }
+}
+
+#[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+#[doc(hidden)]
+pub trait ReprC {
+    #[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+    #[doc(hidden)]
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::no()
     }
 }
 
@@ -1266,7 +1283,7 @@ impl Serialize for PathBuf {
         as_string.serialize(serializer)
     }
 }
-impl ReprC for PathBuf {}
+impl Packed for PathBuf {}
 impl Deserialize for PathBuf {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(PathBuf::from(String::deserialize(deserializer)?))
@@ -1287,7 +1304,7 @@ impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
         T::schema(version, context)
     }
 }
-impl<'a, T: 'a + ToOwned + ?Sized> ReprC for Cow<'a, T> {}
+impl<'a, T: 'a + ToOwned + ?Sized> Packed for Cow<'a, T> {}
 
 impl<'a, T: 'a + Serialize + ToOwned + ?Sized> Serialize for Cow<'a, T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
@@ -1755,7 +1772,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// we violate the rules when we create one continuous thing from parts.
     #[inline(always)]
     #[doc(hidden)]
-    pub unsafe fn raw_write_region<T, T1: ReprC, T2: ReprC>(
+    pub unsafe fn raw_write_region<T, T1: Packed, T2: Packed>(
         &mut self,
         full: &T,
         t1: &T1,
@@ -1820,7 +1837,6 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         writer.write_u16::<LittleEndian>(CURRENT_SAVEFILE_LIB_VERSION /*savefile format version*/)?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
-
         {
             if with_compression {
                 writer.write_u8(1)?; //15 + 1 = 16
@@ -2886,7 +2902,7 @@ pub enum VecOrStringLayout {
     DataLength,
 }
 
-impl ReprC for AbiMethodArgument {}
+impl Packed for AbiMethodArgument {}
 
 /// The definition of an argument to a method
 #[derive(Debug, PartialEq, Clone)]
@@ -2929,7 +2945,7 @@ pub struct AbiMethodInfo {
     /// The arguments of the method.
     pub arguments: Vec<AbiMethodArgument>,
 }
-impl ReprC for AbiMethodInfo {}
+impl Packed for AbiMethodInfo {}
 impl WithSchema for AbiMethodInfo {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
@@ -2962,7 +2978,7 @@ pub struct AbiMethod {
     /// The function signature
     pub info: AbiMethodInfo,
 }
-impl ReprC for AbiMethod {}
+impl Packed for AbiMethod {}
 impl WithSchema for AbiMethod {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
@@ -2993,7 +3009,7 @@ pub struct AbiTraitDefinition {
     /// The set of methods available on the trait
     pub methods: Vec<AbiMethod>,
 }
-impl ReprC for AbiTraitDefinition {}
+impl Packed for AbiTraitDefinition {}
 impl WithSchema for AbiTraitDefinition {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
@@ -3571,7 +3587,7 @@ impl Serialize for Field {
         Ok(())
     }
 }
-impl ReprC for Field {}
+impl Packed for Field {}
 impl Deserialize for Field {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Field {
@@ -3602,7 +3618,7 @@ impl Serialize for Variant {
     }
 }
 
-impl ReprC for Variant {}
+impl Packed for Variant {}
 impl Deserialize for Variant {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Variant {
@@ -3634,7 +3650,7 @@ impl Serialize for SchemaArray {
         Ok(())
     }
 }
-impl ReprC for SchemaArray {}
+impl Packed for SchemaArray {}
 impl Deserialize for SchemaArray {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let count = deserializer.read_usize()?;
@@ -3665,7 +3681,7 @@ impl Serialize for SchemaStruct {
         Ok(())
     }
 }
-impl ReprC for SchemaStruct {}
+impl Packed for SchemaStruct {}
 impl Deserialize for SchemaStruct {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
@@ -3739,7 +3755,7 @@ impl Deserialize for VecOrStringLayout {
         })
     }
 }
-impl ReprC for SchemaPrimitive {}
+impl Packed for SchemaPrimitive {}
 impl Deserialize for SchemaPrimitive {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let var = match deserializer.read_u8()? {
@@ -3798,7 +3814,7 @@ impl Serialize for SchemaEnum {
         Ok(())
     }
 }
-impl ReprC for SchemaEnum {}
+impl Packed for SchemaEnum {}
 impl Deserialize for SchemaEnum {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
@@ -4043,7 +4059,7 @@ impl Serialize for Schema {
     }
 }
 
-impl ReprC for Schema {}
+impl Packed for Schema {}
 impl Deserialize for Schema {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let x = deserializer.read_u8()?;
@@ -4127,9 +4143,9 @@ impl Serialize for str {
     }
 }
 
-impl ReprC for String {}
+impl Packed for String {}
 
-impl ReprC for str {}
+impl Packed for str {}
 
 
 impl Deserialize for String {
@@ -4209,7 +4225,7 @@ impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
         T::schema(version, context)
     }
 }
-impl<T> ReprC for std::sync::Mutex<T> {}
+impl<T> Packed for std::sync::Mutex<T> {}
 impl<T: Serialize> Serialize for std::sync::Mutex<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let data = self.lock()?;
@@ -4231,7 +4247,7 @@ impl<T: WithSchema> WithSchema for Mutex<T> {
 }
 
 #[cfg(feature = "parking_lot")]
-impl<T> ReprC for Mutex<T> {}
+impl<T> Packed for Mutex<T> {}
 
 #[cfg(feature = "parking_lot")]
 impl<T: Serialize> Serialize for Mutex<T> {
@@ -4362,7 +4378,7 @@ impl<T: WithSchema> WithSchema for RwLock<T> {
 }
 
 #[cfg(feature = "parking_lot")]
-impl<T> ReprC for RwLock<T> {}
+impl<T> Packed for RwLock<T> {}
 
 #[cfg(feature = "parking_lot")]
 impl<T: Serialize> Serialize for RwLock<T> {
@@ -4538,7 +4554,7 @@ impl<K: WithSchema + 'static, V: WithSchema + 'static> WithSchema for BTreeMap<K
         )
     }
 }
-impl<K, V> ReprC for BTreeMap<K, V> {}
+impl<K, V> Packed for BTreeMap<K, V> {}
 impl<K: Serialize + 'static, V: Serialize + 'static> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
@@ -4563,7 +4579,7 @@ impl<K: Deserialize + Ord + 'static, V: Deserialize + 'static> Deserialize for B
     }
 }
 
-impl<K, S: ::std::hash::BuildHasher> ReprC for HashSet<K, S> {}
+impl<K, S: ::std::hash::BuildHasher> Packed for HashSet<K, S> {}
 impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
@@ -4618,7 +4634,7 @@ impl<K: WithSchema + Eq + Hash + 'static, V: WithSchema + 'static, S: ::std::has
         )
     }
 }
-impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for HashMap<K, V, S> {}
+impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> Packed for HashMap<K, V, S> {}
 impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize
     for HashMap<K, V, S>
 {
@@ -4757,7 +4773,7 @@ where
     }
 }
 #[cfg(feature = "indexmap")]
-impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> ReprC for IndexMap<K, V, S> {}
+impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> Packed for IndexMap<K, V, S> {}
 
 #[cfg(feature = "indexmap")]
 impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize
@@ -4805,7 +4821,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Eq + Hash, S: ::std::hash::BuildHasher> ReprC for IndexSet<K, S> {}
+impl<K: Eq + Hash, S: ::std::hash::BuildHasher> Packed for IndexSet<K, S> {}
 
 #[cfg(feature = "indexmap")]
 impl<K: WithSchema + Eq + Hash + 'static, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
@@ -4914,9 +4930,9 @@ impl<T: Introspect> Introspect for Removed<T> {
         None
     }
 }
-impl<T> ReprC for Removed<T> {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl<T> Packed for Removed<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
 impl<T: WithSchema> Serialize for Removed<T> {
@@ -4976,9 +4992,9 @@ impl<T: Introspect, D: ValueConstructor<T>> Introspect for AbiRemoved<T, D> {
         None
     }
 }
-impl<T, D: ValueConstructor<T>> ReprC for AbiRemoved<T, D> {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl<T, D: ValueConstructor<T>> Packed for AbiRemoved<T, D> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
 impl<T: WithSchema + Serialize + Default, D: ValueConstructor<T>> Serialize for AbiRemoved<T, D> {
@@ -5011,9 +5027,9 @@ impl<T> WithSchema for std::marker::PhantomData<T> {
         Schema::ZeroSize
     }
 }
-impl<T> ReprC for std::marker::PhantomData<T> {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl<T> Packed for std::marker::PhantomData<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
 impl<T> Serialize for std::marker::PhantomData<T> {
@@ -5068,7 +5084,7 @@ impl<T: WithSchema> WithSchema for Option<T> {
         Schema::SchemaOption(Box::new(T::schema(version, context)))
     }
 }
-impl<T> ReprC for Option<T> {} //Sadly, Option does not allow the #"reprC"-optimization
+impl<T> Packed for Option<T> {} //Sadly, Option does not allow the #"reprC"-optimization
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match self {
@@ -5144,7 +5160,7 @@ impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
         })
     }
 }
-impl<T, R> ReprC for Result<T, R> {} //Sadly, Result does not allow the #"reprC"-optimization
+impl<T, R> Packed for Result<T, R> {} //Sadly, Result does not allow the #"reprC"-optimization
 impl<T: Serialize, R: Serialize> Serialize for Result<T, R> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match self {
@@ -5239,7 +5255,7 @@ impl Serialize for bit_vec::BitVec<u32> {
 }
 
 #[cfg(feature = "bit-vec")]
-impl ReprC for bit_vec::BitVec<u32> {}
+impl Packed for bit_vec::BitVec<u32> {}
 
 #[cfg(feature = "bit-vec")]
 impl Deserialize for bit_vec::BitVec<u32> {
@@ -5322,7 +5338,7 @@ impl Introspect for bit_set::BitSet {
 }
 
 #[cfg(feature = "bit-set")]
-impl ReprC for bit_set::BitSet<u32> {}
+impl Packed for bit_set::BitSet<u32> {}
 
 #[cfg(feature = "bit-set")]
 impl Serialize for bit_set::BitSet<u32> {
@@ -5357,7 +5373,7 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
     }
 }
 
-impl<T> ReprC for BinaryHeap<T> {}
+impl<T> Packed for BinaryHeap<T> {}
 impl<T: WithSchema + 'static> WithSchema for BinaryHeap<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
@@ -5422,7 +5438,7 @@ where
     }
 }
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array> ReprC for smallvec::SmallVec<T> {}
+impl<T: smallvec::Array> Packed for smallvec::SmallVec<T> {}
 
 #[cfg(feature = "smallvec")]
 impl<T: smallvec::Array + 'static> Serialize for smallvec::SmallVec<T>
@@ -5555,7 +5571,7 @@ impl Serialize for Arc<str> {
     }
 }
 
-impl ReprC for Arc<str> {}
+impl Packed for Arc<str> {}
 
 impl Deserialize for Arc<str> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
@@ -5572,7 +5588,7 @@ impl Deserialize for Arc<str> {
     }
 }
 
-impl<T: Serialize + ReprC + 'static> Serialize for Box<[T]> {
+impl<T: Serialize + Packed + 'static> Serialize for Box<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5588,9 +5604,9 @@ impl<T: Serialize + ReprC + 'static> Serialize for Box<[T]> {
         }
     }
 }
-impl<T: ReprC> ReprC for Box<[T]> {}
+impl<T: Packed> Packed for Box<[T]> {}
 
-impl<T: Serialize + ReprC + 'static> Serialize for Arc<[T]> {
+impl<T: Serialize + Packed + 'static> Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5606,14 +5622,14 @@ impl<T: Serialize + ReprC + 'static> Serialize for Arc<[T]> {
         }
     }
 }
-impl<T: ReprC> ReprC for Arc<[T]> {}
+impl<T: Packed> Packed for Arc<[T]> {}
 
-impl<T: Deserialize + ReprC + 'static> Deserialize for Arc<[T]> {
+impl<T: Deserialize + Packed + 'static> Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
-impl<T: Deserialize + ReprC + 'static> Deserialize for Box<[T]> {
+impl<T: Deserialize + Packed + 'static> Deserialize for Box<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
@@ -5641,7 +5657,7 @@ impl<'a, T: WithSchema + 'static> WithSchema for &'a [T] {
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<'a, T: Serialize + ReprC + 'static> Serialize for &'a [T] {
+impl<'a, T: Serialize + Packed + 'static> Serialize for &'a [T] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5661,13 +5677,13 @@ impl<'a, T: Serialize + ReprC + 'static> Serialize for &'a [T] {
 
 /// Deserialize a slice into a Vec
 /// Unsized slices cannot be deserialized into unsized slices.
-pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + ReprC + 'static>(
+pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + Packed + 'static>(
     deserializer: &mut Deserializer<R>,
 ) -> Result<Vec<T>, SavefileError> {
     Vec::deserialize(deserializer)
 }
 
-impl<T> ReprC for Vec<T> {}
+impl<T> Packed for Vec<T> {}
 
 /// 0 = Uninitialized
 static STRING_IS_STANDARD_LAYOUT: AtomicU8 = AtomicU8::new(255);
@@ -5779,7 +5795,7 @@ impl<T: Introspect> Introspect for Vec<T> {
     }
 }
 
-impl<T: Serialize + ReprC + 'static> Serialize for Vec<T> {
+impl<T: Serialize + Packed + 'static> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -5816,7 +5832,7 @@ fn regular_deserialize_vec<T: Deserialize>(
     Ok(ret)
 }
 
-impl<T: Deserialize + ReprC + 'static> Deserialize for Vec<T> {
+impl<T: Deserialize + Packed + 'static> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             Ok(regular_deserialize_vec(deserializer)?)
@@ -5893,7 +5909,7 @@ impl<T: WithSchema + 'static> WithSchema for VecDeque<T> {
     }
 }
 
-impl<T> ReprC for VecDeque<T> {}
+impl<T> Packed for VecDeque<T> {}
 impl<T: Serialize + 'static> Serialize for VecDeque<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vecdeque(self, serializer)
@@ -5929,89 +5945,89 @@ fn regular_deserialize_vecdeque<T: Deserialize>(
     Ok(ret)
 }
 
-impl ReprC for bool {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for bool {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 } //It isn't really guaranteed that bool is an u8 or i8 where false = 0 and true = 1. But it's true in practice. And the breakage would be hard to measure if this were ever changed, so a change is unlikely.
-impl ReprC for u8 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for u8 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for i8 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for i8 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for u16 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for u16 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for i16 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for i16 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for u32 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for u32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for i32 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for i32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for u64 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for u64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for u128 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for u128 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for i128 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for i128 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for i64 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for i64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for char {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for char {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for f32 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for f32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for f64 {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for f64 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
-impl ReprC for usize {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::no()
+impl Packed for usize {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::no()
     } // Doesn't have a fixed size
 }
-impl ReprC for isize {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::no()
+impl Packed for isize {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::no()
     } // Doesn't have a fixed size
 }
-impl ReprC for () {
-    unsafe fn repr_c_optimization_safe(_version: u32) -> IsReprC {
-        IsReprC::yes()
+impl Packed for () {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        IsPacked::yes()
     }
 }
 
@@ -6038,12 +6054,12 @@ impl<T: Introspect, const N: usize> Introspect for [T; N] {
     }
 }
 
-impl<T: ReprC, const N: usize> ReprC for [T; N] {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T: Packed, const N: usize> Packed for [T; N] {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         T::repr_c_optimization_safe(version)
     }
 }
-impl<T: Serialize + ReprC + 'static, const N: usize> Serialize for [T; N] {
+impl<T: Serialize + Packed + 'static, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6061,7 +6077,7 @@ impl<T: Serialize + ReprC + 'static, const N: usize> Serialize for [T; N] {
     }
 }
 
-impl<T: Deserialize + ReprC + 'static, const N: usize> Deserialize for [T; N] {
+impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
@@ -6092,7 +6108,7 @@ impl<T: Deserialize + ReprC + 'static, const N: usize> Deserialize for [T; N] {
     }
 }
 
-impl<T1> ReprC for Range<T1> {}
+impl<T1> Packed for Range<T1> {}
 impl<T1: WithSchema> WithSchema for Range<T1> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::new_tuple2::<T1, T1>(version, context)
@@ -6126,28 +6142,28 @@ impl<T1: Introspect> Introspect for Range<T1> {
     }
 }
 
-impl<T1: ReprC> ReprC for (T1,) {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T1: Packed> Packed for (T1,) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         if offset_of_tuple!((T1,), 0) == 0 && std::mem::size_of::<T1>() == std::mem::size_of::<(T1,)>() {
             T1::repr_c_optimization_safe(version)
         } else {
-            IsReprC::no()
+            IsPacked::no()
         }
     }
 }
-impl<T1: ReprC, T2: ReprC> ReprC for (T1, T2) {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T1: Packed, T2: Packed> Packed for (T1, T2) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         if offset_of_tuple!((T1, T2), 0) == 0
             && std::mem::size_of::<T1>() + std::mem::size_of::<T2>() == std::mem::size_of::<(T1, T2)>()
         {
             T1::repr_c_optimization_safe(version) & T2::repr_c_optimization_safe(version)
         } else {
-            IsReprC::no()
+            IsPacked::no()
         }
     }
 }
-impl<T1: ReprC, T2: ReprC, T3: ReprC> ReprC for (T1, T2, T3) {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T1: Packed, T2: Packed, T3: Packed> Packed for (T1, T2, T3) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         if offset_of_tuple!((T1, T2, T3), 0) == 0
             && offset_of_tuple!((T1, T2, T3), 1) == std::mem::size_of::<T1>()
             && std::mem::size_of::<T1>() + std::mem::size_of::<T2>() + std::mem::size_of::<T3>()
@@ -6157,12 +6173,12 @@ impl<T1: ReprC, T2: ReprC, T3: ReprC> ReprC for (T1, T2, T3) {
                 & T2::repr_c_optimization_safe(version)
                 & T3::repr_c_optimization_safe(version)
         } else {
-            IsReprC::no()
+            IsPacked::no()
         }
     }
 }
-impl<T1: ReprC, T2: ReprC, T3: ReprC, T4: ReprC> ReprC for (T1, T2, T3, T4) {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T1: Packed, T2: Packed, T3: Packed, T4: Packed> Packed for (T1, T2, T3, T4) {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         if offset_of_tuple!((T1, T2, T3, T4), 0) == 0
             && offset_of_tuple!((T1, T2, T3, T4), 1) == std::mem::size_of::<T1>()
             && offset_of_tuple!((T1, T2, T3, T4), 2) == std::mem::size_of::<T1>() + std::mem::size_of::<T2>()
@@ -6177,7 +6193,7 @@ impl<T1: ReprC, T2: ReprC, T3: ReprC, T4: ReprC> ReprC for (T1, T2, T3, T4) {
                 & T3::repr_c_optimization_safe(version)
                 & T4::repr_c_optimization_safe(version)
         } else {
-            IsReprC::no()
+            IsPacked::no()
         }
     }
 }
@@ -6238,7 +6254,7 @@ impl<T1: Deserialize> Deserialize for (T1,) {
 }
 
 #[cfg(feature = "arrayvec")]
-impl<const C: usize> ReprC for arrayvec::ArrayString<C> {}
+impl<const C: usize> Packed for arrayvec::ArrayString<C> {}
 
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> WithSchema for arrayvec::ArrayString<C> {
@@ -6311,14 +6327,14 @@ impl<V: Introspect + 'static, const C: usize> Introspect for arrayvec::ArrayVec<
 }
 
 #[cfg(feature = "arrayvec")]
-impl<V: ReprC, const C: usize> ReprC for arrayvec::ArrayVec<V, C> {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<V: Packed, const C: usize> Packed for arrayvec::ArrayVec<V, C> {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         V::repr_c_optimization_safe(version)
     }
 }
 
 #[cfg(feature = "arrayvec")]
-impl<V: Serialize + ReprC, const C: usize> Serialize for arrayvec::ArrayVec<V, C> {
+impl<V: Serialize + Packed, const C: usize> Serialize for arrayvec::ArrayVec<V, C> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if V::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6336,7 +6352,7 @@ impl<V: Serialize + ReprC, const C: usize> Serialize for arrayvec::ArrayVec<V, C
 }
 
 #[cfg(feature = "arrayvec")]
-impl<V: Deserialize + ReprC, const C: usize> Deserialize for arrayvec::ArrayVec<V, C> {
+impl<V: Deserialize + Packed, const C: usize> Deserialize for arrayvec::ArrayVec<V, C> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V, C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
         let l = deserializer.read_usize()?;
@@ -6352,7 +6368,7 @@ impl<V: Deserialize + ReprC, const C: usize> Deserialize for arrayvec::ArrayVec<
         } else {
             unsafe {
                 let bytebuf = std::slice::from_raw_parts_mut(ret.as_mut_ptr() as *mut u8, std::mem::size_of::<V>() * l);
-                deserializer.reader.read_exact(bytebuf)?; //We 'leak' ReprC objects here on error, but the idea is they are drop-less anyway, so this has no effect
+                deserializer.reader.read_exact(bytebuf)?; //We 'leak' Packed objects here on error, but the idea is they are drop-less anyway, so this has no effect
                 ret.set_len(l);
             }
         }
@@ -6366,7 +6382,7 @@ impl<T: WithSchema + 'static> WithSchema for Box<T> {
         context.possible_recursion::<T>(|context| T::schema(version, context))
     }
 }
-impl<T> ReprC for Box<T> {}
+impl<T> Packed for Box<T> {}
 impl<T: Serialize + 'static> Serialize for Box<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
@@ -6380,7 +6396,7 @@ impl<T: Deserialize + 'static> Deserialize for Box<T> {
 
 use std::rc::Rc;
 
-impl<T> ReprC for Rc<T> {}
+impl<T> Packed for Rc<T> {}
 impl<T: WithSchema + 'static> WithSchema for Rc<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         context.possible_recursion::<T>(|context| T::schema(version, context))
@@ -6397,7 +6413,7 @@ impl<T: Deserialize + 'static> Deserialize for Rc<T> {
     }
 }
 
-impl<T> ReprC for Arc<T> {}
+impl<T> Packed for Arc<T> {}
 impl<T: WithSchema + 'static> WithSchema for Arc<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         context.possible_recursion::<T>(|context| T::schema(version, context))
@@ -6430,7 +6446,7 @@ use std::sync::Arc;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use memoffset::offset_of_tuple;
 
-impl<T> ReprC for RefCell<T> {}
+impl<T> Packed for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
@@ -6447,8 +6463,8 @@ impl<T: Deserialize> Deserialize for RefCell<T> {
     }
 }
 
-impl<T: ReprC> ReprC for Cell<T> {
-    unsafe fn repr_c_optimization_safe(version: u32) -> IsReprC {
+impl<T: Packed> Packed for Cell<T> {
+    unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         T::repr_c_optimization_safe(version)
     }
 }
@@ -7219,17 +7235,17 @@ impl Deserialize for AtomicIsize {
     }
 }
 
-impl ReprC for AtomicBool {}
-impl ReprC for AtomicI8 {}
-impl ReprC for AtomicU8 {}
-impl ReprC for AtomicI16 {}
-impl ReprC for AtomicU16 {}
-impl ReprC for AtomicI32 {}
-impl ReprC for AtomicU32 {}
-impl ReprC for AtomicI64 {}
-impl ReprC for AtomicU64 {}
-impl ReprC for AtomicIsize {}
-impl ReprC for AtomicUsize {}
+impl Packed for AtomicBool {}
+impl Packed for AtomicI8 {}
+impl Packed for AtomicU8 {}
+impl Packed for AtomicI16 {}
+impl Packed for AtomicU16 {}
+impl Packed for AtomicI32 {}
+impl Packed for AtomicU32 {}
+impl Packed for AtomicI64 {}
+impl Packed for AtomicU64 {}
+impl Packed for AtomicIsize {}
+impl Packed for AtomicUsize {}
 
 /// Useful zero-sized marker. It serializes to a magic value,
 /// and verifies this value on deserialization. Does not consume memory
@@ -7272,7 +7288,7 @@ impl Serialize for Canary1 {
         serializer.write_u32(0x47566843)
     }
 }
-impl ReprC for Canary1 {}
+impl Packed for Canary1 {}
 impl WithSchema for Canary1 {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)

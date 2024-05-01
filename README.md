@@ -1,5 +1,7 @@
 ![build](https://github.com/avl/savefile/actions/workflows/rust.yml/badge.svg)
 
+**Having trouble with new version 0.17? - See upgrade guide further down in this document!**
+
 # Introduction to Savefile 
 
 Savefile is a crate to effortlessly serialize rust structs and enums. It uses
@@ -74,7 +76,7 @@ fn main() {
 # Changelog
 
 
-## 0.17.0 (to be released, betas available)
+## 0.17.0
 
 This is a big change! With 0.17 Savefile gains yet another major function: Support for
 making dynamically loaded plugins. I.e, a mechanism to allow rust code to be divided
@@ -84,15 +86,23 @@ across library boundaries.
 Using this feature requires using the crate 'savefile-abi'. Regular use of savefile
 can continue as usual.
 
-The dataformat for schemas has changed, but in a backward compatible way.
-
-Version 0.17.0-beta.11 is, as can be seen from the name, a beta. There will be bugs.
+The data format for schemas has changed, but in a backward compatible way. I.e, savefile
+0.17 can still read data saved by 0.16 and earlier. However, 0.16 can't read data
+saved by 0.17.
 
 Another thing in 0.17.0: We're starting to use 'release-plz' to manage releases.
 Hopefully this will make the releases more professional, with correct git tags, git releases etc.
 
+Also, 0.17 can now sometimes dramtically optimize reading sequences of enums. This will work
+for enums that have #[repr(u8)] or similar, provided the type contains no padding.
+
+Yet another upgrade is that Savefile now supports enums with more than 256 variants!
 
 ### Upgrade guide from 0.16 -> 0.17
+
+Unfortunately 0.17 is quite a big release. Some changes will be required to upgrade.
+
+Here is a short guide:
 
 1: Schemas have been expanded. 
 
@@ -111,7 +121,11 @@ enums. If you ever need an enum to have more than 65536 fields, set it to 4.
 most data types. Only smart pointers, containers, Box etc need ot use this, to guard against 
 recursion. See documentation of WithSchemaContext.
 
-1.6: Several savefile trait implementations have now gained 'static-bounds. For example,
+1.6: The 'ReprC'-trait has been renamed to 'Packed'. It is identical in every other way.
+Upgrading is as simple as a search-and-replace.
+
+
+1.7: Several savefile trait implementations have now gained 'static-bounds. For example,
 Box<T>, Vec<T> and many more now require T:'static. There was no such bound before, but
 since references cannot be deserialized, it was still typically not possible to deserialize
 anything containing a reference. 
@@ -125,19 +139,6 @@ Serializing things with lifetimes is still possible, the only place where 'stati
 is the contents of containers such as Box, Vec etc. The reason is that the new recursion
 support needs to be able to create TypeIds, and this is only possible for objects with
 'static lifetime.
-
-## 0.17.0-beta.13
-
-Major improvements. Better diagnostics. Support for returning Box<Fn(..)>.
-
-## 0.17.0-beta.10
-
-Tentative support for fast serialization/deserialization of enums. May be buggy!
-
-## 0.17.0-beta.9
-
-Fixed bug where schema of slices was not serialized correctly. Introduced in 0.17, so 
-only present in beta releases.
 
 
 ## 0.16.5
@@ -237,7 +238,7 @@ Note! It might in some situations be necessary to use `#[repr(C)]` to get the sp
 The 0.14 release contained some bugs. It was actually impossible to serialize
 collections containing many standard types. This is fixed in 0.14.3.
 
-## 0.14 Major changes to ReprC-system
+## 0.14 Major changes to Packed (previously 'ReprC')-system
 
 One of the strong points of Savefile is the support for very quickly serializing
 and deserializing vectors of simple copy-datatypes.
@@ -265,7 +266,7 @@ pub struct Example {
 }
 ```
 
-The old solution implemented a marker trait 'ReprC' for the type. Then, Savefile relied on
+The old solution implemented a marker trait 'Packed' for the type. Then, Savefile relied on
 specialization to be able to serialize vectors and arrays of these types much faster
 by simply copying large regions of bytes.
 
@@ -275,15 +276,16 @@ land in stable rust.
 
 Because of this, we are now bringing the speedups to stable, by abandoning specialization!
 
-We are now implementing ReprC for _all_ types, and then just returning false for types
-which don't support the optimization. 
+We are now implementing 'Packed' (previously known as 'ReprC') for _all_ types, and then 
+just returning false for types which don't support the optimization. 
 
-This has some drawbacks. Previously, ReprC was an unsafe trait. It wasn't mandatory, but
-if you knew what you were doing you could get extra performance, under responsibility.
+This has some drawbacks. Previously, ReprC (early name of 'Packed') was an unsafe trait. 
+It wasn't mandatory, but if you knew what you were doing you could get extra performance, 
+under responsibility.
 
-But now, ReprC is to be implemented by all types. And we don't want it to be necessary to use
+But now, Packed is to be implemented by all types. And we don't want it to be necessary to use
 unsafe code to be able to use Savefile. However, to the user of Savefile, there isn't much
-difference, except the ReprC trait always being derived, and another way being used to opt-in
+difference, except the Packed trait always being derived, and another way being used to opt-in
 to the unsafe but performant optimization.
 
 I don't know of a way to require 'unsafe' keyword to a derive macro, so we use a deliberately
@@ -517,6 +519,8 @@ Minimum supported rust version for 0.8.x is 1.51.
 Savefile is now usable with a stable compiler, not just nightly.
 
 When run on stable, the following features stop working:
+
+NOTE! The below is old information, no longer at all valid from 0.16 and onward.
 
 * The whole 'ReprC' subsystem. This means serialization of byte arrays 
 (or other small copy-types) is not as fast as it could be. The slow-down

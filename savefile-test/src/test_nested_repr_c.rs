@@ -46,7 +46,7 @@ fn test_not_raw_memcpy2() {
     assert_eq!(
         f_internal_size,
         version + vec_overhead + misaligner + inner + savefile_header + savefile_lib_version + is_compressed
-    ); //3 bytes padding also because of ReprC-optimization
+    ); //3 bytes padding also because of Packed-optimization
 }
 
 #[derive(Savefile, Clone, Copy)]
@@ -61,7 +61,7 @@ struct UnnamedFieldsStruct(usize);
 
 #[test]
 fn test_various_types_for_reprc() {
-    assert_eq!(unsafe { <() as ReprC>::repr_c_optimization_safe(0).is_yes() }, true);
+    assert_eq!(unsafe { <() as Packed>::repr_c_optimization_safe(0).is_yes() }, true);
     assert_eq!(unsafe { <u8>::repr_c_optimization_safe(0) }.is_yes(), true);
 
     assert_eq!(unsafe { <MyUnitStruct>::repr_c_optimization_safe(0) }.is_yes(), true);

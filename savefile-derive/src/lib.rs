@@ -11,7 +11,7 @@
 #![allow(clippy::collapsible_match)]
 #![allow(clippy::single_match)]
 
-//! This crate allows automatic derivation of the Savefile-traits: Serialize, Deserialize, WithSchema, ReprC and Introspect .
+//! This crate allows automatic derivation of the Savefile-traits: Serialize, Deserialize, WithSchema, Packed and Introspect .
 //! The documentation for this is found in the Savefile crate documentation.
 
 extern crate proc_macro;
@@ -52,7 +52,7 @@ fn implement_fields_serialize(
     let local_serializer = quote_spanned! { defspan => local_serializer};
 
     let reprc = quote! {
-        _savefile::prelude::ReprC
+        _savefile::prelude::Packed
     };
 
     let mut deferred_reprc: Option<(usize /*align*/, Vec<TokenStream>)> = None;
@@ -256,7 +256,7 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{ReprC, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
         use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
@@ -646,7 +646,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         const #dummy_const: () = {
             extern crate savefile as _savefile;
             use std::mem::MaybeUninit;
-            use savefile::prelude::ReprC;
+            use savefile::prelude::Packed;
 
             #w
             #r
@@ -695,7 +695,7 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
         const #dummy_const: () = {
             extern crate savefile as _savefile;
             use std::mem::MaybeUninit;
-            use savefile::prelude::ReprC;
+            use savefile::prelude::Packed;
 
             #w
             #r
@@ -736,10 +736,10 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::WithSchema});
     let reprc = quote_spanned! {defspan=>
-        _savefile::prelude::ReprC
+        _savefile::prelude::Packed
     };
     let isreprc = quote_spanned! {defspan=>
-        _savefile::prelude::IsReprC
+        _savefile::prelude::IsPacked
     };
     quote! {
 
@@ -762,15 +762,15 @@ fn implement_reprc_struct(
     expect_fast: bool,
 ) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::ReprC});
+    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Packed});
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let reprc = quote_spanned! {defspan=>
-        _savefile::prelude::ReprC
+        _savefile::prelude::Packed
     };
     let isreprc = quote_spanned! {defspan=>
-        _savefile::prelude::IsReprC
+        _savefile::prelude::IsPacked
     };
     let offsetof = quote_spanned! {defspan=>
         _savefile::prelude::offset_of
@@ -980,7 +980,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
 }
 #[proc_macro_error]
 #[proc_macro_derive(
-    ReprC,
+    Packed,
     attributes(
         savefile_versions,
         savefile_versions_as,
@@ -990,7 +990,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     )
 )]
 pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    abort_call_site!("The #[derive(ReprC)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
+    abort_call_site!("The #[derive(Packed)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let name = input.ident;
@@ -1110,12 +1110,12 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             let defspan = proc_macro2::Span::call_site();
             let generics = input.generics;
             let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-            let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::ReprC});
+            let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Packed});
             let reprc = quote_spanned! { defspan=>
-                _savefile::prelude::ReprC
+                _savefile::prelude::Packed
             };
             let isreprc = quote_spanned! {defspan=>
-                _savefile::prelude::IsReprC
+                _savefile::prelude::IsPacked
             };
 
             if conditions.is_empty() {
@@ -1135,7 +1135,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             let mut reprc_condition = vec![];
             for typ in unique_field_types {
                 reprc_condition.push(quote!(
-                    <#typ as ReprC>::repr_c_optimization_safe(file_version).is_yes()
+                    <#typ as Packed>::repr_c_optimization_safe(file_version).is_yes()
                 ));
             }
 
