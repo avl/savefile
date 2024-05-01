@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
+#![cfg_attr(feature = "nightly", feature(trait_alias))]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![allow(clippy::box_default)]
@@ -13,6 +14,7 @@
 #![allow(clippy::transmute_num_to_bytes)] //Clean this up some day
 #![allow(clippy::manual_memcpy)] //Clean up some day
 #![allow(clippy::needless_late_init)]
+
 /*!
 This is the documentation for `savefile`
 
@@ -235,22 +237,21 @@ More about the savefile_default_val, default_fn and savefile_versions_as attribu
 
 Rules for using the #\[savefile_versions] attribute:
 
- You must keep track of what the current version of your data is. Let's call this version N.
- You may only save data using version N (supply this number when calling `save`)
- When data is loaded, you must supply version N as the memory-version number to `load`. Load will
+ * You must keep track of what the current version of your data is. Let's call this version N.
+ * You may only save data using version N (supply this number when calling `save`)
+ * When data is loaded, you must supply version N as the memory-version number to `load`. Load will
     adapt the deserialization operation to the version of the serialized data.
- The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version.
- Whenever changes to the data are to be made, the global version number N must be increased.
- You may add a new field to your structs, iff you also give it a #\[savefile_versions = "N.."] attribute. N must be the new version of your data.
- You may remove a field from your structs. If previously it had no #\[savefile_versions] attribute, you must
-    add a #\[savefile_versions = "..N-1"] attribute. If it already had an attribute #[savefile_versions = "M.."], you must close
-    its version interval using the current version of your data: #\[savefile_versions = "M..N-1"]. Whenever a field is removed,
-    its type must simply be changed to `Removed<T>` where T is its previous type. You may never completely remove
-    items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
-    For example, if you remove a field in version 3, you should add a #\[savefile_versions="..2"] attribute.
- You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
- You may add enum variants in future versions, but you may not change the size of the discriminant.
-
+ * The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version.
+ * Whenever changes to the data are to be made, the global version number N must be increased.
+ * You may add a new field to your structs, iff you also give it a #\[savefile_versions = "N.."] attribute. N must be the new version of your data.
+ * You may remove a field from your structs.
+    - If previously it had no #\[savefile_versions] attribute, you must add a #\[savefile_versions = "..N-1"] attribute.
+    - If it already had an attribute #[savefile_versions = "M.."], you must close its version interval using the current version of your data: #\[savefile_versions = "M..N-1"].
+    - Whenever a field is removed, its type must simply be changed to `Removed<T>` where T is its previous type.
+    - You may never completely remove items from your structs. Doing so removes backward-compatibility with that version. This will be detected at load.
+    - For example, if you remove a field in version 3, you should add a #\[savefile_versions="..2"] attribute.
+ * You may not change the type of a field in your structs, except when using the savefile_versions_as-macro.
+ * You may add enum variants in future versions, but you may not change the size of the discriminant.
 
 
  ## The savefile_default_val attribute
@@ -416,11 +417,13 @@ Rules for using the #\[savefile_versions] attribute:
 
 
  # Speeding things up
+ Note: This entire chapter can safely be ignored. Savefile will, in most circumstances,
+ perform very well without any special work by the programmer.
 
- Now, let's say we want to add a list of all positions that our player have visited,
- so that we can provide an instant-replay function to our game. The list can become
- really long, so we want to make sure that the overhead when serializing this is
- as low as possible.
+ Continuing the example from previous chapters, let's say we want to add a list of all
+ positions that our player have visited, so that we can provide an instant-replay function to
+ our game. The list can become really long, so we want to make sure that the overhead when
+ serializing this is as low as possible.
 
 
  ```
@@ -1156,8 +1159,7 @@ pub struct IsPacked(bool);
 
 #[doc(hidden)]
 #[deprecated(since="0.17", note="The 'IsReprC' type has been renamed to 'IsPacked'.")]
-#[derive(Default, Debug)]
-pub struct IsReprC(());
+pub type IsReprC = IsPacked;
 
 impl std::ops::BitAnd<IsPacked> for IsPacked {
     type Output = IsPacked;
@@ -1238,11 +1240,20 @@ pub trait Packed {
     }
 }
 
-#[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+/// This just exists to make sure that no one can implement the ReprC-trait placeholder.
+#[doc(hidden)]
+pub struct DeliberatelyUnimplementable{
+    #[allow(dead_code)]
+    private: ()
+}
+
+#[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
 pub trait ReprC {
-    #[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+    #[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
+    #[allow(non_snake_case)]
+    fn this_is_a_placeholder__if_you_see_this_it_is_likely_that_you_have_code_that_refers_to_ReprC_trait__this_trait_has_been_renamed_to__Packed() -> DeliberatelyUnimplementable;
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
         IsPacked::no()
     }
@@ -2290,7 +2301,7 @@ impl WithSchemaContext {
     /// }
     /// ```
     ///
-    /// If recursion is detected (traversing to exactly MyBox<T> twice, in the above example), the method
+    /// If recursion is detected (traversing to exactly `MyBox<T>` twice, in the above example), the method
     /// 'possible_recursion' will return Schema::Recursion, stopping the Schema instance from becoming infinitely big.
     ///
     pub fn possible_recursion<T: 'static>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
@@ -2538,10 +2549,10 @@ pub struct SchemaStruct {
     /// Diagnostic value
     pub dbg_name: String,
     /// If None, the memory layout of the struct is unspecified.
-    /// Otherwise, the size of the struct in memory (std::mem::size_of::<TheStruct>()).
+    /// Otherwise, the size of the struct in memory (`std::mem::size_of::<TheStruct>()`).
     size: Option<usize>,
     /// If None, the memory layout of the struct is unspecified.
-    /// Otherwise, the alignment of the struct (std::mem::align_of::<TheStruct>()).
+    /// Otherwise, the alignment of the struct (`std::mem::align_of::<TheStruct>()`).
     alignment: Option<usize>,
     /// Fields of struct
     pub fields: Vec<Field>,
@@ -2568,9 +2579,9 @@ impl SchemaStruct {
     /// * dbg_name: The name of the struct
     /// * fields: The fields of the struct
     /// * size: If None, the memory layout of the struct is unspecified.
-    ///   Otherwise, the size of the struct in memory (std::mem::size_of::<TheStruct>()).
+    ///   Otherwise, the size of the struct in memory (`std::mem::size_of::<TheStruct>()`).
     /// * alignment: If None, the memory layout of the struct is unspecified.
-    ///   Otherwise, the alignment of the struct (std::mem::align_of::<TheStruct>()).
+    ///   Otherwise, the alignment of the struct (`std::mem::align_of::<TheStruct>()`).
     pub fn new_unsafe(
         dbg_name: String,
         fields: Vec<Field>,
@@ -2667,9 +2678,9 @@ pub struct SchemaEnum {
     /// True if this enum type has a repr(uX) attribute, and thus a predictable
     /// memory layout.
     has_explicit_repr: bool,
-    /// The size of the enum (std::mem::size_of::<TheEnum>()), if known
+    /// The size of the enum (`std::mem::size_of::<TheEnum>()`), if known
     size: Option<usize>,
-    /// The alignment of the enum (std::mem::align_of::<TheEnum>())
+    /// The alignment of the enum (`std::mem::align_of::<TheEnum>()`)
     alignment: Option<usize>,
 }
 
@@ -2715,8 +2726,8 @@ impl SchemaEnum {
     ///   In either case, this is the size of the enum in the disk-format.
     /// * has_explicit_repr: True if this enum type has a repr(uX) attribute, and thus a predictable
     ///   memory layout.
-    /// * size: The size of the enum (std::mem::size_of::<TheEnum>()), if known
-    /// * alignment: The alignment of the enum (std::mem::align_of::<TheEnum>())
+    /// * size: The size of the enum (`std::mem::size_of::<TheEnum>()`), if known
+    /// * alignment: The alignment of the enum (`std::mem::align_of::<TheEnum>()`)
     ///
     /// # Safety
     /// The argument 'has_explicit_repr' must only be true if the enum in fact has a #[repr(uX)] attribute.
@@ -3135,8 +3146,8 @@ pub enum Schema {
     /// if your type is aptly represented as a Struct or Enum instead.
     /// This never has a specified memory format.
     Custom(String),
-    /// The savefile format of a Box<T> is identical to that of T.
-    /// But SavefileAbi still needs to represent Box<T> separate from T, since
+    /// The savefile format of a `Box<T>` is identical to that of `T`.
+    /// But SavefileAbi still needs to represent `Box<T>` separate from `T`, since
     /// their memory layout isn't the same.
     Boxed(Box<Schema>),
     /// Savefile does not support deserializing unsized slices.
@@ -3148,7 +3159,7 @@ pub enum Schema {
     /// Savefile schema still needs to be able to represent Str.
     Str,
     /// Savefile does not support deserializing references.
-    /// If it would, the savefile format of &T would be identical to that of T.
+    /// If it would, the savefile format of `&T` would be identical to that of `T`.
     /// But SavefileAbi still needs to represent &T separate from T, since
     /// their memory layout isn't the same.
     Reference(Box<Schema>),
@@ -5727,7 +5738,7 @@ impl RawVecInspector {
     }
 }
 
-/// Calculate the memory layout of &[T]. I.e, of the reference to the data.
+/// Calculate the memory layout of `&[T]`. I.e, of the reference to the data.
 /// This type is typically 16 bytes, consisting of two words, one being the length,
 /// the other being a pointer to the start of the data.
 pub const fn calculate_slice_memory_layout<T>() -> VecOrStringLayout {

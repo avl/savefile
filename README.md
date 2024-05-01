@@ -79,6 +79,9 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.1
+
+Just minor improvements to documentation.
 
 ## 0.17.0
 
@@ -640,6 +643,9 @@ Common errors:
 ## "the trait bound `MyStuff: WithSchema` is not satisfied"
 This probably means you've forgotten to derive the Savefile-traits. Add a `#[derive(Savefile)]`.
 
+## the trait `ReprC` is not implemented
+
+This one is easy. `ReprC` has been renamed to `Packed`. Just change to `Packed` and things should work. 
 
 # License
 
