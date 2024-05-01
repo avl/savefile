@@ -14,16 +14,16 @@ Docs: https://docs.rs/savefile/latest/savefile/
 
 # Capabilities
 
- * **Easy to use** Most std datatypes are supported, and the derive macro can used for most user-types.
+ * **Easy to use** Most std datatypes are supported, and the derive macro can be used for most user-types.
  * **Reliable** - Savefile has an extensive test suite. 
  * **Backward compatible** - Savefile supports schema-versioning, with built-in verification and detailed error messages on schema mismatch.
- * **Fast** - Savefile can *safely* write many data types as raw bytes.
+ * **Fast** - Savefile can serialize/deserialize many data types quickly by *safely* treating them as raw bytes.
  * **Safe** - Savefile can be used without requiring any unsafe code from the user.
+
+# Savefile-Abi
 
 Savefile-Abi is a related crate, which allows publishing forward- and backward compatible
 shared libraries, written in rust, to be used as binary plugins in rust-programs.
-
-Savefile ABI is available in the latest beta-version ( `0.17.0-beta.11` )
 
 Docs: https://docs.rs/savefile-abi/latest/
 
