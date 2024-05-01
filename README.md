@@ -75,7 +75,7 @@ fn main() {
 
 ```
 
-See docs for more information, includign schema-versioning: https://docs.rs/savefile/latest/savefile/ .
+See the docs for more information, including schema-versioning: https://docs.rs/savefile/latest/savefile/ .
 
 # Changelog
 
