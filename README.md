@@ -643,6 +643,9 @@ Common errors:
 ## "the trait bound `MyStuff: WithSchema` is not satisfied"
 This probably means you've forgotten to derive the Savefile-traits. Add a `#[derive(Savefile)]`.
 
+## the trait `ReprC` is not implemented
+
+This one is easy. `ReprC` has been renamed to `Packed`. Just change to `Packed` and things should work. 
 
 # License
 

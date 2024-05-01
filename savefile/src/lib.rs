@@ -1239,10 +1239,10 @@ pub trait Packed {
     }
 }
 
-#[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+#[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
 pub trait ReprC {
-    #[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
+    #[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
         IsPacked::no()
