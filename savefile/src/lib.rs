@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
+#![cfg_attr(feature = "nightly", feature(trait_alias))]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![allow(clippy::box_default)]
@@ -13,6 +14,7 @@
 #![allow(clippy::transmute_num_to_bytes)] //Clean this up some day
 #![allow(clippy::manual_memcpy)] //Clean up some day
 #![allow(clippy::needless_late_init)]
+
 /*!
 This is the documentation for `savefile`
 
@@ -1157,8 +1159,7 @@ pub struct IsPacked(bool);
 
 #[doc(hidden)]
 #[deprecated(since="0.17", note="The 'IsReprC' type has been renamed to 'IsPacked'.")]
-#[derive(Default, Debug)]
-pub struct IsReprC(());
+pub type IsReprC = IsPacked;
 
 impl std::ops::BitAnd<IsPacked> for IsPacked {
     type Output = IsPacked;
@@ -1239,11 +1240,20 @@ pub trait Packed {
     }
 }
 
+/// This just exists to make sure that no one can implement the ReprC-trait placeholder.
+#[doc(hidden)]
+pub struct DeliberatelyUnimplementable{
+    #[allow(dead_code)]
+    private: ()
+}
+
 #[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
 pub trait ReprC {
     #[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
+    #[allow(non_snake_case)]
+    fn this_is_a_placeholder__if_you_see_this_it_is_likely_that_you_have_code_that_refers_to_ReprC_trait__this_trait_has_been_renamed_to__Packed() -> DeliberatelyUnimplementable;
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
         IsPacked::no()
     }
