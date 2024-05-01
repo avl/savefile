@@ -1240,7 +1240,7 @@ pub trait Packed {
     }
 }
 
-/// This just exists to make sure that no one can implement the ReprC-trait placeholder.
+/// This just exists to make sure that no one can actually implement the ReprC-trait placeholder.
 #[doc(hidden)]
 #[deprecated(since="0.17", note="The 'Packed' trait has been renamed to 'Packed'.")]
 pub struct DeliberatelyUnimplementable{
