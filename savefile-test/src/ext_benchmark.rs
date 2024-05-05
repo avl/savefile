@@ -212,6 +212,7 @@ fn bench_ext_triangle(b: &mut Bencher) {
     let mesh = generate_mesh();
     let mut encoded: Vec<u8> = Vec::new();
     b.iter(move || {
+        encoded.clear();
         savefile::save_noschema(black_box(&mut encoded), 0, black_box(&mesh)).unwrap();
     })
 }
