@@ -11,11 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Make comment clearer
 
-### Other
-- Fix deprecation of helper struct
-- merge
-- merge
-
 ## [0.17.1](https://github.com/avl/savefile/compare/savefile-v0.17.0...savefile-v0.17.1) - 2024-05-01
 
 ### Other
