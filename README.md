@@ -115,14 +115,19 @@ Here is a short guide:
 
 1.1: Schema::Vector takes a 2nd parameter. Just set it to 'VecOrStringLayout::Unknown' or `VecOrStringLayout::default()`.
 
-1.2: Field of Schema::Struct now takes an 'offset' parameter. It is safe to always set to None.
+1.2: Field of Schema::Struct now takes an 'offset' parameter. It is safe to always set to None. Some
+parameters have become private, so now you need to use a 'new'-function to create instances of Schema::Struct.
+The reason for this is that it is needed to guarantee soundness since some of the new fields must be
+given correct values to avoid unsound behaviour. There is an unsafe function to initialize these,
+so they are not completely hidden.
 
 1.3: The field 'discriminator' of SchemaEnum Variant has been renamed to 'discriminant' (since this is
 what the rust project calls it)
 
 1.4: The SchemaEnum type has gained the field 'discriminant_size'. This is the number of bytes needed to
 encode the discriminant. Set to 1 for enums which will never have more than 256 fields. Set to 2 for bigger
-enums. If you ever need an enum to have more than 65536 fields, set it to 4.
+enums. If you ever need an enum to have more than 65536 fields, set it to 4. Note that the
+SchemaEnum type also now has private fields, and also needs to be constructed using 'new'.
 
 1.5: The WithSchema::schema function now takes a context object. You can just pass this through for
 most data types. Only smart pointers, containers, Box etc need ot use this, to guard against 
