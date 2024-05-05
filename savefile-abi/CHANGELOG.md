@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2](https://github.com/avl/savefile/compare/savefile-abi-v0.17.1...savefile-abi-v0.17.2) - 2024-05-05
+
+### Other
+- updated the following local packages: savefile, savefile-derive
+
 ## [0.17.1](https://github.com/avl/savefile/compare/savefile-abi-v0.17.0...savefile-abi-v0.17.1) - 2024-05-01
 
 ### Other
