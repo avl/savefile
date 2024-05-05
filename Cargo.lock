@@ -12,27 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alkahest"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "631a0c0a3e1a64558bb2552a3893102c428d5e88a0e3f0a6979a7a67328c1e1b"
-dependencies = [
- "alkahest-proc",
- "bytemuck",
-]
-
-[[package]]
-name = "alkahest-proc"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8087db15c316edb2432048cfd2f3f848ee22887f9d717d7375bf7b666a59e7e7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -79,12 +58,6 @@ name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
-
-[[package]]
-name = "bytemuck"
-version = "1.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d68c57235a3a081186990eca2867354726650f42f7516ca50c28d6281fd15"
 
 [[package]]
 name = "byteorder"
@@ -550,7 +523,6 @@ dependencies = [
 name = "savefile-min-build"
 version = "0.1.0"
 dependencies = [
- "alkahest",
  "savefile",
  "savefile-abi",
  "savefile-derive",
