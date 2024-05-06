@@ -14,6 +14,7 @@ use savefile_derive::savefile_abi_export;
 pub trait ExampleTrait {
     fn get(&mut self, x: u32) -> u32;
 }
+#[derive(Default)]
 struct ExampleImpl {
 
 }
@@ -24,6 +25,7 @@ impl ExampleTrait for ExampleImpl {
 }
 // Test what happens when you mix up the ordering of trait and impl:
 savefile_abi_export!(ExampleTrait, ExampleImpl);
-//~^ 26:1: 26:48: expected trait, found struct `ExampleImpl` [E0404]
+//~^ 27:22: 27:34: trait objects must include the `dyn` keyword [E0782]
+//~^^ 27:36: 27:47: expected trait, found struct `ExampleImpl` [E0404]
 
 fn main() {}

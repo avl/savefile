@@ -26,7 +26,7 @@ use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
     path_to_string, FieldInfo,
 };
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenTree};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
@@ -34,12 +34,9 @@ use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
 use syn::__private::bool;
 use syn::spanned::Spanned;
-use syn::token::Paren;
+use syn::token::{Paren};
 use syn::Type::Tuple;
-use syn::{
-    DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem,
-    Type, TypeGenerics, TypeParamBound, TypeTuple,
-};
+use syn::{DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
     implicit_self: bool,
@@ -564,21 +561,41 @@ pub fn savefile_abi_exportable(
 }
 #[proc_macro_error]
 #[proc_macro]
-pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = item.to_string();
-    let symbols: Vec<_> = input.split(',').map(|x| x.trim()).collect();
-    if symbols.len() != 2 {
-        abort!(input.span(), "savefile_abi_export requires two parameters. The first parameter is the implementing type, the second is the trait it implements.");
+    pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let tokens = proc_macro2::TokenStream::from(item);
+
+    let mut tokens_iter = tokens.into_iter();
+
+    let Some(implementing_type) = tokens_iter.next() else {
+        abort!(Span::call_site(), "The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements.");
+    };
+    let Some(comma) = tokens_iter.next() else {
+        abort!(Span::call_site(), "The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements.");
+    };
+    if let TokenTree::Punct(p) = comma {
+        if p.as_char() != ',' {
+            abort!(p.span(), "Expected a comma (','). The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements, and these must be separated by a comma.");
+        }
+    } else {
+        abort!(comma.span(), "Expected a comma (','). The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements, and these must be separated by a comma.");
+
     }
+    let Some(trait_type) = tokens_iter.next() else {
+        abort!(Span::call_site(), "The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements. Expected trait name.");
+    };
+
+    if let Some(extra) = tokens_iter.next() {
+        abort!(extra.span(), "Unexpected token. The macro savefile_abi_export! requires exactly two parameters. The first parameter must be the implementing type, the second is the trait it implements.");
+    }
+
+
     let defspan = Span::call_site();
     let uses = quote_spanned! { defspan =>
         extern crate savefile_abi;
         use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry,parse_return_value_impl};
     };
 
-    let implementing_type = Ident::new(symbols[0], Span::call_site());
-    let trait_type = Ident::new(symbols[1], Span::call_site());
-    let abi_entry = Ident::new(("abi_entry_".to_string() + symbols[1]).as_str(), Span::call_site());
+    let abi_entry = Ident::new(("abi_entry_".to_string() + &trait_type.to_string()).as_str(), Span::call_site());
 
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]

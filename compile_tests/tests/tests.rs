@@ -1,6 +1,5 @@
 extern crate compiletest_rs as compiletest;
 
-use std::env;
 use std::path::PathBuf;
 
 fn run_mode(mode: &'static str, custom_dir: Option<&'static str>) {
@@ -11,14 +10,9 @@ fn run_mode(mode: &'static str, custom_dir: Option<&'static str>) {
 
     let dir = custom_dir.unwrap_or(mode);
     config.src_base = PathBuf::from(format!("tests/{}", dir));
-    config.target_rustcflags = Some("-L target/debug -L     target/debug/deps".to_string());
-    config.llvm_filecheck = Some(
-        env::var("FILECHECK")
-            .unwrap_or("FileCheck".to_string())
-            .into(),
-    );
-    //config.clean_rmeta();
-    //config.clean_rlib();
+    config.target_rustcflags = Some("-L target/debug -L target/debug/deps --edition 2021".to_string());
+    config.llvm_filecheck = Some("FileCheck".to_string().into());
+
     config.strict_headers = true;
 
     compiletest::run_tests(&config);
