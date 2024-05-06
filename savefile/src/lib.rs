@@ -1,7 +1,6 @@
 #![allow(incomplete_features)]
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
-#![cfg_attr(feature = "nightly", feature(trait_alias))]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![allow(clippy::box_default)]
