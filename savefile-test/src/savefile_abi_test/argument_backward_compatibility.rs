@@ -39,8 +39,7 @@ mod v1 {
                 EnumArgument::Variant2 => "Variant2".into(),
             }
         }
-        fn function_existing_in_v1(&self) {
-        }
+        fn function_existing_in_v1(&self) {}
     }
 }
 
@@ -85,8 +84,7 @@ mod v2 {
             a.data3 + a.data2 + b.data2 + b.data3
         }
 
-        fn function_existing_in_v2(&self) {
-        }
+        fn function_existing_in_v2(&self) {}
     }
 }
 
@@ -200,7 +198,7 @@ pub fn test_caller_has_newer_version_calling_non_existing_function() {
             iface1,
         )
     }
-        .unwrap();
+    .unwrap();
     conn1.function_existing_in_v2();
 }
 
@@ -214,18 +212,18 @@ pub fn test_caller_has_older_version_calling_non_existing_function() {
             iface2,
         )
     }
-        .unwrap();
+    .unwrap();
     conn.function_existing_in_v1();
 }
 #[test]
 fn test_calling_function_that_is_later_removed() {
-    let boxed: Box<dyn ArgInterfaceV1> = Box::new(Implementation1{});
+    let boxed: Box<dyn ArgInterfaceV1> = Box::new(Implementation1 {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     conn.function_existing_in_v1();
 }
 #[test]
 fn test_calling_function_that_is_added_in_later_version() {
-    let boxed: Box<dyn ArgInterfaceV2> = Box::new(Implementation2{});
+    let boxed: Box<dyn ArgInterfaceV2> = Box::new(Implementation2 {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     conn.function_existing_in_v2();
 }

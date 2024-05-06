@@ -1357,9 +1357,11 @@ pub fn test_verify_cow_deserialize_not_borrowed() {
     }
     f.set_position(0);
     {
-        let roundtripped:Cow<String> = Deserializer::load(&mut f, 0).unwrap();
+        let roundtripped: Cow<String> = Deserializer::load(&mut f, 0).unwrap();
         match roundtripped {
-            Cow::Borrowed(_) => {panic!("Roundtripped Cow should not be borrowed!")}
+            Cow::Borrowed(_) => {
+                panic!("Roundtripped Cow should not be borrowed!")
+            }
             Cow::Owned(_) => {}
         }
     }

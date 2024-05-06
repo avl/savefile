@@ -1157,7 +1157,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
 pub struct IsPacked(bool);
 
 #[doc(hidden)]
-#[deprecated(since="0.17", note="The 'IsReprC' type has been renamed to 'IsPacked'.")]
+#[deprecated(since = "0.17", note = "The 'IsReprC' type has been renamed to 'IsPacked'.")]
 pub type IsReprC = IsPacked;
 
 impl std::ops::BitAnd<IsPacked> for IsPacked {
@@ -1241,20 +1241,21 @@ pub trait Packed {
 
 /// This just exists to make sure that no one can actually implement the ReprC-trait placeholder.
 #[doc(hidden)]
-#[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
-pub struct DeliberatelyUnimplementable{
+#[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
+pub struct DeliberatelyUnimplementable {
     #[allow(dead_code)]
-    private: ()
+    private: (),
 }
 
-#[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
+#[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
 pub trait ReprC {
-    #[deprecated(since="0.17", note="The 'ReprC' trait has been renamed to 'Packed'.")]
+    #[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
     #[allow(non_snake_case)]
     #[allow(deprecated)]
-    fn this_is_a_placeholder__if_you_see_this_it_is_likely_that_you_have_code_that_refers_to_ReprC_trait__this_trait_has_been_renamed_to__Packed() -> DeliberatelyUnimplementable;
+    fn this_is_a_placeholder__if_you_see_this_it_is_likely_that_you_have_code_that_refers_to_ReprC_trait__this_trait_has_been_renamed_to__Packed(
+    ) -> DeliberatelyUnimplementable;
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
         IsPacked::no()
     }
@@ -2399,7 +2400,6 @@ impl<'a> IntrospectItem<'a> for str {
         &THE_NULL_INTROSPECTABLE
     }
 }
-
 
 impl<'a> IntrospectItem<'a> for String {
     fn key(&self) -> &str {
@@ -3700,8 +3700,16 @@ impl Deserialize for SchemaStruct {
         let l = deserializer.read_usize()?;
         Ok(SchemaStruct {
             dbg_name,
-            size: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
-            alignment: if deserializer.file_version > 0 {<_ as Deserialize>::deserialize(deserializer)?} else {None},
+            size: if deserializer.file_version > 0 {
+                <_ as Deserialize>::deserialize(deserializer)?
+            } else {
+                None
+            },
+            alignment: if deserializer.file_version > 0 {
+                <_ as Deserialize>::deserialize(deserializer)?
+            } else {
+                None
+            },
             fields: {
                 let mut ret = Vec::new();
                 for _ in 0..l {
@@ -4158,7 +4166,6 @@ impl Serialize for str {
 impl Packed for String {}
 
 impl Packed for str {}
-
 
 impl Deserialize for String {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<String, SavefileError> {
