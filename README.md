@@ -100,7 +100,7 @@ saved by 0.17.
 Another thing in 0.17.0: We're starting to use 'release-plz' to manage releases.
 Hopefully this will make the releases more professional, with correct git tags, git releases etc.
 
-Also, 0.17 can now sometimes dramtically optimize reading sequences of enums. This will work
+Also, 0.17 can now sometimes dramatically optimize reading sequences of enums. This will work
 for enums that have #[repr(u8)] or similar, provided the type contains no padding.
 
 Yet another upgrade is that Savefile now supports enums with more than 256 variants!
