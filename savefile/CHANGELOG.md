@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3](https://github.com/avl/savefile/compare/savefile-v0.17.2...savefile-v0.17.3) - 2024-05-09
+
+### Fixed
+- Silence warning on newer rustc, since TryFrom and TryInto are now part of prelude. Use still needed to keep working on old rustc.
+
+### Other
+- Merge remote-tracking branch 'origin/master' into minor_v19
+
 ## [0.17.2](https://github.com/avl/savefile/compare/savefile-v0.17.1...savefile-v0.17.2) - 2024-05-05
 
 ### Fixed

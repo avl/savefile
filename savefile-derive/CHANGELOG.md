@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3](https://github.com/avl/savefile/compare/savefile-derive-v0.17.2...savefile-derive-v0.17.3) - 2024-05-09
+
+### Other
+- Merge remote-tracking branch 'origin/master' into minor_v19
+
 ## [0.17.2](https://github.com/avl/savefile/compare/savefile-derive-v0.17.1...savefile-derive-v0.17.2) - 2024-05-05
 
 ### Other
