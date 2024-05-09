@@ -1,5 +1,5 @@
 use assert_roundtrip_version;
-use savefile::{Removed, Packed};
+use savefile::{Packed, Removed};
 use {assert_roundtrip, assert_roundtrip_to_new_version};
 
 #[repr(u8)]

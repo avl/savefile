@@ -1,5 +1,5 @@
-use common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo, RemovedType};
-use get_enum_size;
+use crate::common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo, RemovedType};
+use crate::get_enum_size;
 use proc_macro2::{Literal, TokenStream};
 use syn::spanned::Spanned;
 use syn::DeriveInput;

@@ -4,7 +4,7 @@ pub use {
     super::save_file_noschema, super::save_noschema, super::save_to_mem, super::AbiRemoved, super::Canary1,
     super::Deserialize, super::Deserializer, super::Field, super::Introspect, super::IntrospectItem,
     super::IntrospectedElementKey, super::IntrospectionResult, super::Introspector, super::IntrospectorNavCommand,
-    super::IsPacked, super::Removed, super::Packed, super::SavefileError, super::Schema, super::SchemaEnum,
+    super::IsPacked, super::Packed, super::Removed, super::SavefileError, super::Schema, super::SchemaEnum,
     super::SchemaPrimitive, super::SchemaStruct, super::Serialize, super::Serializer, super::Variant,
     super::WithSchema, super::WithSchemaContext,
 };

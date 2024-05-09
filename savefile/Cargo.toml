@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.17.2"
+version = "0.17.3"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -20,7 +20,7 @@ categories = ["encoding"]
 
 license = "MIT/Apache-2.0"
 
-edition = "2018"
+edition = "2021"
 
 [features]
 default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set"]
@@ -31,8 +31,7 @@ serde_derive = ["dep:serde_derive","serde"]
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
 size_sanity_checks = []
 # Use features only available on the nightly rust-compiler.
-# Enabling this means serialization of vectors of simple types will be much faster.
-# It also enables serialization of arbitrary size arrays (arbitrary size Vec always work, regardless of features)
+# Enabling this provides slightly better introspection support.
 nightly=[]
 
 compression = ["bzip2"]
@@ -54,13 +53,13 @@ bit-set = {version = "0.5", optional = true}
 rustc-hash = {version = "1.1", optional = true}
 memoffset = "0.9"
 byteorder = "1.4"
-savefile-derive = {path="../savefile-derive", version = "=0.17.2", optional = true }
+savefile-derive = {path="../savefile-derive", version = "=0.17.3", optional = true }
 serde_derive = {version= "1.0", optional = true}
 serde = {version= "1.0", optional = true}
 quickcheck = {version= "1.0", optional = true}
 
 [dev-dependencies]
-savefile-derive = { path="../savefile-derive", version = "=0.17.2" }
+savefile-derive = { path="../savefile-derive", version = "=0.17.3" }
 
 [build-dependencies]
 rustc_version="0.2"

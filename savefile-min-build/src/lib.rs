@@ -1,6 +1,4 @@
-
 use savefile_derive::Savefile;
-
 
 #[derive(Debug, Savefile, PartialEq)]
 pub enum TestStructEnum {
@@ -8,7 +6,4 @@ pub enum TestStructEnum {
 }
 
 #[test]
-fn test() {
-
-}
-
+fn test() {}

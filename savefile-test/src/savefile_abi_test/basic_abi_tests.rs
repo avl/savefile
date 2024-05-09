@@ -292,7 +292,6 @@ fn test_cow_smuggler() {
     assert_eq!(conn.smuggle2("hej".into()), "hej");
     assert_eq!(conn.smuggle2("hej".to_string().into()), "hej");
 
-    let static_ret : Cow<'static, str> = conn.smuggle2("hej".into());
+    let static_ret: Cow<'static, str> = conn.smuggle2("hej".into());
     assert_eq!(static_ret, "hej");
-
 }

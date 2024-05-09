@@ -1,4 +1,4 @@
-use common::{compile_time_check_reprc, compile_time_size};
+use crate::common::{compile_time_check_reprc, compile_time_size};
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::ToTokens;
 use std::collections::HashMap;

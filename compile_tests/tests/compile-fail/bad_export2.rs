@@ -21,6 +21,6 @@ struct ExampleImpl {
 
 // Forgot to implement trait
 savefile_abi_export!(ExampleImpl, ExampleTrait);
-//~^ 23:1: 23:48: the trait bound `ExampleImpl: ExampleTrait` is not satisfied [E0277]
+//~^ 23:22: 23:47: the trait bound `ExampleImpl: ExampleTrait` is not satisfied [E0277]
 
 fn main() {}
