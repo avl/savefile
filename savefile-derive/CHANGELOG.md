@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2](https://github.com/avl/savefile/compare/savefile-derive-v0.17.1...savefile-derive-v0.17.2) - 2024-05-05
+
+### Other
+- Fix failing test for new rustc
+
 ## [0.17.0-beta.15](https://github.com/avl/savefile/compare/savefile-derive-v0.17.0-beta.14...savefile-derive-v0.17.0-beta.15) - 2024-04-30
 
 ### Fixed

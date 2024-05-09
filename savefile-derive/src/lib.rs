@@ -585,7 +585,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         const _:() = {
             #uses
             #[automatically_derived]
-            unsafe impl AbiExportableImplementation for #implementing_type {
+            unsafe impl AbiExportableImplementation for #implementing_type where #implementing_type: Default + #trait_type {
                 const ABI_ENTRY: unsafe extern "C" fn (AbiProtocol) = #abi_entry;
                 type AbiInterface = dyn #trait_type;
 
