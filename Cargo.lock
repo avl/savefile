@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "savefile"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-abi"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "byteorder",
  "libloading",
@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
