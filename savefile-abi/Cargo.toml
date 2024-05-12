@@ -6,6 +6,7 @@ authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile-abi/"
 homepage = "https://github.com/avl/savefile/blob/master/savefile-abi/README.md"
 repository = "https://github.com/avl/savefile"
+rust-version = "1.74"
 
 description = "Easy to use, simple, stable ABI for Rust-libraries. Allows creating dynamically loadable plugins written in rust."
 
@@ -20,3 +21,12 @@ savefile = { path="../savefile", version = "=0.17.2" }
 savefile-derive = { path="../savefile-derive", version = "=0.17.2" }
 byteorder = "1.4"
 libloading = "0.8"
+
+[features]
+# Rust version is > 1.78
+# Automatically set by build.rs
+rust1_78=[]
+
+
+[build-dependencies]
+rustc_version="0.2"

@@ -1203,6 +1203,12 @@ impl IsPacked {
 /// See method repr_c_optimization_safe.
 /// Note! The name Packed is a little misleading. A better name would be
 /// 'packed'
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be serialized or deserialized by Savefile, since it doesn't implement trait `savefile::Packed`",
+    label = "This cannot be serialized or deserialized",
+    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+    note = "Or you can manually implement the `savefile::Packed` trait."
+))]
 pub trait Packed {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
@@ -1218,7 +1224,7 @@ pub trait Packed {
     ///
     /// Rules to allow returning true:
     ///
-    /// * The type must be copy
+    /// * The type must "be Copy" (i.e, implement the `Copy`-trait)
     /// * The type must not contain any padding (if there is padding, backward compatibility will fail, since in fallback mode regular savefile-deserialize will be used, and it will not use padding)
     /// * The type must have a strictly deterministic memory layout (no field order randomization). This typically means repr(C)
     /// * All the constituent types of the type must also implement `Packed` (correctly).
@@ -1226,7 +1232,8 @@ pub trait Packed {
     /// Constructing an instance of 'IsPacked' with value 'true' is not safe. See
     /// documentation of 'IsPacked'. The idea is that the Packed-trait itself
     /// can still be safe to implement, it just won't be possible to get hold of an
-    /// instance of IsPacked(true). To make it impossible to just
+    /// instance of IsPacked(true). That is, a safe implementation of `Packed` can't return
+    /// IsPacked(true), if everything else follows safety rules. To make it impossible to just
     /// 'steal' such a value from some other thing implementing 'Packed',
     /// this method is marked unsafe (however, it can be left unimplemented,
     /// making it still possible to safely implement Packed).
@@ -1249,6 +1256,11 @@ pub struct DeliberatelyUnimplementable {
 
 #[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "ReprC has been deprecated and must not be used. Use trait `savefile::Packed` instead!",
+    label = "ReprC was erroneously required here",
+    note = "Please change any `ReprC` bounds into `Packed` bounds.",
+))]
 pub trait ReprC {
     #[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
@@ -2331,6 +2343,13 @@ impl WithSchemaContext {
 /// This is only for increased safety, the file format does not in fact use the schema for any other
 /// purpose, the design is schema-less at the core, the schema is just an added layer of safety (which
 /// can be disabled).
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` does not have a defined schema for savefile, since it doesn't implement the trait `savefile::WithSchema`",
+    label = "This cannot be serialized or deserialized with a schema",
+    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+    note = "Or you can manually implement the `savefile::WithSchema` trait.",
+    note = "You can also use one of the `*_noschema` functions to save/load without a schema."
+))]
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
     /// The WithSchemaContext can be used to guard against recursive data structures.
@@ -2354,6 +2373,12 @@ pub fn get_schema<T: WithSchema + 'static>(version: u32) -> Schema {
 /// extern crate savefile-derive;`
 ///
 /// and the use #\[derive(Serialize)]
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be serialized by Savefile, since it doesn't implement the trait `savefile::Serialize`",
+    label = "This cannot be serialized",
+    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+    note = "Or you can manually implement the `savefile::Serialize` trait."
+))]
 pub trait Serialize: WithSchema {
     /// Serialize self into the given serializer.
     /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
@@ -2365,6 +2390,11 @@ pub trait Serialize: WithSchema {
 /// simply (String, &dyn Introspect) is that Mutex wouldn't be introspectable in that case.
 /// Mutex needs something like `(String, MutexGuard<T>)`. By having this a trait,
 /// different types can have whatever reference holder needed (MutexGuard, RefMut etc).
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be an introspected value used by Savefile, since it doesn't implement the trait `savefile::IntrospectItem`",
+    label = "This cannot be the type of an introspected field value",
+    note = "You can possibly implement IntrospectItem manually for the type `{Self}`, or try to use `String` instead of `{Self}`."
+))]
 pub trait IntrospectItem<'a> {
     /// Should return a descriptive string for the given child. For structures,
     /// this would be the field name, for instance.
@@ -2417,6 +2447,12 @@ impl<'a> IntrospectItem<'a> for String {
 pub const MAX_CHILDREN: usize = 10000;
 
 /// Gives the ability to look into an object, inspecting any children (fields).
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be introspected by Savefile, since it doesn't implement trait `savefile::Introspect`",
+    label = "This cannot be introspected",
+    note = "You can implement it by adding `#[derive(Savefile)]` or `#[derive(SavefileIntrospectOnly)]` before the declaration of `{Self}`",
+    note = "Or you can manually implement the `savefile::Introspect` trait."
+))]
 pub trait Introspect {
     /// Returns the value of the object, excluding children, as a string.
     /// Exactly what the value returned here is depends on the type.
@@ -2458,6 +2494,12 @@ pub trait Introspect {
 /// extern crate savefile-derive;`
 ///
 /// and the use #\[derive(Deserialize)]
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be deserialized by Savefile, since it doesn't implement the trait `savefile::Deserialize`",
+    label = "This cannot be deserialized",
+    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+    note = "Or you can manually implement the `savefile::Deserialize` trait."
+))]
 pub trait Deserialize: WithSchema + Sized {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError>; //TODO: Do error handling
@@ -4884,7 +4926,31 @@ impl<K: Deserialize + Eq + Hash + 'static> Deserialize for IndexSet<K> {
     }
 }
 
-/// Something that can construct a value of type T
+/// Something that can construct a value of type T.
+/// Used when a field has been removed using the `AbiRemoved` type.
+/// Usage:
+/// ```rust
+/// use savefile::{AbiRemoved, ValueConstructor};
+/// use savefile_derive::Savefile;
+/// #[derive(Savefile)]
+/// struct MyStruct {
+///     my_field: String,
+///     #[savefile_versions="..0"]
+///     my_removed_field: AbiRemoved<String, MyStructMyRemovedFieldFactory>,
+/// }
+/// struct MyStructMyRemovedFieldFactory;
+/// impl ValueConstructor<String> for MyStructMyRemovedFieldFactory {
+///     fn make_value() -> String {
+///         "Default value for when values of version 0 are to be serialized".to_string()
+///     }
+/// }
+/// ```
+#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
+    message = "`{Self}` cannot serve as a factory generating default values of type {T}, since it doesn't implement the trait `savefile::ValueConstructor<{T}>`-",
+    label = "`{Self}` cannot produce values of type `{T}`",
+    note = "Check that any type used as 2nd type parameter to AbiRemoved implements `savefile::ValueConstructor<{T}>`.",
+    note = "Alternatively, skip the 2nd parameter entirely, and ensure that `{T}` implements `Default`.",
+))]
 pub trait ValueConstructor<T> {
     /// Create a value of type T.
     /// This is used by the AbiRemoved trait to be able to invent
@@ -4892,16 +4958,10 @@ pub trait ValueConstructor<T> {
     fn make_value() -> T;
 }
 
-impl<T: Default, R: Fn() -> T + Default> ValueConstructor<T> for R {
-    fn make_value() -> T {
-        let r: R = Default::default();
-        r()
-    }
-}
-
-///
+/// A value constructor that delegates to the 'Default' trait.
+/// Requires that type `T` implements `Default`.
 #[derive(Debug, PartialEq, Eq)]
-pub struct DefaultValueConstructor<T: Default> {
+pub struct DefaultValueConstructor<T> {
     phantom: PhantomData<*const T>,
 }
 
@@ -4912,6 +4972,13 @@ impl<T: Default> ValueConstructor<T> for DefaultValueConstructor<T> {
 }
 
 /// Helper struct which represents a field which has been removed
+/// In contrast to AbiRemoved, this type only supports deserialization.
+/// It is thus not recommended for use when SavefileAbi is to be used, and
+/// forward compatibility is desired.
+///
+/// The difference is that Removed does not require T to implement Default,
+/// or any other factory trait, since we never need to serialize dummy
+/// values of Removed (we never serialize using a schema where a field i Removed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Removed<T> {
     phantom: std::marker::PhantomData<*const T>,
@@ -4969,11 +5036,14 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
 }
 
 /// Helper struct which represents a field which has been removed.
-/// This, in contrast to 'AbiRemoved',
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct AbiRemoved<T, D = DefaultValueConstructor<T>>
-where
-    D: ValueConstructor<T>,
+/// In contrast to `Removed`, this type supports both serialization and
+/// deserialization, and is preferred when SavefileAbi is to be used.
+/// Regular Savefile does not support serializing older versions, whereas
+/// SavefileAbi does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AbiRemoved<T, D=DefaultValueConstructor<T>>
+    where
+        D: ValueConstructor<T>,
 {
     phantom: std::marker::PhantomData<(*const T, *const D)>,
 }
@@ -4981,14 +5051,14 @@ where
 /// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
 /// it doesn't implement Send or Sync per default. However, implementing these
 /// is actually safe, so implement it manually.
-unsafe impl<T, D: ValueConstructor<T>> Send for AbiRemoved<T, D> {}
+unsafe impl<T, D: ValueConstructor<T>> Send for AbiRemoved<T,D> {}
 /// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
 /// it doesn't implement Send or Sync per default. However, implementing these
 /// is actually safe, so implement it manually.
-unsafe impl<T, D: ValueConstructor<T>> Sync for AbiRemoved<T, D> {}
+unsafe impl<T, D: ValueConstructor<T>> Sync for AbiRemoved<T,D> {}
 
-impl<T: Default, D: ValueConstructor<T>> AbiRemoved<T, D> {
-    /// Helper to create an instance of `Removed<T>`. `Removed<T>` has no data.
+impl<T, D: ValueConstructor<T>> AbiRemoved<T, D> {
+    /// Helper to create an instance of `AbiRemoved<T>`. `AbiRemoved<T>` has no data.
     pub fn new() -> AbiRemoved<T, D> {
         AbiRemoved {
             phantom: std::marker::PhantomData,
@@ -5004,7 +5074,7 @@ impl<T: WithSchema, D: ValueConstructor<T>> WithSchema for AbiRemoved<T, D> {
 
 impl<T: Introspect, D: ValueConstructor<T>> Introspect for AbiRemoved<T, D> {
     fn introspect_value(&self) -> String {
-        format!("Removed<{}>", std::any::type_name::<T>())
+        format!("AbiRemoved<{}>", std::any::type_name::<T>())
     }
 
     fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {

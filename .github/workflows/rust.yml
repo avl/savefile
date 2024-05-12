@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install nightly
-      run: rustup toolchain install nightly && rustup toolchain install stable
+      run: rustup toolchain install nightly && rustup toolchain install stable && rustup toolchain install 1.74
     - name: Miri (nightly)
       run: rustup component add --toolchain nightly miri && cd savefile-test && cargo +nightly miri test
     - name: Build (nightly)
@@ -34,4 +34,6 @@ jobs:
       run: cargo +stable build -p savefile-min-build
     - name: compile_tests (stable)
       run: cd compile_tests && cargo +stable test
+    - name: Build (1.74)
+      run: cargo +1.74 build --workspace
 

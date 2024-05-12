@@ -32,7 +32,13 @@ serde_derive = ["dep:serde_derive","serde"]
 size_sanity_checks = []
 # Use features only available on the nightly rust-compiler.
 # Enabling this provides slightly better introspection support.
+# Automatically set by build.rs for nightly compilers
 nightly=[]
+
+# Rust version is > 1.78
+# Automatically set by build.rs
+rust1_78=[]
+
 
 compression = ["bzip2"]
 

@@ -475,6 +475,7 @@ version = "0.17.2"
 dependencies = [
  "byteorder",
  "libloading",
+ "rustc_version 0.2.3",
  "savefile",
  "savefile-derive",
 ]
