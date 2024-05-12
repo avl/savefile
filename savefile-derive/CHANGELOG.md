@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.4](https://github.com/avl/savefile/compare/savefile-derive-v0.17.3...savefile-derive-v0.17.4) - 2024-05-12
+
+### Added
+- Better diagnostics when correct traits not implemented by user, and also explicit minimum rustc version specified
+
+### Other
+- Merge branch 'minor_v19' of github.com:avl/savefile into minor_v19
+- Merge remote-tracking branch 'origin/master' into minor_v19
+
 ## [0.17.3](https://github.com/avl/savefile/compare/savefile-derive-v0.17.2...savefile-derive-v0.17.3) - 2024-05-09
 
 ### Other
