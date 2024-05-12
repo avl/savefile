@@ -4961,7 +4961,7 @@ pub trait ValueConstructor<T> {
 /// A value constructor that delegates to the 'Default' trait.
 /// Requires that type `T` implements `Default`.
 #[derive(Debug, PartialEq, Eq)]
-pub struct DefaultValueConstructor<T> {
+pub struct DefaultValueConstructor<T:Default> {
     phantom: PhantomData<*const T>,
 }
 
