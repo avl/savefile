@@ -1,9 +1,9 @@
 [package]
 name = "savefile-derive"
-version = "0.17.3"
+version = "0.17.4"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 repository = "https://github.com/avl/savefile"
-
+rust-version = "1.74"
 description = "Custom derive macros for savefile crate - simple, convenient, fast, versioned, binary serialization/deserialization library."
 
 readme = "../README.md"

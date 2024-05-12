@@ -33,7 +33,7 @@ pub extern "C" fn call_do_nothing(adder: &AbiConnection<dyn AdderInterface>) {
 
 fn main() {
     let connection = AbiConnection::<dyn AdderInterface>::load_shared_library(
-        "c:/savefile/target/debug/savefile_abi_min_lib_impl.dll", //Change this to the proper path on your machine
+        "../target/debug/libsavefile_abi_min_lib_impl.so", //Change this to the proper path on your machine
     )
     .unwrap();
 

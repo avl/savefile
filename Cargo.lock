@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "savefile"
-version = "0.17.3"
+version = "0.17.4"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -471,10 +471,11 @@ dependencies = [
 
 [[package]]
 name = "savefile-abi"
-version = "0.17.3"
+version = "0.17.4"
 dependencies = [
  "byteorder",
  "libloading",
+ "rustc_version 0.2.3",
  "savefile",
  "savefile-derive",
 ]
@@ -511,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.17.3"
+version = "0.17.4"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
