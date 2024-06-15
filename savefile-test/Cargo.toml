@@ -29,6 +29,8 @@ rustc-hash="1.1"
 quickcheck="1.0"
 quickcheck_macros ="1.0"
 insta = { version = "1.38.0", features = ["yaml"] }
+log = "0.4.21"
+crossbeam-channel = "0.5"
 
 [build-dependencies]
 rustc_version="0.4"

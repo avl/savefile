@@ -1110,6 +1110,8 @@ impl SavefileError {
 /// and a file protocol version number.
 /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
 /// It now requires a type parameter with the type of writer to operate on.
+///
+/// You should not be using this directly, see the save*-functions instead.
 pub struct Serializer<'a, W: Write> {
     /// The underlying writer. You should not access this.
     pub writer: &'a mut W,
@@ -1123,6 +1125,8 @@ pub struct Serializer<'a, W: Write> {
 /// This is basically just a wrapped `std::io::Read` object,
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
+///
+/// You should not be using this directly, see the load*-functions instead.
 pub struct Deserializer<'a, R: Read> {
     /// The wrapped reader
     pub reader: &'a mut R,
@@ -6471,6 +6475,23 @@ impl<T: WithSchema + 'static> WithSchema for Box<T> {
         context.possible_recursion::<T>(|context| T::schema(version, context))
     }
 }
+impl WithSchema for Box<str> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        str::schema(version, context)
+    }
+}
+impl Serialize for Box<str> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.deref().serialize(serializer)
+    }
+}
+impl Deserialize for Box<str> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(String::deserialize(deserializer)?.into())
+    }
+}
+impl Packed for Box<str> {}
+
 impl<T> Packed for Box<T> {}
 impl<T: Serialize + 'static> Serialize for Box<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {

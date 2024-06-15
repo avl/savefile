@@ -17,7 +17,7 @@ extern crate savefile;
 extern crate test;
 #[macro_use]
 extern crate savefile_derive;
-
+extern crate crossbeam_channel;
 extern crate bit_set;
 extern crate bit_vec;
 extern crate byteorder;

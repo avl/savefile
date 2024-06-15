@@ -108,7 +108,7 @@ fn emit_closure_helpers(
     }
 
     let funcdef = if owning {
-        quote!( Box <(dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)> )
+        quote!( std::boxed::Box <(dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)> )
     } else {
         quote!( *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a) )
     };
@@ -739,7 +739,7 @@ impl ArgType {
 
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
-                    deserialized_type: quote! {Box<#deserialized_type>},
+                    deserialized_type: quote! {std::boxed::Box<#deserialized_type>},
                     callee_trampoline_temp_variable_declaration1: quote! {
                         #callee_trampoline_temp_variable_declaration1
                     },
@@ -749,7 +749,7 @@ impl ArgType {
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1,
                     schema: quote!( Schema::Boxed( std::boxed::Box::new(#schema) ) ),
-                    arg_type1: quote!( Box<#arg_type1> ),
+                    arg_type1: quote!( std::boxed::Box<#arg_type1> ),
                     known_size_align1: None,
                     known_size_align_of_pointer1: None,
                 }
@@ -847,7 +847,7 @@ impl ArgType {
                 };
                 let arg_make_ptr = if take_ownership {
                     quote! {
-                        std::boxed::Box::into_raw(Box::new(#temp_arg_ser_name))
+                        std::boxed::Box::into_raw(std::boxed::Box::new(#temp_arg_ser_name))
                     }
                 } else {
                     quote! {
@@ -1117,7 +1117,7 @@ pub(super) fn generate_method_definitions(
                     );
                 }
 
-            (self.template.entry)(AbiProtocol::RegularCall {
+            (self.entry)(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
                 compatibility_mask: compatibility_mask,
                 method_number: callee_method_number,

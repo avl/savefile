@@ -10,3 +10,4 @@ mod advanced_datatypes_test;
 mod closure_tests;
 
 mod enum_tests;
+mod abi_remote;

@@ -1458,7 +1458,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_mut)]
                         #[allow(unused_comparisons, unused_variables)]
-                        fn introspect_child(&self, index:usize) -> Option<Box<dyn #introspect_item_type+'_>> {
+                        fn introspect_child(&self, index:usize) -> Option<std::boxed::Box<dyn #introspect_item_type+'_>> {
                             match self {
                                 #(#variants,)*
                             }
@@ -1540,7 +1540,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         }
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
-                        fn introspect_child(&self, index: usize) -> Option<Box<dyn #introspect_item_type+'_>> {
+                        fn introspect_child(&self, index: usize) -> Option<std::boxed::Box<dyn #introspect_item_type+'_>> {
                             #(#fields1;)*
                             return None;
                         }
