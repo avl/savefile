@@ -254,7 +254,7 @@ pub fn savefile_abi_exportable(
         extern crate savefile;
         extern crate savefile_abi;
         use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
-        use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
+        use savefile_abi::{EntryPoint,parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
@@ -528,7 +528,7 @@ pub fn savefile_abi_exportable(
         }
 
         #[automatically_derived]
-        impl #trait_name for AbiConnection<dyn #trait_name> {
+        impl<E:EntryPoint> #trait_name for AbiConnection<dyn #trait_name, E> {
             #(#caller_method_trampoline)*
         }
     };

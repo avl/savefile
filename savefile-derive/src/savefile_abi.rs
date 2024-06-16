@@ -1117,7 +1117,7 @@ pub(super) fn generate_method_definitions(
                     );
                 }
 
-            (self.entry)(AbiProtocol::RegularCall {
+            self.entry.call(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
                 compatibility_mask: compatibility_mask,
                 method_number: callee_method_number,

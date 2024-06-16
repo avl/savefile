@@ -149,43 +149,43 @@ The type now needs a 'city' field.
 We can add this while retaining compatibility with clients expecting the old API:
 
 ```
-extern crate savefile_derive;
-
- # use savefile::prelude::SavefileError;
- # use savefile_derive::{Savefile,savefile_abi_exportable};
- # use savefile_abi::verify_compatiblity;
- # use std::collections::{HashMap, BinaryHeap};
-
-#[derive(Savefile)]
-pub struct MyCustomType {
-    pub name: String,
-    pub age: u8,
-    pub length: f32,
-    #[savefile_versions="1.."]
-    pub city: String,
-}
-
-#[savefile_abi_exportable(version=1)]
-pub trait Processor {
-    fn insert(&self, x: &MyCustomType) -> Result<u32, String>;
-}
-
-#[cfg(test)]
-{
-    #[test]
-    pub fn test_backward_compatibility() {
-       // Automatically verify backward compatibility isn't broken.
-       // Schemas for each version are stored in directory 'schemas',
-       // and consulted on next run to ensure no change.
-       // You should check the schemas in to source control.
-       // If check fails for an unreleased version, just remove the schema file from
-       // within 'schemas' directory.
-       verify_compatiblity::<dyn Processor>("schemas").unwrap()
-    }
-}
-
-
-```
+* extern crate savefile_derive;
+*
+*  # use savefile::prelude::SavefileError;
+*  # use savefile_derive::{Savefile,savefile_abi_exportable};
+*  # use savefile_abi::verify_compatibility;
+*  # use std::collections::{HashMap, BinaryHeap};
+*
+* #[derive(Savefile)]
+* pub struct MyCustomType {
+*     pub name: String,
+*     pub age: u8,
+*     pub length: f32,
+*     #[savefile_versions="1.."]
+*     pub city: String,
+* }
+*
+* #[savefile_abi_exportable(version=1)]
+* pub trait Processor {
+*     fn insert(&self, x: &MyCustomType) -> Result<u32, String>;
+* }
+*
+* #[cfg(test)]
+* {
+*     #[test]
+*     pub fn test_backward_compatibility() {
+*        // Automatically verify backward compatibility isn't broken.
+*        // Schemas for each version are stored in directory 'schemas',
+*        // and consulted on next run to ensure no change.
+*        // You should check the schemas in to source control.
+*        // If check fails for an unreleased version, just remove the schema file from
+*        // within 'schemas' directory.
+*        verify_compatiblity::<dyn Processor>("schemas").unwrap()
+*     }
+* }
+*
+*
+* ```
 
 Older clients, not aware of the 'city' field, can still call newer implementations. The 'city'
 field will receive an empty string (Default::default()). Newer clients, calling older implementations,
@@ -650,15 +650,14 @@ impl EntryKey {
 /// through other means.
 pub unsafe trait EntryPoint {
     /// Call the entry-point, according to 'data'.
-    unsafe fn call(&self, data: AbiProtocol) -> Result<(), SavefileError>;
+    unsafe fn call(&self, data: AbiProtocol);
     /// Get a key that uniquely identifies this entry-point
     fn get_key(&self) -> EntryKey;
 }
 
 unsafe impl EntryPoint for unsafe extern "C" fn(flag: AbiProtocol) {
-    unsafe fn call(&self, data: AbiProtocol) -> Result<(), SavefileError> {
+    unsafe fn call(&self, data: AbiProtocol) {
         self(data);
-        Ok(())
     }
 
     fn get_key(&self) -> EntryKey {
@@ -911,11 +910,11 @@ pub enum AbiProtocol {
         /// Note, callee does not actually write to this, it just calls `callback`, which allows caller
         /// to write to the result_receiver. The field is still needed here, since the `callback` is a bare function,
         /// and cannot capture any data.
-        result_receiver: *mut AbiTraitDefinition,
+        result_receiver: *mut (),
         /// Called by callee to convey information back to caller.
         /// `receiver` is place the caller will want to write the result.
         callback: unsafe extern "C" fn(
-            receiver: *mut AbiTraitDefinition,
+            receiver: *mut (), //*mut AbiTraitDefinition,
             callee_schema_version: u16,
             data: *const u8,
             len: usize,
@@ -1423,12 +1422,12 @@ impl<T:AbiExportable + ?Sized +'static> AbiConnection<T> {
 /// Helper to use InterrogateMethods
 #[doc(hidden)]
 pub unsafe extern "C" fn definition_receiver(
-    receiver: *mut AbiTraitDefinition,
+    receiver: *mut (),
     schema_version: u16,
     data: *const u8,
     len: usize,
 ) {
-    let receiver = unsafe { &mut *receiver };
+    let receiver = unsafe { &mut *(receiver as *mut AbiTraitDefinition) };
     let slice = unsafe { slice::from_raw_parts(data, len) };
     let mut cursor = Cursor::new(slice);
 
@@ -1437,6 +1436,18 @@ pub unsafe extern "C" fn definition_receiver(
 }
 
 impl<T: AbiExportable + ?Sized + 'static,E: EntryPoint> AbiConnection<T,E> {
+
+    /// Create an AbiConnection from an arbitrary entrypoint
+    /// Leave 'trait_object' None to create a new instance.
+    #[doc(hidden)]
+    pub fn from_entrypoint(
+        remote_entry: E,
+        trait_object: Option<TraitObject>,
+        owning: Owning,
+    ) -> Result<AbiConnection<T,E>, SavefileError> {
+        AbiConnection::<T, E>::new_internal(remote_entry, trait_object, owning)
+    }
+
     /// Analyse the difference in definitions between the two sides,
     /// and create an AbiConnection
     #[allow(clippy::too_many_arguments)]
@@ -1592,7 +1603,7 @@ impl<T: AbiExportable + ?Sized + 'static,E: EntryPoint> AbiConnection<T,E> {
                     remote_entry.call(AbiProtocol::InterrogateVersion {
                         schema_version_receiver: &mut callee_schema_version as *mut _,
                         abi_version_receiver: &mut callee_abi_version as *mut _,
-                    })?;
+                    });
                 }
 
                 if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
@@ -1615,18 +1626,18 @@ impl<T: AbiExportable + ?Sized + 'static,E: EntryPoint> AbiConnection<T,E> {
                     remote_entry.call(AbiProtocol::InterrogateMethods {
                         schema_version_required: callee_schema_version,
                         callee_schema_version_interrogated: callee_abi_version,
-                        result_receiver: &mut callee_abi_native_definition as *mut _,
+                        result_receiver: &mut callee_abi_native_definition as *mut _ as *mut (),
                         callback: definition_receiver,
-                    })?;
+                    });
                 }
 
                 unsafe {
                     remote_entry.call(AbiProtocol::InterrogateMethods {
                         schema_version_required: callee_schema_version,
                         callee_schema_version_interrogated: effective_version,
-                        result_receiver: &mut callee_abi_effective_definition as *mut _,
+                        result_receiver: &mut callee_abi_effective_definition as *mut _ as *mut _,
                         callback: definition_receiver,
-                    })?;
+                    });
                 }
 
                 let own_effective_definition = T::get_definition(effective_version);
@@ -1677,7 +1688,7 @@ impl<T: AbiExportable + ?Sized + 'static,E: EntryPoint> AbiConnection<T,E> {
                     trait_object_receiver: &mut trait_object as *mut _,
                     error_receiver: &mut error_msg as *mut String as *mut _,
                     error_callback,
-                })?;
+                });
             }
 
             if error_msg.len() > 0 {
@@ -1874,7 +1885,7 @@ pub unsafe fn abi_entry<T: AbiExportableImplementation>(flag: AbiProtocol) {
 ///
 /// 'path' is a path where files defining the Abi schema are stored. These files
 /// should be checked in to version control.
-pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), SavefileError> {
+pub fn verify_compatibility<T: AbiExportable + ?Sized>(path: &str) -> Result<(), SavefileError> {
     std::fs::create_dir_all(path)?;
     for version in 0..=T::get_latest_version() {
         let def = T::get_definition(version);

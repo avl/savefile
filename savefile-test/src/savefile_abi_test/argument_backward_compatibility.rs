@@ -1,7 +1,7 @@
 use savefile::prelude::AbiRemoved;
 use savefile::{get_schema, SavefileError, WithSchemaContext};
 use savefile_abi::RawAbiCallResult::AbiError;
-use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
+use savefile_abi::{verify_compatibility, AbiConnection, AbiExportable};
 use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
 use savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
 use savefile_abi_test::basic_abi_tests::CowSmuggler;
@@ -98,7 +98,7 @@ pub fn test_abi_schemas_get_def() {
 #[test]
 #[cfg(not(miri))]
 pub fn test_backward_compatibility() -> Result<(), SavefileError> {
-    verify_compatiblity::<dyn ArgInterfaceV2>("schemas")
+    verify_compatibility::<dyn ArgInterfaceV2>("schemas")
 }
 
 #[test]
