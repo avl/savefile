@@ -21,11 +21,17 @@ savefile = { path="../savefile", version = "=0.17.4" }
 savefile-derive = { path="../savefile-derive", version = "=0.17.4" }
 byteorder = "1.4"
 libloading = "0.8"
+crossbeam-channel = { version = "0.5.13", optional = true }
+parking_lot = { version = "0.12.2", optional = true }
+rustls = { version = "0.23", optional = true}
+rustls-pemfile = "2.1.2"
 
 [features]
 # Rust version is > 1.78
 # Automatically set by build.rs
 rust1_78=[]
+remote=["parking_lot","crossbeam-channel"]
+tls=["rustls"]
 
 
 [build-dependencies]

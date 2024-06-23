@@ -976,7 +976,7 @@ pub enum SavefileError {
         /// Descriptive message
         msg: String,
     },
-    /// The file does not have a supported version number
+    /// An error without a further classification
     GeneralError {
         /// Descriptive message
         msg: String,
@@ -1280,6 +1280,11 @@ pub trait ReprC {
 impl From<std::io::Error> for SavefileError {
     fn from(s: std::io::Error) -> SavefileError {
         SavefileError::IOError { io_error: s }
+    }
+}
+impl From<Box<dyn std::error::Error>> for SavefileError {
+    fn from(s: Box<dyn std::error::Error>) -> SavefileError {
+        SavefileError::GeneralError { msg: format!("{:?}", s) }
     }
 }
 

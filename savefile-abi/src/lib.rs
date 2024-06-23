@@ -297,6 +297,13 @@ called by value are always serialized.
 
 */
 
+/// Optional routines for RPC.
+/// These routines allow to expose traits across machines and processes
+#[cfg(feature="remote")]
+pub mod abi_remote;
+/// Helpers for constructing Serializers for use with savefile remote ABI
+pub mod serialize_helpers;
+
 extern crate savefile;
 extern crate savefile_derive;
 use savefile::{
