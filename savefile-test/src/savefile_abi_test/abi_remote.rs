@@ -14,7 +14,7 @@ use crossbeam_channel::{bounded, Receiver, RecvError, Sender};
 use parking_lot::Mutex;
 
 use savefile::{AbiTraitDefinition, Deserialize, Deserializer, SavefileError, Serialize, Serializer};
-use savefile_abi::{AbiConnection, AbiConnectionTemplate, AbiErrorMsg, AbiExportable, AbiProtocol, definition_receiver, EntryKey, EntryPoint, Owning, RawAbiCallResult, TraitObject};
+use savefile_abi::{AbiConnection, AbiConnectionTemplate, AbiErrorMsg, AbiExportable, AbiExportableImplementation, AbiProtocol, definition_receiver, EntryKey, EntryPoint, Owning, RawAbiCallResult, TraitObject};
 
 
 #[repr(u8)]
@@ -37,21 +37,25 @@ fn serve_connection(mut stream: TcpStream, types: HashMap<TraitName, Arc<DynAbiE
         supported_types: types,
     };
     let mut first_cmd = Some(initial_cmd);
+    let mut stream2 = BufWriter::new(stream.try_clone()?);
+    let mut ser = Serializer {
+        file_version: 0,
+        writer: &mut stream2,
+    };
+    let mut stream = BufReader::new(stream);
+    let mut deser = Deserializer {
+        reader: &mut stream,
+        file_version: 0,
+        ephemeral_state: Default::default(),
+    };
     loop {
-        let mut stream2 = stream.try_clone()?;
-        let mut ser = Serializer {
-            file_version: 0,
-            writer: &mut stream2,
-        };
-        let mut deser = Deserializer {
-            reader: &mut stream,
-            file_version: 0,
-            ephemeral_state: Default::default(),
-        };
         let cmd = if let Some(x) = first_cmd.take() {x} else {deser.read_u8()?};
         let mut buf = vec![];
         match cmd {
-            3/*RemoteCommands::CreateInstance*/ => {
+            6 => {
+                return Ok(());
+            }
+            4/*RemoteCommands::CreateInstance*/ => {
                 let name = TraitName(deser.read_string()?);
                 let objtype = context.supported_types.get(&name).ok_or_else(||SavefileError::GeneralError {msg:format!("Unsupported trait '{}'", name.0)})?;
                 let mut trait_object = TraitObject::zero();
@@ -71,19 +75,23 @@ fn serve_connection(mut stream: TcpStream, types: HashMap<TraitName, Arc<DynAbiE
                 } else {
                     ser.write_u8(1)?;
                     trait_object.as_usize_tuples().serialize(&mut ser)?;
+                    context.active_objects.insert(TraitKey(trait_object.as_usize_tuples()), DynAbiExportableObject {
+                        object_type: Arc::clone(objtype),
+                        trait_object,
+                    });
                 }
                 ser.writer.flush()?;
             }
-            4 /*RemoteCommands::DropInstance*/ => {
+            5 /*RemoteCommands::DropInstance*/ => {
                 let trait_object_key = TraitKey(<_ as Deserialize>::deserialize(&mut deser)?);
-                let obj = context.active_objects.get(&trait_object_key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object: {:?}", trait_object_key)})?;
+                let obj = context.active_objects.get(&trait_object_key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object[5]: {:?}", trait_object_key)})?;
                 unsafe { (obj.object_type.local_entry)(AbiProtocol::DropInstance {
                     trait_object: obj.trait_object,
                 }) }
                 String::default().serialize(&mut ser)?;
                 ser.writer.flush()?;
             }
-            2 /*RemoteCommands::InterrogateMethods*/ => {
+            3 /*RemoteCommands::InterrogateMethods*/ => {
                 let name = TraitName(deser.read_string()?);
                 let objtype = context.supported_types.get(&name).ok_or_else(||SavefileError::GeneralError {msg:format!("Unsupported trait '{}'", name.0)})?;
 
@@ -112,7 +120,7 @@ fn serve_connection(mut stream: TcpStream, types: HashMap<TraitName, Arc<DynAbiE
             }
             1 /*RemoteCommands::InterrogateVersion*/ => {
                 let key = TraitName::deserialize(&mut deser)?;
-                let obj  = context.supported_types.get(&key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object '{:?}'", key)})?;
+                let obj  = context.supported_types.get(&key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object[1] '{:?}'", key)})?;
 
                 let mut schema_version_receiver: u16 = 0;
                 let mut abi_version_receiver: u32 = 0;
@@ -127,7 +135,8 @@ fn serve_connection(mut stream: TcpStream, types: HashMap<TraitName, Arc<DynAbiE
             0/*RemoteCommands::CallInstanceMethod*/ => {
                 let trait_object_key = TraitKey(<_ as Deserialize>::deserialize(&mut deser)?);
                 let method_number = deser.read_u16()?;
-                let obj = context.active_objects.get(&trait_object_key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object: {:?}", trait_object_key)})?;
+
+                let obj = context.active_objects.get(&trait_object_key).ok_or_else(||SavefileError::GeneralError {msg:format!("Unknown object[0]: {:?}", trait_object_key)})?;
                 let datasize = deser.read_usize()?;
                 if buf.len() < datasize {
                     buf.resize(datasize, 0);
@@ -166,6 +175,7 @@ fn serve_connection(mut stream: TcpStream, types: HashMap<TraitName, Arc<DynAbiE
                     }
                 ); }
 
+                println!("Sending back result: {:?}", &result);
                 result.serialize(&mut ser)?;
                 ser.writer.flush()?;
             }
@@ -181,7 +191,7 @@ enum BackgroundListenerResult {
     QuitNormally,
     FailedToBindSocket,
 }
-#[derive(Savefile)]
+#[derive(Savefile,Debug)]
 pub enum DynAbiCallResult {
     Success(Box<[u8]>),
     Panic(String),
@@ -250,11 +260,20 @@ struct ClientConnectionState {
     deser: BufReader<TcpStream>,
 }
 
+impl Drop for ClientConnectionState {
+    fn drop(&mut self) {
+        _ = self.ser.write_u8(6);
+        _ = self.ser.flush();
+    }
+}
+
 struct ClientConnection {
     key: EntryKey,
     trait_name: TraitName,
     conn: Arc<Mutex<ClientConnectionState>>,
 }
+
+
 
 static CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 fn process_client_command<W:Write, R: Read>(ser: &mut Serializer<W>, deser: &mut Deserializer<R>,  cmd: ClientCommand, trait_name: &TraitName) -> Result<(), SavefileError> {
@@ -319,9 +338,10 @@ fn process_client_command<W:Write, R: Read>(ser: &mut Serializer<W>, deser: &mut
         }
         AbiProtocol::CreateInstance { trait_object_receiver, error_receiver, error_callback } => {
             ser.write_u8(4)?; //CreateInstance
+            ser.write_string(&trait_name.0)?;
             ser.writer.flush()?;
             match deser.read_u8()? {
-                0 => {
+                1 => {
                      // Success
                     let to = unsafe { TraitObject::from_usize_without_provenance(deser.read_usize()?, deser.read_usize()?) };
                     unsafe {
@@ -410,7 +430,7 @@ struct RemoteEntrypoint {
 }
 
 struct Server {
-    addr: SocketAddr,
+    addr: SocketAddr, //TODO: Replace this janky solution with a mechanism that implements select([accept_fd, local_pipe]) instead.
     jh: Option<JoinHandle<BackgroundListenerResult>>,
     has_quit: bool,
 }
@@ -438,7 +458,7 @@ impl Drop for Server {
                 target = self.addr;
             }
             if let Ok(mut stream) = TcpStream::connect(target) {
-                _ = stream.write_u8(0);
+                _ = stream.write_u8(6);
             }
         }
         _ = self.jh.take().map(|x|x.join());
@@ -467,7 +487,7 @@ fn serve(local: impl ToSocketAddrs + Send + 'static, supported_types: HashMap<Tr
                 };
                 match stream.read_u8(){
                     Ok(val) => {
-                        if val == 0 {
+                        if val == 6 {
                             //Time to quit
                             println!("Received order to quit");
                             return BackgroundListenerResult::QuitNormally;
@@ -501,13 +521,21 @@ fn serve(local: impl ToSocketAddrs + Send + 'static, supported_types: HashMap<Tr
 pub trait TestTrait {
     fn call_trait(&self);
 }
+#[derive(Default)]
+struct TestTraitImpl;
+impl TestTrait for TestTraitImpl {
+    fn call_trait(&self) {
+    }
+}
+
+savefile_abi_export!(TestTraitImpl, TestTrait);
 
 #[test]
 fn test_server() {
     let mut m = HashMap::new();
     m.insert(TraitName("TestTrait".into()), Arc::new(DynAbiExportableObjectType{
         name: TraitName("TestTrait".into()),
-        local_entry: <dyn TestTrait as AbiExportable>::ABI_ENTRY,
+        local_entry: TestTraitImpl::ABI_ENTRY,
         definitions: |ver|<dyn TestTrait as AbiExportable>::get_definition(ver),
         latest_version: 0,
     }));

@@ -995,7 +995,9 @@ pub(super) fn generate_method_definitions(
 
     let result_default;
     let return_ser_temp;
+    let no_return_early_receiver_ret_optimization;
     if no_return {
+        no_return_early_receiver_ret_optimization = quote!( if let RawAbiCallResult::Success{..} = &outcome {result_receiver.write(Ok(())); return;} );
         return_value_schema = quote!(get_schema::<()>(0));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
         ret_serialize = quote!(());
@@ -1005,6 +1007,7 @@ pub(super) fn generate_method_definitions(
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) );
     //Safe, does not need drop and does not allocate
     } else {
+        no_return_early_receiver_ret_optimization = quote!();
         let parsed_ret_type = parse_type(
             version,
             "___retval",
@@ -1107,6 +1110,7 @@ pub(super) fn generate_method_definitions(
                 ) {
                     let outcome = unsafe { &*outcome };
                     let result_receiver = unsafe { &mut *(result_receiver as *mut std::mem::MaybeUninit<Result<#ret_type, SavefileError>>) };
+                    #no_return_early_receiver_ret_optimization
                     result_receiver.write(
                         parse_return_value_impl(outcome, |mut deserializer| -> Result<#ret_type, SavefileError> {
 
@@ -1117,6 +1121,7 @@ pub(super) fn generate_method_definitions(
                     );
                 }
 
+            println!("Prior to call!");
             self.entry.call(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
                 compatibility_mask: compatibility_mask,
@@ -1130,7 +1135,9 @@ pub(super) fn generate_method_definitions(
             }
             let resval = unsafe { result_buffer.assume_init() };
 
-            resval.expect("Unexpected panic in invocation target")
+            let t = resval.expect("Unexpected panic in invocation target");
+            println!("Returning from method def!");
+            t
         }
     };
 
@@ -1146,7 +1153,10 @@ pub(super) fn generate_method_definitions(
 
     let handle_retval;
     if no_return {
-        handle_retval = quote!();
+        handle_retval = quote!(
+            let outcome = RawAbiCallResult::Success {data: NonNull::<u8>::dangling().as_ptr(), len: 0usize};
+            unsafe { receiver(&outcome as *const _, abi_result) }
+        );
     } else {
         let ret_buffer;
         let data_as_ptr;
@@ -1206,6 +1216,7 @@ pub(super) fn generate_method_definitions(
             #(#callee_trampoline_variable_deserializer)*
 
             let ret = #callee_real_method_invocation_except_args( #(#callee_trampoline_real_method_invocation_arguments,)* );
+
 
             #handle_retval
 

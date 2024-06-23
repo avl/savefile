@@ -315,6 +315,7 @@ use std::path::Path;
 use std::ptr::null;
 use std::sync::{Mutex, MutexGuard};
 use std::{ptr, slice};
+use std::fmt::Formatter;
 
 use std::time::{Duration, Instant};
 
@@ -849,6 +850,21 @@ pub enum RawAbiCallResult {
     AbiError(AbiErrorMsg),
 }
 
+impl std::fmt::Debug for RawAbiCallResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RawAbiCallResult::Success { data, len } => {
+                write!(f, "Success, len = {}, data = {:?}", len, *data)
+            }
+            RawAbiCallResult::Panic(p) => {
+                write!(f, "Panic: {}", p.convert_to_string())
+            }
+            RawAbiCallResult::AbiError(e) => {
+                write!(f, "AbiError: {}", e.convert_to_string())
+            }
+        }
+    }
+}
 
 
 
@@ -945,6 +961,7 @@ pub fn parse_return_value_impl<T>(
         RawAbiCallResult::Success { data, len } => {
             let data = unsafe { std::slice::from_raw_parts(*data, *len) };
             let mut reader = Cursor::new(data);
+
             let file_version = reader.read_u32::<LittleEndian>()?;
             let mut deserializer = Deserializer {
                 reader: &mut reader,

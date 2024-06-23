@@ -258,6 +258,7 @@ pub fn savefile_abi_exportable(
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
+        use std::ptr::NonNull;
     };
 
     let mut method_metadata: Vec<TokenStream> = vec![];
@@ -559,9 +560,12 @@ pub fn savefile_abi_exportable(
 
     expanded.into()
 }
+
+
+///
 #[proc_macro_error]
 #[proc_macro]
-    pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let tokens = proc_macro2::TokenStream::from(item);
 
     let mut tokens_iter = tokens.into_iter();
