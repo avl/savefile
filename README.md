@@ -79,6 +79,22 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.5
+
+Support for std::time::Duration and std::time::SystemTime .
+
+## 0.17.4
+
+Improvements to error messages.
+
+## 0.17.3
+
+Improved error messages for certain compilation failures.
+
+## 0.17.2
+
+Fix failing tests on new rustc-version.
+
 ## 0.17.1
 
 Just minor improvements to documentation.
