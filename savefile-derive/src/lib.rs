@@ -37,6 +37,7 @@ use syn::spanned::Spanned;
 use syn::token::{Paren};
 use syn::Type::Tuple;
 use syn::{DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
+
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
     implicit_self: bool,

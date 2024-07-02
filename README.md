@@ -79,6 +79,10 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.6
+
+Support for introspection of std::time::Duration and std::time::SystemTime .
+
 ## 0.17.5
 
 Support for std::time::Duration and std::time::SystemTime .

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.6](https://github.com/avl/savefile/compare/savefile-abi-v0.17.5...savefile-abi-v0.17.6) - 2024-07-02
+
+### Added
+- Introspect for SystemTime and Duration
+
 ## [0.17.5](https://github.com/avl/savefile/compare/savefile-abi-v0.17.4...savefile-abi-v0.17.5) - 2024-07-02
 
 ### Other
