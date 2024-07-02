@@ -7416,6 +7416,32 @@ impl Deserialize for Duration {
     }
 }
 
+impl Introspect for Duration {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+
+    fn introspect_len(&self) -> usize {
+        0
+    }
+}
+impl Introspect for SystemTime {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+
+    fn introspect_len(&self) -> usize {
+        0
+    }
+}
 impl WithSchema for SystemTime {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct{
