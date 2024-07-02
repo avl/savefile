@@ -6532,7 +6532,7 @@ use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
-
+use std::time::{Duration, SystemTime};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use memoffset::offset_of_tuple;
 
@@ -7382,6 +7382,97 @@ impl Packed for Canary1 {}
 impl WithSchema for Canary1 {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)
+    }
+}
+
+impl WithSchema for Duration {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct{
+            dbg_name: "Duration".to_string(),
+            size: None,
+            alignment: None,
+            fields: vec![
+                Field {
+                    name: "Duration".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                    offset: None,
+                }
+            ],
+        })
+    }
+}
+impl Packed for Duration {
+
+}
+impl Serialize for Duration {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_u128(self.as_nanos())
+    }
+}
+impl Deserialize for Duration {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let temp = deserializer.read_u128()?;
+        Ok(Duration::from_secs((temp/1_000_000_000) as u64) + Duration::from_nanos((temp % 1_000_000_000) as u64))
+    }
+}
+
+impl WithSchema for SystemTime {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct{
+            dbg_name: "SystemTime".to_string(),
+            size: None,
+            alignment: None,
+            fields: vec![
+                Field {
+                    name: "SystemTimeDuration".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                    offset: None,
+                }
+            ],
+        })
+    }
+}
+impl Packed for SystemTime {
+
+}
+impl Serialize for SystemTime {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        match self.duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(nanos) => {
+                let temp = nanos.as_nanos();
+                if temp >= 1u128<<120 {
+                    return Err(SavefileError::GeneralError {msg: "Savefile cannot handle dates where the year is larger than ca 10^19 years.".to_string()});
+                }
+                serializer.write_u128(temp)?;
+            }
+            Err(err) => { //Before UNIX Epoch
+                let mut temp = err.duration().as_nanos();
+                if temp >= 1u128<<120 {
+                    return Err(SavefileError::GeneralError {msg: "Savefile cannot handle dates much earlier than the creation of the universe.".to_string()});
+                }
+                temp |= 1u128<<127;
+                serializer.write_u128(temp)?;
+            }
+        }
+        Ok(())
+    }
+}
+fn u128_duration_nanos(nanos: u128) -> Duration {
+    if nanos > u64::MAX as u128 {
+        Duration::from_nanos((nanos % 1_000_000_000) as u64) + Duration::from_secs((nanos/1_000_000_000) as u64)
+    } else {
+        Duration::from_nanos(nanos as u64)
+    }
+}
+impl Deserialize for SystemTime {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let mut temp = deserializer.read_u128()?;
+        if temp >= (1u128<<127) {
+            temp &= (1u128<<127)-1; //Before UNIX Epoch
+            return Ok(SystemTime::UNIX_EPOCH - u128_duration_nanos(temp));
+        } else {
+            return Ok(SystemTime::UNIX_EPOCH + u128_duration_nanos(temp));
+        }
     }
 }
 

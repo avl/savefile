@@ -840,7 +840,7 @@ use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, 
 #[cfg(test)]
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
 #[test]
 pub fn test_atomic() {
@@ -1543,6 +1543,36 @@ pub fn test_indexset() {
     iset.insert((43, 43));
     iset.insert((44, 44));
     assert_roundtrip(iset.clone());
+}
+
+#[test]
+fn test_systemtime() {
+    roundtrip(SystemTime::UNIX_EPOCH);
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_nanos(1));
+    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_nanos(1));
+
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_nanos(4_000_000_000));
+
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000));
+
+
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_nanos(u64::MAX));
+    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_nanos(u64::MAX));
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(4_000_000_000));
+    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_secs(4_000_000_000));
+
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(58_000_000_000) + Duration::from_nanos((1u64)<<55));
+    roundtrip(SystemTime::UNIX_EPOCH - (Duration::from_secs(8_000_000_000) + Duration::from_nanos((1u64)<<55)));
+
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(365u64*86400 * 150_000_000_000)); //Test we can roundtrip dates 150 billion years into the future. It should be enough (oh man if this would ever come back to hurt us it would be funny ...)
+    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_secs(365u64*86400 * 15_000_000_000));
+}
+#[test]
+fn test_duration() {
+    roundtrip(Duration::from_nanos(0));
+    roundtrip(Duration::from_nanos(1));
+    roundtrip(Duration::from_nanos(u64::MAX));
+    roundtrip(Duration::from_nanos(999_999_999) + Duration::from_secs(u64::MAX));
 }
 
 #[cfg(test)]

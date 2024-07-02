@@ -1,0 +1,64 @@
+---
+source: savefile-test/src/savefile_abi_test/argument_backward_compatibility.rs
+assertion_line: 95
+expression: exportable
+---
+name: ArgInterfaceV2
+methods:
+  - name: sums
+    info:
+      return_value:
+        Primitive: schema_u32
+      arguments:
+        - schema:
+            Struct:
+              dbg_name: ArgArgument
+              size: 8
+              alignment: 4
+              fields:
+                - name: data1
+                  value:
+                    Primitive: schema_u32
+                  offset: ~
+                - name: data2
+                  value:
+                    Primitive: schema_u32
+                  offset: 0
+        - schema:
+            Struct:
+              dbg_name: ArgArgument
+              size: 8
+              alignment: 4
+              fields:
+                - name: data1
+                  value:
+                    Primitive: schema_u32
+                  offset: ~
+                - name: data2
+                  value:
+                    Primitive: schema_u32
+                  offset: 0
+  - name: enum_arg
+    info:
+      return_value:
+        Primitive:
+          schema_string: DataCapacityLength
+      arguments:
+        - schema:
+            Enum:
+              dbg_name: EnumArgument
+              variants:
+                - name: Variant1
+                  discriminant: 0
+                  fields: []
+                - name: Variant2
+                  discriminant: 1
+                  fields: []
+              discriminant_size: 1
+              has_explicit_repr: false
+              size: 1
+              alignment: 1
+  - name: function_existing_in_v2
+    info:
+      return_value: ZeroSize
+      arguments: []
