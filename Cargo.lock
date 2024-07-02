@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
