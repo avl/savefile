@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 #![cfg_attr(feature = "nightly", feature(test))]
 #![deny(warnings)]
+#![cfg_attr(miri, allow(dead_code))]
 
 #[cfg(test)]
 extern crate insta;
