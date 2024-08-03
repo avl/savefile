@@ -832,7 +832,7 @@ use savefile::{diff_schema, save_compressed, VecOrStringLayout};
 use savefile_abi::AbiConnection;
 use smallvec::alloc::collections::BTreeMap;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::string::ToString;
@@ -1266,6 +1266,15 @@ pub fn test_serialize_btreemap() {
     let mut bm = BTreeMap::new();
     bm.insert(45, 32u16);
     assert_roundtrip(bm);
+}
+
+#[test]
+pub fn test_serialize_btreeset() {
+    let mut bs = BTreeSet::new();
+    bs.insert(45);
+    assert_roundtrip(bs);
+    let bs = BTreeSet::<i32>::new();
+    assert_roundtrip(bs);
 }
 
 #[test]
