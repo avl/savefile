@@ -79,6 +79,10 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.7
+
+Support for BTreeSet.
+
 ## 0.17.6
 
 Support for introspection of std::time::Duration and std::time::SystemTime .

@@ -1988,3 +1988,4 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
     expanded
 }
+

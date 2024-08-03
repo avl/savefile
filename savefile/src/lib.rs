@@ -894,7 +894,7 @@ use std::sync::atomic::{
 pub use ::byteorder::LittleEndian;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap,BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 #[allow(unused_imports)]
 use std::mem::MaybeUninit;
@@ -4563,6 +4563,24 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Hash
     }
 }
 
+impl<K: Introspect> Introspect for BTreeSet<K> {
+    fn introspect_value(&self) -> String {
+        format!("BTreeSet<{}>", std::any::type_name::<K>())
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        if let Some(key) = self.iter().nth(index) {
+            Some(introspect_item(format!("#{}", index), key))
+        } else {
+            None
+        }
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+
+
 impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
     fn introspect_value(&self) -> String {
         format!(
@@ -4639,6 +4657,39 @@ impl<K: Deserialize + Ord + 'static, V: Deserialize + 'static> Deserialize for B
         Ok(ret)
     }
 }
+
+
+impl<K> Packed for BTreeSet<K> {}
+impl<K: WithSchema + 'static> WithSchema for BTreeSet<K> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(
+            Box::new(context.possible_recursion::<K>(|context| K::schema(version, context))),
+            VecOrStringLayout::Unknown,
+        )
+    }
+}
+impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_usize(self.len())?;
+        for item in self {
+            item.serialize(serializer)?;
+        }
+        Ok(())
+    }
+}
+impl<K: Deserialize+'static+Ord> Deserialize for BTreeSet<K> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let cnt = deserializer.read_usize()?;
+        let mut ret = BTreeSet::new();
+        for _ in 0..cnt {
+            ret.insert(<_ as Deserialize>::deserialize(deserializer)?);
+        }
+        Ok(ret)
+    }
+}
+
+
+
 
 impl<K, S: ::std::hash::BuildHasher> Packed for HashSet<K, S> {}
 impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {

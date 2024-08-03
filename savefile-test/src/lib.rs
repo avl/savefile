@@ -1,3 +1,4 @@
+#![cfg(test)]
 #![allow(unused_imports)]
 #![cfg_attr(feature = "nightly", feature(test))]
 #![deny(warnings)]
@@ -48,11 +49,6 @@ mod test_versioning;
 #[cfg(feature = "external_benchmarks")]
 #[cfg(not(miri))]
 mod ext_benchmark;
-
-#[derive(Debug, Savefile, PartialEq)]
-struct NonCopy {
-    ncfield: u8,
-}
 
 use std::io::BufWriter;
 use std::io::Cursor;
@@ -832,7 +828,7 @@ use savefile::{diff_schema, save_compressed, VecOrStringLayout};
 use savefile_abi::AbiConnection;
 use smallvec::alloc::collections::BTreeMap;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::string::ToString;
@@ -1269,6 +1265,15 @@ pub fn test_serialize_btreemap() {
 }
 
 #[test]
+pub fn test_serialize_btreeset() {
+    let mut bs = BTreeSet::new();
+    bs.insert(45);
+    assert_roundtrip(bs);
+    let bs = BTreeSet::<i32>::new();
+    assert_roundtrip(bs);
+}
+
+#[test]
 pub fn test_serialize_hashset() {
     let hs = HashSet::<i32>::new();
     assert_roundtrip(hs);
@@ -1392,6 +1397,13 @@ impl Introspect for ExampleWithoutAutomaticIntrospect {
     fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
         None
     }
+}
+
+#[test]
+fn roundtrip_example_without_introspect() {
+    roundtrip(ExampleWithoutAutomaticIntrospect{
+        x: 42
+    });
 }
 
 #[cfg(test)]
