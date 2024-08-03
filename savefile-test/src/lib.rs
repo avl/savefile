@@ -49,11 +49,6 @@ mod test_versioning;
 #[cfg(not(miri))]
 mod ext_benchmark;
 
-#[derive(Debug, Savefile, PartialEq)]
-struct NonCopy {
-    ncfield: u8,
-}
-
 use std::io::BufWriter;
 use std::io::Cursor;
 
