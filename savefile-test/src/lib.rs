@@ -1,7 +1,7 @@
+#![cfg(test)]
 #![allow(unused_imports)]
 #![cfg_attr(feature = "nightly", feature(test))]
 #![deny(warnings)]
-#![cfg_attr(miri, allow(dead_code))]
 
 #[cfg(test)]
 extern crate insta;
@@ -1397,6 +1397,13 @@ impl Introspect for ExampleWithoutAutomaticIntrospect {
     fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
         None
     }
+}
+
+#[test]
+fn roundtrip_example_without_introspect() {
+    roundtrip(ExampleWithoutAutomaticIntrospect{
+        x: 42
+    });
 }
 
 #[cfg(test)]

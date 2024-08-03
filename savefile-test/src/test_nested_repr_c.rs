@@ -1,4 +1,6 @@
+#![cfg(test)]
 use savefile::prelude::*;
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Savefile)]
 #[savefile_unsafe_and_fast]
