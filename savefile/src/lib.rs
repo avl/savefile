@@ -2450,7 +2450,7 @@ pub const MAX_CHILDREN: usize = 10000;
 #[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
     message = "`{Self}` cannot be introspected by Savefile, since it doesn't implement trait `savefile::Introspect`",
     label = "This cannot be introspected",
-    note = "If you get this message after having used the #[savefile_ignore] attribute on a field, consider adding #[savefile_introspect_ignore]."
+    note = "If you get this message after having used the #[savefile_ignore] attribute on a field, consider adding #[savefile_introspect_ignore].",
     note = "You can implement it by adding `#[derive(Savefile)]` or `#[derive(SavefileIntrospectOnly)]` before the declaration of `{Self}`",
     note = "Or you can manually implement the `savefile::Introspect` trait."
 ))]
