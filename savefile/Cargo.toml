@@ -23,9 +23,10 @@ license = "MIT/Apache-2.0"
 edition = "2021"
 
 [features]
-default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set"]
-bit-set = ["dep:bit-set","bit-vec"]
-serde_derive = ["dep:serde_derive","serde"]
+default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set", "bit-set08", "bit-vec08"]
+bit-set = ["dep:bit-set", "bit-vec"]
+bit-set08 = ["dep:bit-set08", "bit-vec08"]
+serde_derive = ["dep:serde_derive", "serde"]
 
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
@@ -48,6 +49,7 @@ derive = ["dep:savefile-derive"]
 
 [dependencies]
 bit-vec = { version = "0.6", optional = true}
+bit-vec08 = { package="bit-vec", version = "0.8", optional = true}
 arrayvec = { version = "0.7", optional = true}
 smallvec = { version = "1.11", optional = true}
 indexmap = { version = "1.9", optional = true}
@@ -56,6 +58,7 @@ ring = {version = "0.16.9", optional = true}
 rand = { version = "0.8", optional = true}
 bzip2 = {version = "0.4.4", optional = true}
 bit-set = {version = "0.5", optional = true}
+bit-set08 = {package="bit-set", version = "0.8", optional = true}
 rustc-hash = {version = "1.1", optional = true}
 memoffset = "0.9"
 byteorder = "1.4"

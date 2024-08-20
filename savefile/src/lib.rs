@@ -1247,6 +1247,8 @@ pub trait Packed {
 }
 
 /// This just exists to make sure that no one can actually implement the ReprC-trait placeholder.
+/// If you somehow end up here, what you really want is to find instances of ReprC and change them
+/// to Packed.
 #[doc(hidden)]
 #[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 pub struct DeliberatelyUnimplementable {
@@ -5327,7 +5329,7 @@ impl<T: Deserialize, R: Deserialize> Deserialize for Result<T, R> {
     }
 }
 
-#[cfg(feature = "bit-vec")]
+#[cfg(any(feature = "bit-vec", feature="bit-vec08"))]
 #[cfg(target_endian = "big")]
 compile_error!("savefile bit-vec feature does not support big-endian machines");
 
@@ -5496,6 +5498,180 @@ impl Deserialize for bit_set::BitSet<u32> {
         Ok(bit_set::BitSet::from_bit_vec(bit_vec))
     }
 }
+
+
+
+
+
+#[cfg(feature = "bit-vec08")]
+impl WithSchema for bit_vec08::BitVec {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "BitVec".to_string(),
+            size: None,
+            alignment: None,
+            fields: vec![
+                Field {
+                    name: "num_bits".to_string(),
+                    value: Box::new(usize::schema(version, context)),
+                    offset: None,
+                },
+                Field {
+                    name: "num_bytes".to_string(),
+                    value: Box::new(usize::schema(version, context)),
+                    offset: None,
+                },
+                Field {
+                    name: "buffer".to_string(),
+                    value: Box::new(Schema::Vector(
+                        Box::new(u8::schema(version, context)),
+                        VecOrStringLayout::Unknown,
+                    )),
+                    offset: None,
+                },
+            ],
+        })
+    }
+}
+
+#[cfg(feature = "bit-vec08")]
+impl Introspect for bit_vec08::BitVec {
+    fn introspect_value(&self) -> String {
+        let mut ret = String::new();
+        for i in 0..self.len() {
+            if self[i] {
+                ret.push('1');
+            } else {
+                ret.push('0');
+            }
+        }
+        ret
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+
+#[cfg(feature = "bit-vec08")]
+impl Serialize for bit_vec08::BitVec<u32> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        let storage = self.storage();
+        let rawbytes_ptr = storage.as_ptr() as *const u8;
+        let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
+        serializer.write_usize(rawbytes.len() | (1 << 63))?;
+        serializer.write_bytes(rawbytes)?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "bit-vec08")]
+impl Packed for bit_vec08::BitVec<u32> {}
+
+#[cfg(feature = "bit-vec08")]
+impl Deserialize for bit_vec08::BitVec<u32> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let numbits = deserializer.read_usize()?;
+        let mut numbytes = deserializer.read_usize()?;
+        if numbytes & (1 << 63) != 0 {
+            //New format
+            numbytes &= !(1 << 63);
+            let mut ret = bit_vec08::BitVec::with_capacity(numbytes * 8);
+            unsafe {
+                let num_words = numbytes / 4;
+                let storage = ret.storage_mut();
+                storage.resize(num_words, 0);
+                let storage_ptr = storage.as_ptr() as *mut u8;
+                let storage_bytes: &mut [u8] = std::slice::from_raw_parts_mut(storage_ptr, 4 * num_words);
+                deserializer.read_bytes_to_buf(storage_bytes)?;
+                ret.set_len(numbits);
+            }
+            Ok(ret)
+        } else {
+            let bytes = deserializer.read_bytes(numbytes)?;
+            let mut ret = bit_vec08::BitVec::from_bytes(&bytes);
+            ret.truncate(numbits);
+            Ok(ret)
+        }
+    }
+}
+
+#[cfg(feature = "bit-set")]
+impl WithSchema for bit_set08::BitSet {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "BitSet".to_string(),
+            size: None,
+            alignment: None,
+            fields: vec![
+                Field {
+                    name: "num_bits".to_string(),
+                    value: Box::new(usize::schema(version, context)),
+                    offset: None,
+                },
+                Field {
+                    name: "num_bytes".to_string(),
+                    value: Box::new(usize::schema(version, context)),
+                    offset: None,
+                },
+                Field {
+                    name: "buffer".to_string(),
+                    value: Box::new(Schema::Vector(
+                        Box::new(u8::schema(version, context)),
+                        VecOrStringLayout::Unknown,
+                    )),
+                    offset: None,
+                },
+            ],
+        })
+    }
+}
+
+#[cfg(feature = "bit-set08")]
+impl Introspect for bit_set08::BitSet {
+    fn introspect_value(&self) -> String {
+        let mut ret = String::new();
+        for i in 0..self.len() {
+            if self.contains(i) {
+                use std::fmt::Write;
+                if !ret.is_empty() {
+                    ret += " ";
+                }
+                write!(&mut ret, "{}", i).unwrap();
+            }
+        }
+        ret
+    }
+
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+        None
+    }
+}
+
+#[cfg(feature = "bit-set08")]
+impl Packed for bit_set08::BitSet<u32> {}
+
+#[cfg(feature = "bit-set08")]
+impl Serialize for bit_set08::BitSet<u32> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let bitset = self.get_ref();
+        bitset.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "bit-set")]
+impl Deserialize for bit_set08::BitSet<u32> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let bit_vec: bit_vec08::BitVec = bit_vec08::BitVec::deserialize(deserializer)?;
+        Ok(bit_set08::BitSet::from_bit_vec(bit_vec))
+    }
+}
+
+
+
+
 
 impl<T: Introspect> Introspect for BinaryHeap<T> {
     fn introspect_value(&self) -> String {
@@ -7535,6 +7711,17 @@ impl Serialize for SystemTime {
         Ok(())
     }
 }
+
+impl Introspect for std::time::Instant {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
 fn u128_duration_nanos(nanos: u128) -> Duration {
     if nanos > u64::MAX as u128 {
         Duration::from_nanos((nanos % 1_000_000_000) as u64) + Duration::from_secs((nanos/1_000_000_000) as u64)
