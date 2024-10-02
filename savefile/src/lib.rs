@@ -6586,6 +6586,7 @@ impl<T1: Deserialize> Deserialize for (T1,) {
 }
 
 
+#[cfg(feature="nalgebra")]
 impl<T:nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
     fn introspect_value(&self) -> String {
         format!("{:?}", self)
@@ -6595,6 +6596,7 @@ impl<T:nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
         None
     }
 }
+#[cfg(feature="nalgebra")]
 impl<T:nalgebra::Scalar> Introspect for nalgebra::Vector3<T> {
     fn introspect_value(&self) -> String {
         format!("{:?}", self)
@@ -6604,6 +6606,7 @@ impl<T:nalgebra::Scalar> Introspect for nalgebra::Vector3<T> {
         None
     }
 }
+#[cfg(feature="nalgebra")]
 impl<T:nalgebra::Scalar> Introspect for nalgebra::Isometry3<T> {
     fn introspect_value(&self) -> String {
         format!("{:?}", self)
