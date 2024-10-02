@@ -9,6 +9,7 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
+extern crate nalgebra;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -1710,4 +1711,23 @@ fn dummy_test() {
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     let r = simple_add_call(&conn, 1, 2);
     assert_eq!(r, 3);
+}
+
+#[test]
+fn test_isometry() {
+    let iso = nalgebra::Isometry3::<f64>::from_parts(
+        nalgebra::Point3::new(0.0,1.0,2.0).into(),
+        nalgebra::UnitQuaternion::from_euler_angles(0.0,1.0,2.0),
+    );
+    assert_roundtrip(iso);
+}
+#[test]
+fn test_points() {
+    let a = [nalgebra::Point3::new(1.0,2.0,3.0),nalgebra::Point3::new(4.0,5.0,6.0)];
+    assert_roundtrip(a);
+}
+#[test]
+fn test_vector() {
+    let a = [nalgebra::Point3::new(1.5,2.5,3.0),nalgebra::Point3::new(4.0,5.5,6.0)];
+    assert_roundtrip(a);
 }

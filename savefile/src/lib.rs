@@ -2217,6 +2217,21 @@ pub fn save_compressed<T: WithSchema + Serialize>(
     Serializer::save::<T>(writer, version, data, true)
 }
 
+/// Write the given `data` to the file. Compresses data using 'bzip2' compression format.
+///
+/// The current version of data must be `version`.
+/// The resultant data can be loaded using the regular load_file-function (it autodetects if compressions was
+/// active or not).
+/// Note, this function will fail if the bzip2-feature is not enabled.
+pub fn save_file_compressed<T: WithSchema + Serialize, P: AsRef<Path>>(
+    path: P,
+    version: u32,
+    data: &T,
+) -> Result<(), SavefileError> {
+    let mut f = BufWriter::new(File::create(path)?);
+    Serializer::save::<T>(&mut f, version, data, true)
+}
+
 /// Serialize the given data and return as a `Vec<u8>`
 /// The current version of data must be `version`.
 pub fn save_to_mem<T: WithSchema + Serialize>(version: u32, data: &T) -> Result<Vec<u8>, SavefileError> {
@@ -6569,6 +6584,172 @@ impl<T1: Deserialize> Deserialize for (T1,) {
         Ok((T1::deserialize(deserializer)?,))
     }
 }
+
+
+impl<T:nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+impl<T:nalgebra::Scalar> Introspect for nalgebra::Vector3<T> {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+impl<T:nalgebra::Scalar> Introspect for nalgebra::Isometry3<T> {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Point3<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        let d = nalgebra::Point3::<T>::new(T::default(),T::default(),T::default());
+        let p1 = &d.x as *const T;
+        let p2 = &d.y as *const T;
+        let p3 = &d.z as *const T;
+
+        if std::mem::size_of::<nalgebra::Point3<T>>() ==  3 * std::mem::size_of::<T>() &&
+            p1.offset(1) ==p2 && p1.offset(2) == p3
+        {
+            IsPacked::yes()
+        } else {
+            IsPacked::no()
+        }
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Point3<T> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(T::schema(version, context)),
+            count: 3,
+        })
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Point3<T> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.coords.x.serialize(serializer)?;
+        self.coords.y.serialize(serializer)?;
+        self.coords.z.serialize(serializer)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Point3<T> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(
+            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
+        )
+    }
+}
+
+
+
+#[cfg(feature = "nalgebra")]
+impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Vector3<T> {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        let d = nalgebra::Vector3::<T>::new(T::default(),T::default(),T::default());
+        let p1 = &d.x as *const T;
+        let p2 = &d.y as *const T;
+        let p3 = &d.z as *const T;
+
+        if std::mem::size_of::<nalgebra::Point3<T>>() ==  3 * std::mem::size_of::<T>() &&
+            p1.offset(1) ==p2 && p1.offset(2) == p3
+        {
+            IsPacked::yes()
+        } else {
+            IsPacked::no()
+        }
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Vector3<T> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(T::schema(version, context)),
+            count: 3,
+        })
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Vector3<T> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.x.serialize(serializer)?;
+        self.y.serialize(serializer)?;
+        self.z.serialize(serializer)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Vector3<T> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(
+            nalgebra::Vector3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
+        )
+    }
+}
+
+
+#[cfg(feature = "nalgebra")]
+impl<T:Packed> Packed for nalgebra::Isometry3<T> {
+}
+#[cfg(feature = "nalgebra")]
+impl<T:WithSchema> WithSchema for nalgebra::Isometry3<T> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(T::schema(version, context)),
+            count: 7,
+        })
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Isometry3<T> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.translation.vector.x.serialize(serializer)?;
+        self.translation.vector.y.serialize(serializer)?;
+        self.translation.vector.z.serialize(serializer)?;
+
+        self.rotation.coords.w.serialize(serializer)?;
+        self.rotation.coords.x.serialize(serializer)?;
+        self.rotation.coords.y.serialize(serializer)?;
+        self.rotation.coords.z.serialize(serializer)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Isometry3<T> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok(nalgebra::Isometry3::from_parts(
+            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
+            nalgebra::UnitQuaternion::new_unchecked(
+                nalgebra::Quaternion::new(
+                <T as Deserialize>::deserialize(deserializer)?,
+                <T as Deserialize>::deserialize(deserializer)?,
+                <T as Deserialize>::deserialize(deserializer)?,
+                <T as Deserialize>::deserialize(deserializer)?,
+                )
+            ))
+        )
+    }
+}
+
 
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> Packed for arrayvec::ArrayString<C> {}

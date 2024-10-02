@@ -79,6 +79,10 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.8
+
+Support for some nalgebra types.
+
 ## 0.17.7
 
 Support for BTreeSet.
