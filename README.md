@@ -78,6 +78,9 @@ fn main() {
 See the docs for more information, including schema-versioning: https://docs.rs/savefile/latest/savefile/ .
 
 # Changelog
+## 0.17.9
+
+Replace the un-maintained proc-macro-error with proc-macro-error2.
 
 ## 0.17.8
 
