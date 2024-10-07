@@ -20,7 +20,7 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 #[macro_use]
-extern crate proc_macro_error;
+extern crate proc_macro_error2;
 
 use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
