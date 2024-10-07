@@ -1,6 +1,6 @@
 [package]
 name = "savefile"
-version = "0.17.8"
+version = "0.17.9"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile/"
 homepage = "https://github.com/avl/savefile/"
@@ -63,13 +63,13 @@ bit-set08 = {package="bit-set", version = "0.8", optional = true}
 rustc-hash = {version = "1.1", optional = true}
 memoffset = "0.9"
 byteorder = "1.4"
-savefile-derive = {path="../savefile-derive", version = "=0.17.8", optional = true }
+savefile-derive = {path="../savefile-derive", version = "=0.17.9", optional = true }
 serde_derive = {version= "1.0", optional = true}
 serde = {version= "1.0", optional = true}
 quickcheck = {version= "1.0", optional = true}
 
 [dev-dependencies]
-savefile-derive = { path="../savefile-derive", version = "=0.17.8" }
+savefile-derive = { path="../savefile-derive", version = "=0.17.9" }
 
 [build-dependencies]
 rustc_version="0.2"
