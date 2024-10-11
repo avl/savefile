@@ -1,5 +1,5 @@
 #![cfg(test)]
-use roundtrip;
+use crate::roundtrip;
 use savefile::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Savefile)]

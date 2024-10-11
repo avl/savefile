@@ -50,7 +50,7 @@ fn test_quickcheck_version3(xs: Version3) -> bool {
 
 #[test]
 fn simple_vertest1() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     let ver2: Version2 = assert_roundtrip_to_new_version(
         Version1 {
             a: "Hello".to_string(),
@@ -97,7 +97,7 @@ enum EnumVer2 {
 
 #[test]
 fn test_versioning_of_enums() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(EnumVer1::Variant1, 0, EnumVer2::Variant1, 1);
     assert_roundtrip_to_new_version(EnumVer1::Variant2, 0, EnumVer2::Variant2, 1);
 }
@@ -120,7 +120,7 @@ enum EnumVerA2 {
 
 #[test]
 fn test_versioning_of_enums2() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         EnumVerA1::Variant2 { x: 32, y: 33 },
         0,
@@ -146,7 +146,7 @@ enum EnumVerB2 {
 
 #[test]
 fn test_versioning_of_enums3() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         EnumVerB1::Variant2(32, 33),
         0,
@@ -183,7 +183,7 @@ struct ComplexData2 {
 
 #[test]
 fn test_versioning_of_enums4() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         ComplexData1 {
             some_field: SubData1 {
@@ -216,7 +216,7 @@ struct DefTraitTest {
 
 #[test]
 fn test_default_trait1() {
-    use assert_roundtrip_version;
+    use crate::assert_roundtrip_version;
     assert_roundtrip_version::<DefTraitTest>(
         DefTraitTest {
             removed_enum: DefTraitEnum::VariantA,
@@ -244,7 +244,7 @@ fn test_custom_default_fn() {
         b: String,
     }
 
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         VersionB1 { a: "test".to_string() },
         0,
@@ -267,7 +267,7 @@ struct AnewType {
 }
 
 use std::convert::From;
-use {roundtrip, roundtrip_version};
+use crate::{roundtrip, roundtrip_version};
 
 impl From<String> for AnewType {
     fn from(_dummy: String) -> AnewType {
@@ -284,7 +284,7 @@ struct StructWithAnotherType {
 
 #[test]
 fn test_change_type_of_field() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         StructWithOneType {
             a_str: "test".to_string(),
@@ -311,7 +311,7 @@ struct StructWithAnotherType2 {
 
 #[test]
 fn test_change_type_of_field2() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(
         StructWithOneType {
             a_str: "422".to_string(),
@@ -340,7 +340,7 @@ struct FastVersionA1 {
 
 #[test]
 fn simple_vertest_a() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     let _ver1: FastVersionA1 = assert_roundtrip_to_new_version(
         FastVersionA0 { a: 2, b: 3, c: 4 },
         0,
@@ -368,7 +368,7 @@ struct FastVersionB1 {
 
 #[test]
 fn simple_vertest_b() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     let _ver1: FastVersionB1 =
         assert_roundtrip_to_new_version(FastVersionB0 { a: 2, b: 3 }, 0, FastVersionB1 { a: 2, b: 3, c: 0 }, 1);
 }

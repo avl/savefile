@@ -2,9 +2,9 @@ use savefile::prelude::AbiRemoved;
 use savefile::{get_schema, SavefileError, WithSchemaContext};
 use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
-use savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
-use savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
-use savefile_abi_test::basic_abi_tests::CowSmuggler;
+use crate::savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
+use crate::savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
+use crate::savefile_abi_test::basic_abi_tests::CowSmuggler;
 use savefile_derive::Savefile;
 
 mod v1 {

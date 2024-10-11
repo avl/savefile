@@ -1,13 +1,14 @@
 use savefile_abi::AbiConnection;
 use savefile_abi::AbiExportable;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[savefile_abi_exportable(version = 0)]
 pub trait SimpleInterface {
     fn do_call(&self, x: u32) -> u32;
 }
 #[savefile_abi_exportable(version = 0)]
-pub trait AdvancedTestInterface {
+pub trait AdvancedTestInterface : Send{
     fn roundtrip_hashmap(&self, x: HashMap<String, String>) -> HashMap<String, String>;
     fn clone_hashmap(&self, x: &HashMap<String, String>) -> HashMap<String, String>;
 
@@ -17,6 +18,9 @@ pub trait AdvancedTestInterface {
     fn return_boxed_closure(&self) -> Box<dyn Fn() -> u32>;
     fn return_boxed_closure2(&self) -> Box<dyn Fn()>;
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32;
+
+    fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>);
+
 }
 struct SimpleImpl;
 
@@ -60,8 +64,44 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32 {
         x(&|y| y())
     }
+
+    fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>) {
+        cb(&[1,2,3], "hello".to_string())
+    }
 }
 
+struct TestUser(Box<dyn AdvancedTestInterface + 'static>);
+
+pub trait DummyTrait2 : Send {
+
+}
+
+impl DummyTrait2 for TestUser {
+
+}
+fn require_send<T:Send>(_t: T) {
+
+}
+#[test]
+fn abi_test_buf_send() {
+    let boxed: Box<dyn AdvancedTestInterface + Send + Sync> = Box::new(AdvancedTestInterfaceImpl {});
+    require_send(boxed);
+}
+
+#[test]
+fn abi_test_buf_callback() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    let buf = Arc::new(Mutex::new(None));
+    let bufclone = Arc::clone(&buf);
+    conn.buf_callback(Box::new(move|argbuf, _s|{
+        *bufclone.lock().unwrap() = Some(argbuf.to_vec());
+    }));
+    let mut guard = buf.lock().unwrap();
+    let vec = guard.take().unwrap();
+    assert_eq!(vec, [1,2,3]);
+
+}
 #[test]
 fn abi_test_slice() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});

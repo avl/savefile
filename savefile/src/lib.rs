@@ -36,6 +36,9 @@ computer game is saved to disk using Savefile.
 
 
 ```
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
 extern crate savefile;
 use savefile::prelude::*;
 
@@ -72,6 +75,7 @@ fn main() {
     assert_eq!(reloaded_player.name,"Steve".to_string());
 }
 
+# }
 ```
 
 # Limitations of Savefile
@@ -107,6 +111,9 @@ Mark the struct like so:
 
 
 ```
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
 extern crate savefile;
 use savefile::prelude::*;
 use std::path::Path;
@@ -144,6 +151,7 @@ fn main() {
     player.skills.push("Whistling".to_string());
     save_player("newsave.bin", &player); //The version saved here will have the vec of skills
 }
+# }
 ```
 
 
@@ -426,6 +434,9 @@ Rules for using the #\[savefile_versions] attribute:
 
 
  ```
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
  extern crate savefile;
  use savefile::prelude::*;
  use std::path::Path;
@@ -471,6 +482,7 @@ Rules for using the #\[savefile_versions] attribute:
      player.history.push(Position{x:2,y:2});
      save_player("newersave.bin", &player);
  }
+# }
  ```
  Savefile can speed up serialization of arrays/vectors of certain types, when it can
  detect that the type consists entirely of packed plain binary data.

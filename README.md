@@ -79,6 +79,11 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.11
+
+Support Sync + Send-bounds for dyn Fn parameters, in savefile-abi. Also, reduce
+risk of variable name conflicts between generated code and user code.
+
 ## 0.17.10
 
 Support for serializing the std::io::Error type.
