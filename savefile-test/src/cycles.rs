@@ -1,4 +1,4 @@
-use assert_roundtrip;
+use crate::assert_roundtrip;
 use savefile::{get_schema, Removed, WithSchema, WithSchemaContext};
 
 #[derive(Savefile, Debug, PartialEq)]
@@ -65,6 +65,6 @@ struct Version2Base(Option<Box<Version2LevelA>>);
     expected = "Saved schema differs from in-memory schema for version 0. Error: At location [./Version1Base/0/?/Version1LevelA/0/?/Version1LevelB/0/Version1LevelC/0]: Application protocol uses recursion up 3 levels, but foreign format uses 2"
 )]
 fn cycles_vertest1() {
-    use assert_roundtrip_to_new_version;
+    use crate::assert_roundtrip_to_new_version;
     assert_roundtrip_to_new_version(Version1Base(None), 0, Version2Base(None), 1);
 }

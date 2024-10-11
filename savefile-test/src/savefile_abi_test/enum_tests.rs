@@ -1,5 +1,5 @@
 use savefile_abi::{AbiConnection, AbiExportable};
-use savefile_abi_test::basic_abi_tests::{TestInterface, TestInterfaceImpl};
+use crate::savefile_abi_test::basic_abi_tests::{TestInterface, TestInterfaceImpl};
 
 #[derive(Savefile, Clone)]
 #[repr(C, u8)]

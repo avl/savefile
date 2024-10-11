@@ -10,7 +10,6 @@ members = [
     "savefile-abi-min-lib-impl"
 ]
 exclude = ["compile_tests"]
-
 resolver = "2"
 
 [profile.dev.package]

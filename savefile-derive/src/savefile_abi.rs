@@ -381,6 +381,7 @@ fn parse_type(
                             );
                         }
                     })
+                    .filter(|seg| seg.ident != "Send" && seg.ident != "Sync")
                     .collect();
                 if type_bounds.len() == 0 {
                     abort!(trait_obj.bounds.span(), "{}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", location);
@@ -1062,15 +1063,15 @@ pub(super) fn generate_method_definitions(
 
         let compile_time_known_size = compile_time_known_size + 4; //Space for 'version'
         arg_buffer = quote! {
-            let mut rawdata = [0u8;#compile_time_known_size];
-            let mut data = Cursor::new(&mut rawdata[..]);
+            let mut __savefile_internal_datarawdata = [0u8;#compile_time_known_size];
+            let mut __savefile_internal_data = Cursor::new(&mut __savefile_internal_datarawdata[..]);
         };
-        data_as_ptr = quote!(rawdata[..].as_ptr());
+        data_as_ptr = quote!(__savefile_internal_datarawdata[..].as_ptr());
         data_length = quote!( #compile_time_known_size );
     } else {
-        arg_buffer = quote!( let mut data = FlexBuffer::new(); );
-        data_as_ptr = quote!(data.as_ptr() as *const u8);
-        data_length = quote!(data.len());
+        arg_buffer = quote!( let mut __savefile_internal_data = FlexBuffer::new(); );
+        data_as_ptr = quote!(__savefile_internal_data.as_ptr() as *const u8);
+        data_length = quote!(__savefile_internal_data.len());
     }
 
     let _ = caller_return_type;
@@ -1093,7 +1094,7 @@ pub(super) fn generate_method_definitions(
             #(#caller_arg_serializers_temp)*
 
             let mut serializer = Serializer {
-                writer: &mut data,
+                writer: &mut __savefile_internal_data,
                 file_version: self.template.effective_version,
             };
             serializer.write_u32(self.template.effective_version).unwrap();
@@ -1162,21 +1163,21 @@ pub(super) fn generate_method_definitions(
 
             let compile_time_known_size = compile_time_known_size + 4; //Space for 'version'
             ret_buffer = quote! {
-                let mut rawdata = [0u8;#compile_time_known_size];
-                let mut data = Cursor::new(&mut rawdata[..]);
+                let mut __savefile_internal_datarawdata = [0u8;#compile_time_known_size];
+                let mut __savefile_internal_data = Cursor::new(&mut __savefile_internal_datarawdata[..]);
             };
-            data_as_ptr = quote!(rawdata[..].as_ptr());
+            data_as_ptr = quote!(__savefile_internal_datarawdata[..].as_ptr());
             data_length = quote!( #compile_time_known_size );
         } else {
-            ret_buffer = quote!( let mut data = FlexBuffer::new(); );
-            data_as_ptr = quote!(data.as_ptr() as *const u8);
-            data_length = quote!(data.len());
+            ret_buffer = quote!( let mut __savefile_internal_data = FlexBuffer::new(); );
+            data_as_ptr = quote!(__savefile_internal_data.as_ptr() as *const u8);
+            data_length = quote!(__savefile_internal_data.len());
         }
 
         handle_retval = quote! {
             #ret_buffer
             let mut serializer = Serializer {
-                writer: &mut data,
+                writer: &mut __savefile_internal_data,
                 file_version: #version,
             };
 

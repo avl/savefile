@@ -1,4 +1,4 @@
-use assert_roundtrip;
+use crate::assert_roundtrip;
 
 #[repr(u16)]
 #[derive(Savefile, Debug, PartialEq)]

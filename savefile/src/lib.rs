@@ -36,11 +36,12 @@ computer game is saved to disk using Savefile.
 
 
 ```
-extern crate savefile;
 use savefile::prelude::*;
+use savefile_derive::Savefile;
 
-#[macro_use]
-extern crate savefile_derive;
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
 
 
 #[derive(Savefile)]
@@ -72,6 +73,7 @@ fn main() {
     assert_eq!(reloaded_player.name,"Steve".to_string());
 }
 
+# }
 ```
 
 # Limitations of Savefile
@@ -107,11 +109,12 @@ Mark the struct like so:
 
 
 ```
-extern crate savefile;
 use savefile::prelude::*;
 use std::path::Path;
-#[macro_use]
-extern crate savefile_derive;
+use savefile_derive::Savefile;
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
 
 const GLOBAL_VERSION:u32 = 1;
 #[derive(Savefile)]
@@ -144,6 +147,7 @@ fn main() {
     player.skills.push("Whistling".to_string());
     save_player("newsave.bin", &player); //The version saved here will have the vec of skills
 }
+# }
 ```
 
 
@@ -261,8 +265,7 @@ Rules for using the #\[savefile_versions] attribute:
  Example:
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  #[derive(Savefile)]
  struct SomeType {
@@ -287,8 +290,7 @@ Rules for using the #\[savefile_versions] attribute:
  The default_fn attribute allows constructing more complex values as defaults.
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  fn make_hello_pair() -> (String,String) {
      ("Hello".to_string(),"World".to_string())
@@ -316,8 +318,7 @@ Rules for using the #\[savefile_versions] attribute:
  of the value when serializing.
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  #[derive(Savefile)]
  struct IgnoreExample {
@@ -340,8 +341,7 @@ Rules for using the #\[savefile_versions] attribute:
  Let's say the first version of our protocol uses the following struct:
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  #[derive(Savefile)]
  struct Employee {
@@ -359,8 +359,7 @@ Rules for using the #\[savefile_versions] attribute:
  So, we change the type of phone_number to String:
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  fn convert(phone_number:u64) -> String {
      phone_number.to_string()
@@ -385,8 +384,7 @@ Rules for using the #\[savefile_versions] attribute:
  Let's say we have the following struct:
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  #[derive(Savefile)]
  struct Racecar {
@@ -398,8 +396,7 @@ Rules for using the #\[savefile_versions] attribute:
  We realize that we need to increase the range of the max_speed_kmh variable, and change it like this:
 
  ```
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile_derive::Savefile;
 
  #[derive(Savefile)]
  struct Racecar {
@@ -426,12 +423,13 @@ Rules for using the #\[savefile_versions] attribute:
 
 
  ```
- extern crate savefile;
  use savefile::prelude::*;
  use std::path::Path;
+ use savefile_derive::Savefile;
+# #[cfg(miri)] fn main() {}
+# #[cfg(not(miri))]
+# fn main() {
 
- #[macro_use]
- extern crate savefile_derive;
 
  #[derive(Clone, Copy, Savefile)]
  #[repr(C)] // Memory layout will become equal to savefile disk format - optimization possible!
@@ -471,6 +469,7 @@ Rules for using the #\[savefile_versions] attribute:
      player.history.push(Position{x:2,y:2});
      save_player("newersave.bin", &player);
  }
+# }
  ```
  Savefile can speed up serialization of arrays/vectors of certain types, when it can
  detect that the type consists entirely of packed plain binary data.
@@ -659,11 +658,10 @@ This can be fixed with manual padding:
  The savefile-library itself produces correct Schema-instances for all types it supports.
 
  ````rust
- extern crate savefile;
+ use savefile::prelude::*;
  pub struct MyPathBuf {
      path: String,
  }
- use savefile::prelude::*;
  impl WithSchema for MyPathBuf {
      fn schema(_version: u32, context: &mut WithSchemaContext) -> Schema {
          Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
@@ -699,9 +697,8 @@ This can be fixed with manual padding:
 
 
  ````rust
- extern crate savefile;
- #[macro_use]
- extern crate savefile_derive;
+ use savefile::prelude::*;
+ use savefile_derive::Savefile;
  use savefile::Introspect;
  use savefile::IntrospectItem;
  #[derive(Savefile)]
@@ -750,9 +747,8 @@ This can be fixed with manual padding:
  Example:
 
  ````rust
- # extern crate savefile;
- # #[macro_use]
- # extern crate savefile_derive;
+ # use savefile::prelude::*;
+ # use savefile_derive::Savefile;
  # use savefile::prelude::*;
 
  #[derive(Savefile)]
@@ -776,9 +772,7 @@ This can be fixed with manual padding:
  An example:
  ````rust
 
- extern crate savefile;
- #[macro_use]
- extern crate savefile_derive;
+ use savefile_derive::Savefile;
  use savefile::Introspect;
  use savefile::IntrospectItem;
  use savefile::prelude::*;
@@ -2459,8 +2453,7 @@ pub fn get_schema<T: WithSchema + 'static>(version: u32) -> Schema {
 /// as an argument.
 ///
 /// The most convenient way to implement this is to use
-/// `#[macro_use]
-/// extern crate savefile-derive;`
+/// `use savefile-derive::Savefile;`
 ///
 /// and the use #\[derive(Serialize)]
 #[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
@@ -2581,8 +2574,7 @@ pub trait Introspect {
 /// be able to deserialize.
 ///
 /// The most convenient way to implement this is to use
-/// `#[macro_use]
-/// extern crate savefile-derive;`
+/// `use savefile-derive::Savefile`
 ///
 /// and the use #\[derive(Deserialize)]
 #[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(

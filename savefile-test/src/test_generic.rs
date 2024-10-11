@@ -1,4 +1,4 @@
-use assert_roundtrip;
+use crate::assert_roundtrip;
 use savefile::prelude::*;
 use std::fmt::Debug;
 use std::marker::{PhantomData, PhantomPinned};

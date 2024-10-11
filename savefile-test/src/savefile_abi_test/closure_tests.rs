@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 use savefile_abi::{AbiConnection, AbiExportable};
-use savefile_abi_test::basic_abi_tests::{CallbackImpl, TestInterface, TestInterfaceImpl};
-use savefile_abi_test::closure_tests::new_version::ExampleImplementationNewer;
+use crate::savefile_abi_test::basic_abi_tests::{CallbackImpl, TestInterface, TestInterfaceImpl};
+use crate::savefile_abi_test::closure_tests::new_version::ExampleImplementationNewer;
 
 #[derive(Savefile)]
 pub struct CustomArg {
@@ -128,7 +128,7 @@ fn test_closure_with_custom_return_call_older() {
     //let old_def = <dyn ExampleNewer as AbiExportable>::get_definition(0);
     //println!("Old def: {:#?}", old_def);
     {
-        use savefile_abi_test::closure_tests::new_version::Example;
+        use crate::savefile_abi_test::closure_tests::new_version::Example;
         let result = conn.call_closure_return_custom_arg(&|arg| new_version::CustomArg {
             x: arg.x,
             y: "hej".to_string(),
