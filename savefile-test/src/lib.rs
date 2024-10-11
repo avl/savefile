@@ -32,7 +32,7 @@ use indexmap::IndexMap;
 use indexmap::IndexSet;
 use savefile::prelude::*;
 use std::fmt::Debug;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 extern crate arrayvec;
 extern crate bincode;
 extern crate parking_lot;
@@ -83,6 +83,26 @@ pub fn assert_roundtrip_version<E: Serialize + Deserialize + Debug + PartialEq>(
     let f_internal_size = f.get_ref().len();
     assert_eq!(f.position() as usize, f_internal_size);
 }
+
+pub fn assert_roundtrip_by<E: Serialize + Deserialize + Debug>(sample: E, comp: impl Fn(E, E) -> bool) {
+    let mut f = Cursor::new(Vec::new());
+    {
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            Serializer::save(&mut bufw, 1, &sample, false).unwrap();
+        }
+        bufw.flush().unwrap();
+    }
+    f.set_position(0);
+    {
+        let roundtrip_result = Deserializer::load::<E>(&mut f, 1).unwrap();
+        assert!(comp(sample, roundtrip_result));
+    }
+
+    let f_internal_size = f.get_ref().len();
+    assert_eq!(f.position() as usize, f_internal_size);
+}
+
 
 pub fn assert_roundtrip_debug<E: Serialize + Deserialize + Debug>(sample: E) {
     let sample_debug_string = format!("{:?}", sample);
@@ -1501,6 +1521,22 @@ struct MyUnitStruct;
 pub fn test_unit_struct() {
     let h = MyUnitStruct;
     assert_roundtrip(h);
+}
+#[test]
+fn roundtrip_io_error() {
+    fn assert_error_roundtrip(err: std::io::Error)  {
+        assert_roundtrip_by(
+            err,
+            |a,b|{
+                a.kind() == b.kind() &&
+                    a.to_string() == b.to_string()
+            }
+        );
+    }
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrNotAvailable,"Hello"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrInUse,"Hello2"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::Other,"Hello3"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::TimedOut,"Hello4"));
 }
 
 #[test]

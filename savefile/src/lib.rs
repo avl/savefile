@@ -884,7 +884,7 @@ use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::io::{BufReader, BufWriter, Read};
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
@@ -1357,6 +1357,79 @@ impl<'a, T: 'a + Introspect + ToOwned + ?Sized> Introspect for Cow<'a, T> {
 
     fn introspect_len(&self) -> usize {
         (**self).introspect_len()
+    }
+}
+
+impl WithSchema for std::io::Error {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::StdIoError
+    }
+}
+impl Packed for std::io::Error {}
+
+impl Serialize for std::io::Error {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let kind = match self.kind() {
+            ErrorKind::NotFound => {1}
+            ErrorKind::PermissionDenied => {2}
+            ErrorKind::ConnectionRefused => {3}
+            ErrorKind::ConnectionReset => {4}
+            ErrorKind::ConnectionAborted => {7}
+            ErrorKind::NotConnected => {8}
+            ErrorKind::AddrInUse => {9}
+            ErrorKind::AddrNotAvailable => {10}
+            ErrorKind::BrokenPipe => {12}
+            ErrorKind::AlreadyExists => {13}
+            ErrorKind::WouldBlock => {14}
+            ErrorKind::InvalidInput => {21}
+            ErrorKind::InvalidData => {22}
+            ErrorKind::TimedOut => {23}
+            ErrorKind::WriteZero => {24}
+            ErrorKind::Interrupted => {36}
+            ErrorKind::Unsupported => {37}
+            ErrorKind::UnexpectedEof => {38}
+            ErrorKind::OutOfMemory => {39}
+            ErrorKind::Other => {40}
+            _ => {
+                42
+            }
+        };
+        serializer.write_u16(kind as u16)?;
+        serializer.write_string(&self.to_string())?;
+        Ok(())
+    }
+}
+impl Deserialize for std::io::Error {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let kind = deserializer.read_u16()?;
+        let kind = match kind {
+            1 => ErrorKind::NotFound,
+            2 => ErrorKind::PermissionDenied,
+            3 => ErrorKind::ConnectionRefused,
+            4 => ErrorKind::ConnectionReset,
+            7 => ErrorKind::ConnectionAborted,
+            8 => ErrorKind::NotConnected,
+            9 => ErrorKind::AddrInUse,
+            10 => ErrorKind::AddrNotAvailable,
+            12 => ErrorKind::BrokenPipe,
+            13 => ErrorKind::AlreadyExists,
+            14 => ErrorKind::WouldBlock,
+            21 => ErrorKind::InvalidInput,
+            22 => ErrorKind::InvalidData,
+            23 => ErrorKind::TimedOut,
+            24 => ErrorKind::WriteZero,
+            36 => ErrorKind::Interrupted,
+            37 => ErrorKind::Unsupported,
+            38 => ErrorKind::UnexpectedEof,
+            39 => ErrorKind::OutOfMemory,
+            40 => ErrorKind::Other,
+            _ => {
+                ErrorKind::Other
+            }
+        };
+
+        let string = String::deserialize(deserializer)?;
+        Ok(std::io::Error::new(kind, string))
     }
 }
 
@@ -3243,6 +3316,8 @@ pub enum Schema {
     /// if it is identical in memory and file, and because of this, counting
     /// only the recursion points is non-ambiguous.
     Recursion(usize /*depth*/),
+    /// std::io::Error
+    StdIoError,
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3278,6 +3353,7 @@ impl Schema {
             Schema::Recursion(depth) => {
                 format!("<recursion {}>", depth)
             }
+            Schema::StdIoError => "stdioerror".into(),
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3432,6 +3508,7 @@ impl Schema {
             Schema::Reference(_) => None,
             Schema::Trait(_, _) => None,
             Schema::Recursion(_) => None,
+            Schema::StdIoError => None,
         }
     }
 }
@@ -3572,6 +3649,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             return None;
         }
         (Schema::Str, Schema::Str) => {
+            return None;
+        }
+        (Schema::StdIoError, Schema::StdIoError) => {
             return None;
         }
         (Schema::Boxed(a), Schema::Boxed(b)) => {
@@ -4135,6 +4215,10 @@ impl Serialize for Schema {
                 serializer.write_usize(*depth)?;
                 Ok(())
             }
+            Schema::StdIoError => {
+                serializer.write_u8(17)?;
+                Ok(())
+            }
         }
     }
 }
@@ -4173,9 +4257,10 @@ impl Deserialize for Schema {
                 <_ as Deserialize>::deserialize(deserializer)?,
             ),
             16 => Schema::Recursion(<_ as Deserialize>::deserialize(deserializer)?),
+            17 => Schema::StdIoError,
             c => {
                 return Err(SavefileError::GeneralError {
-                    msg: format!("Corrupt schema, schema variant {} encountered", c),
+                    msg: format!("Corrupt, or future schema, schema variant {} encountered", c),
                 })
             }
         };
