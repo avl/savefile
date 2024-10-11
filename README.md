@@ -78,6 +78,12 @@ fn main() {
 See the docs for more information, including schema-versioning: https://docs.rs/savefile/latest/savefile/ .
 
 # Changelog
+
+## 0.17.10
+
+Support for serializing the std::io::Error type.
+Note, non-stabilized Error-kinds are not supported.
+
 ## 0.17.9
 
 Replace the un-maintained proc-macro-error with proc-macro-error2.
