@@ -134,12 +134,14 @@ fn emit_closure_helpers(
     return names;
 }
 
+#[derive(Debug)]
 pub(crate) enum ArgType {
     PlainData(Type),
-    Reference(Box<ArgType>, bool /*ismut (only traits objects can be mut here)*/),
+    Reference(Box<ArgType>, bool /*ismut (only trait objects can be mut here)*/),
     Str(bool /*static*/),
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
+    Result(Box<ArgType>, Box<ArgType>),
     Trait(Ident, bool /*ismut self*/),
     Fn(
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
@@ -207,6 +209,14 @@ pub(crate) fn parse_box_type(
                         true,
                         is_mut_ref,
                     ) {
+                        ArgType::Result(_,_) => {
+                            abort!(
+                                first_gen_arg.span(),
+                                "{}. Savefile does not support boxed results. Try boxing the contents of the result instead. I.e, instead of Box<Result<A,B>>, try Result<Box<A>,Box<B>>. Type encountered: {}",
+                                location,
+                                typ.to_token_stream()
+                            )
+                        }
                         ArgType::Boxed(_) => {
                             abort!(
                                 first_gen_arg.span(),
@@ -335,7 +345,7 @@ fn parse_type(
             if is_mut_ref {
                 abort!(
                     typ.span(),
-                    "{}: Mutable refernces are not supported by savefile-abi, except for FnMut-trait objects. {}",
+                    "{}: Mutable references are not supported by savefile-abi, except for FnMut-trait objects. {}",
                     location,
                     typ.to_token_stream()
                 );
@@ -400,7 +410,7 @@ fn parse_type(
                     if bound.ident == "FnOnce" {
                         abort!(
                             bound.ident.span(),
-                            "{}, FnOnce is not supported. Maybe you can use FnMut instead?",
+                            "{}, FnOnce is presently not supported by savefile-abi. Maybe you can use FnMut instead?",
                             location,
                         );
                     }
@@ -470,6 +480,62 @@ fn parse_type(
                     is_reference,
                     is_mut_ref,
                 );
+            } else if last_seg.ident == "Result"  && is_return_value {
+                if path.path.segments.len() != 1 {
+                    abort!(path.path.segments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result', without any namespace");
+                }
+                if is_reference {
+                    abort!(last_seg.ident.span(), "Savefile does not presently support reference to Result in return position. Consider removing the '&'.");
+                }
+
+                match &last_seg.arguments {
+                    PathArguments::Parenthesized(_) |
+                    PathArguments::None => {
+                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result<A,B>', with two type parameters within angle-brackets. Found not type arguments.");
+                    }
+                    PathArguments::AngleBracketed(params)  => {
+                        let argvec: Vec<_> = params.args.iter().collect();
+                        if argvec.len() != 2 {
+                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result<A,B>', with two type parameters within angle-brackets. Got {} type arguments", argvec.len());
+                        }
+                        let mut argtypes = vec![];
+                        for arg in argvec {
+                            match arg {
+                                GenericArgument::Type(argtyp) => {
+                                    argtypes.push(Box::new(
+                                        parse_type(
+                                            version,
+                                            arg_name,
+                                            argtyp,
+                                            method_name,
+                                            is_return_value,
+                                            &mut *name_generator,
+                                            extra_definitions,
+                                            is_reference,
+                                            is_mut_ref,
+                                        )));
+                                }
+                                GenericArgument::Lifetime(_) => {
+                                    abort!(arg.span(), "Savefile does not support lifetime specifications.");
+                                }
+                                GenericArgument::Const(_) => {
+                                    abort!(arg.span(), "Savefile does not support const in this location.");
+                                }
+                                GenericArgument::Binding(_) => {
+                                    abort!(arg.span(), "Savefile does not support the syntax expressed here.");
+                                }
+                                GenericArgument::Constraint(_) => {
+                                    abort!(arg.span(), "Savefile does not support constraints at this position.");
+                                }
+                            }
+                        }
+                        let mut i = argtypes.into_iter();
+                        let oktype = i.next().unwrap();
+
+                        let errtype = i.next().unwrap();
+                        return ArgType::Result(oktype, errtype);
+                    }
+                }
             } else {
                 rawtype = typ;
             }
@@ -528,7 +594,7 @@ impl ArgType {
         version: u32,
         arg_index: Option<usize>,
         arg_orig_name: &str,
-        arg_name: &TokenStream,
+        arg_name: &TokenStream, //always just 'arg_orig_name'
         nesting_level: u32,
         take_ownership: bool,
         extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
@@ -583,6 +649,7 @@ impl ArgType {
                     ArgType::Str(_) => None,
                     ArgType::Reference(..) => None,
                     ArgType::Slice(_) => None,
+                    ArgType::Result(_,_) => None,
                 };
 
                 let (mutsymbol, read_raw_ptr) = if *is_mut {
@@ -888,6 +955,85 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
+            ArgType::Result(ok_type, err_type) => {
+                let ok_instruction = ok_type.get_instruction(
+                    version,
+                    arg_index,
+                    "okval",
+                    &quote!( okval ),
+                    nesting_level + 1,
+                    true,
+                    extra_definitions,
+                );
+                let err_instruction = err_type.get_instruction(
+                    version,
+                    arg_index,
+                    "errval",
+                    &quote!( errval ),
+                    nesting_level + 1,
+                    true,
+                    extra_definitions,
+                );
+
+                let TypeInstruction {
+                    callee_trampoline_variable_deserializer1: ok_callee_trampoline_variable_deserializer1,
+                    caller_arg_serializer1: ok_caller_arg_serializer1,
+                    deserialized_type: ok_deserialized_type,
+                    callee_trampoline_temp_variable_declaration1: ok_callee_trampoline_temp_variable_declaration1,
+                    caller_arg_serializer_temp1: ok_caller_arg_serializer_temp1,
+                    schema: ok_schema,
+                    ..
+                } = ok_instruction;
+
+                let TypeInstruction {
+                    callee_trampoline_variable_deserializer1: err_callee_trampoline_variable_deserializer1,
+                    caller_arg_serializer1: err_caller_arg_serializer1,
+                    deserialized_type: err_deserialized_type,
+                    callee_trampoline_temp_variable_declaration1: err_callee_trampoline_temp_variable_declaration1,
+                    caller_arg_serializer_temp1: err_caller_arg_serializer_temp1,
+                    schema: err_schema,
+                    ..
+                } = err_instruction;
+
+                TypeInstruction {
+                    deserialized_type: quote! { Result<#ok_deserialized_type, #err_deserialized_type> },
+                    callee_trampoline_temp_variable_declaration1: quote! {
+                        #ok_callee_trampoline_temp_variable_declaration1;
+                        #err_callee_trampoline_temp_variable_declaration1;
+                    },
+                    callee_trampoline_variable_deserializer1: quote! {
+                            if deserializer.read_bool()? {
+                                Ok(#ok_callee_trampoline_variable_deserializer1)
+                            } else {
+                                Err(#err_callee_trampoline_variable_deserializer1)
+                            }
+                    },
+                    caller_arg_serializer_temp1: quote! {
+                        #ok_caller_arg_serializer_temp1;
+                        #err_caller_arg_serializer_temp1;
+                    },
+                    caller_arg_serializer1: quote! {
+                        match #arg_name {
+                            Ok(okval) => {
+                                serializer.write_bool(true)?;
+                                #ok_caller_arg_serializer1
+                            },
+                            Err(errval) => {
+                                serializer.write_bool(false)?;
+                                #err_caller_arg_serializer1
+                            }
+                        }
+                    },
+                    schema: quote!(
+                        get_result_schema(#ok_schema, #err_schema)
+                    ),
+                    arg_type1: quote!(
+                        Result<#ok_deserialized_type, #err_deserialized_type>
+                    ),
+                    known_size_align1: None,
+                    known_size_align_of_pointer1: None,
+                }
+            }
         }
     }
 }
@@ -1188,12 +1334,12 @@ pub(super) fn generate_method_definitions(
             {
                 Ok(()) => {
                     let outcome = RawAbiCallResult::Success {data: #data_as_ptr, len: #data_length};
-                    unsafe { receiver(&outcome as *const _, abi_result) }
+                    unsafe { __savefile_internal_receiver(&outcome as *const _, abi_result) }
                 }
                 Err(err) => {
                     let err_str = format!("{:?}", err);
                     let outcome = RawAbiCallResult::AbiError(AbiErrorMsg{error_msg_utf8: err_str.as_ptr(), len: err_str.len()});
-                    unsafe { receiver(&outcome as *const _, abi_result) }
+                    unsafe { __savefile_internal_receiver(&outcome as *const _, abi_result) }
                 }
             }
         }

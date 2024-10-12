@@ -1,6 +1,6 @@
 [package]
 name = "savefile-derive"
-version = "0.17.11"
+version = "0.17.12"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 repository = "https://github.com/avl/savefile"
 rust-version = "1.74"
