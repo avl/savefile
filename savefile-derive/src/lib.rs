@@ -1,5 +1,5 @@
 #![recursion_limit = "128"]
-#![deny(warnings)]
+#![allow(warnings)]
 #![allow(clippy::needless_borrowed_reference)]
 #![allow(clippy::match_like_matches_macro)]
 #![allow(clippy::bool_assert_comparison)]

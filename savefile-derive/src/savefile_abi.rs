@@ -598,6 +598,7 @@ impl ArgType {
         nesting_level: u32,
         take_ownership: bool,
         extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+        prefixed_arg_name: &Ident,
     ) -> TypeInstruction {
         let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name, nesting_level), Span::call_site());
 
@@ -627,6 +628,7 @@ impl ArgType {
                     nesting_level + 1,
                     false,
                     extra_definitions,
+                    prefixed_arg_name
                 );
 
                 let known_size_align1 = match &**arg_type {
@@ -676,7 +678,7 @@ impl ArgType {
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1: quote! {
                         if #layout_compatible {
-                            unsafe { serializer.write_raw_ptr(#arg_name as *const #arg_type1).expect("Writing argument ref") };
+                            unsafe { serializer.write_raw_ptr(#prefixed_arg_name as *const #arg_type1).expect("Writing argument ref") };
                             Ok(())
                         } else {
                             #caller_arg_serializer1
@@ -689,7 +691,7 @@ impl ArgType {
             }
             ArgType::Str(_) => {
                 TypeInstruction {
-                    //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
+                    //callee_trampoline_real_method_invocation_argument1: quote! {&#prefixed_arg_name},
                     callee_trampoline_temp_variable_declaration1: quote! {},
                     deserialized_type: quote! {String},
                     callee_trampoline_variable_deserializer1: quote! {
@@ -703,12 +705,12 @@ impl ArgType {
                     caller_arg_serializer1: quote! {
                         {
                             unsafe {
-                                serializer.write_ptr(#arg_name.as_ptr() as *const ()).expect("Failed while serializing");
-                                serializer.write_usize(#arg_name.len())
+                                serializer.write_ptr(#prefixed_arg_name.as_ptr() as *const ()).expect("Failed while serializing");
+                                serializer.write_usize(#prefixed_arg_name.len())
                             }
                         }
                     },
-                    //caller_fn_arg1: quote! {#arg_name : &str},
+                    //caller_fn_arg1: quote! {#prefixed_arg_name : &str},
                     schema: quote!(Schema::Str),
 
                     arg_type1: quote!(str),
@@ -735,10 +737,11 @@ impl ArgType {
                     nesting_level + 1,
                     false,
                     extra_definitions,
+                    prefixed_arg_name
                 );
 
                 TypeInstruction {
-                    //callee_trampoline_real_method_invocation_argument1: quote! {&#arg_name},
+                    //callee_trampoline_real_method_invocation_argument1: quote! {&#prefixed_arg_name},
                     callee_trampoline_temp_variable_declaration1: quote! {
                         #callee_trampoline_temp_variable_declaration1
                         let #temp_arg_name;
@@ -752,9 +755,9 @@ impl ArgType {
                     },
                     caller_arg_serializer_temp1,
                     caller_arg_serializer1: quote! {
-                        (#arg_name).serialize(&mut serializer)
+                        (#prefixed_arg_name).serialize(&mut serializer)
                     }, //we only support slices containing savefile-serializable stuff, so we don't forward to the item type here
-                    //caller_fn_arg1: quote! {#arg_name : &[#arg_type]},
+
                     schema: quote!( Schema::Slice(std::boxed::Box::new(#schema)) ),
                     arg_type1: quote!( [#arg_type1] ),
                     known_size_align1: if known_size_align1.is_some() {
@@ -773,7 +776,7 @@ impl ArgType {
                 },
                 caller_arg_serializer_temp1: quote!(),
                 caller_arg_serializer1: quote! {
-                    #arg_name.serialize(&mut serializer)
+                    #prefixed_arg_name.serialize(&mut serializer)
                 },
                 schema: quote!( get_schema::<#arg_type>(version) ),
                 known_size_align1: if compile_time_check_reprc(arg_type) {
@@ -803,6 +806,7 @@ impl ArgType {
                     nesting_level + 1,
                     true,
                     extra_definitions,
+                    prefixed_arg_name
                 );
 
                 TypeInstruction {
@@ -844,7 +848,7 @@ impl ArgType {
                     caller_arg_serializer_temp1: quote!(),
                     caller_arg_serializer1: quote! {
                         {
-                            PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#arg_name) } ).serialize(&mut serializer)
+                            PackagedTraitObject::#newsymbol::<dyn #trait_type>( unsafe { std::mem::transmute(#prefixed_arg_name) } ).serialize(&mut serializer)
                         }
                     },
                     schema: quote!( Schema::Trait(#ismut, <dyn #trait_name as AbiExportable>::get_definition(version)) ),
@@ -906,11 +910,11 @@ impl ArgType {
 
                 let arg_access = if take_ownership {
                     quote! {
-                        #arg_name
+                        #prefixed_arg_name
                     }
                 } else {
                     quote! {
-                        #arg_name as *#mutorconst _
+                        #prefixed_arg_name as *#mutorconst _
                     }
                 };
                 let arg_make_ptr = if take_ownership {
@@ -964,6 +968,7 @@ impl ArgType {
                     nesting_level + 1,
                     true,
                     extra_definitions,
+                    &Ident::new("okval", Span::call_site())
                 );
                 let err_instruction = err_type.get_instruction(
                     version,
@@ -973,6 +978,7 @@ impl ArgType {
                     nesting_level + 1,
                     true,
                     extra_definitions,
+                    &Ident::new("errval", Span::call_site())
                 );
 
                 let TypeInstruction {
@@ -1013,7 +1019,7 @@ impl ArgType {
                         #err_caller_arg_serializer_temp1;
                     },
                     caller_arg_serializer1: quote! {
-                        match #arg_name {
+                        match #prefixed_arg_name {
                             Ok(okval) => {
                                 serializer.write_bool(true)?;
                                 #ok_caller_arg_serializer1
@@ -1065,6 +1071,10 @@ pub(super) fn generate_method_definitions(
 
     let mut compile_time_known_size = Some(0);
     for (arg_index, (arg_name, typ)) in args.iter().enumerate() {
+        let prefixed_arg_name = Ident::new(
+            &format!("arg_{}", arg_name),
+            Span::call_site(),
+        );
         let argtype = parse_type(
             version,
             &arg_name.to_string(),
@@ -1076,7 +1086,7 @@ pub(super) fn generate_method_definitions(
             false,
             false,
         );
-        callee_trampoline_variable_declaration.push(quote! {let #arg_name;});
+        callee_trampoline_variable_declaration.push(quote! {let #prefixed_arg_name;});
 
         let instruction = argtype.get_instruction(
             version,
@@ -1086,22 +1096,23 @@ pub(super) fn generate_method_definitions(
             0,
             true,
             extra_definitions,
+            &prefixed_arg_name
         );
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
         callee_trampoline_real_method_invocation_arguments.push(
-            quote! {#arg_name}, //instruction.callee_trampoline_real_method_invocation_argument1
+            quote! {#prefixed_arg_name}, //instruction.callee_trampoline_real_method_invocation_argument1
         );
         callee_trampoline_temp_variable_declaration.push(instruction.callee_trampoline_temp_variable_declaration1);
 
         let deserializer_expression = instruction.callee_trampoline_variable_deserializer1;
 
-        callee_trampoline_variable_deserializer.push(quote!( #arg_name = #deserializer_expression ; ));
+        callee_trampoline_variable_deserializer.push(quote!( #prefixed_arg_name = #deserializer_expression ; ));
         let arg_serializer = instruction.caller_arg_serializer1;
         caller_arg_serializers.push(quote! {
             #arg_serializer.expect("Failed while serializing");
         });
-        caller_fn_arg_list.push(quote!( #arg_name: #typ )); //instruction.caller_fn_arg1);
+        caller_fn_arg_list.push(quote!( #prefixed_arg_name: #typ )); //instruction.caller_fn_arg1);
         let schema = instruction.schema;
         //let can_be_sent_as_ref = instruction.can_be_sent_as_ref;
         metadata_arguments.push(quote! {
@@ -1185,6 +1196,7 @@ pub(super) fn generate_method_definitions(
             0,
             true,
             extra_definitions,
+            &Ident::new("ret", Span::call_site())
         );
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
