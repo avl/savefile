@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::borrow::Cow;
 use std::cell::{Cell, UnsafeCell};
 use std::io::Cursor;
@@ -13,6 +14,12 @@ pub trait CallbackInterface {
     fn set(&mut self, x: u32);
     fn get(&self) -> u32;
 }
+
+#[derive(Savefile)]
+pub struct SomeRandomType;
+
+
+
 
 #[savefile_abi_exportable(version = 0)]
 pub trait TestInterface {
@@ -38,7 +45,36 @@ pub trait TestInterface {
 
     fn boxes(&self, a: Box<u32>) -> Box<u32>;
 
+    fn test_default_impl(&self) -> String  {
+        "hello".to_string()
+    }
+
     fn get_static_str(&self) -> &'static str;
+    // Test using lots of symbol-names from the derive-macro, to verify
+    // there's no crashes
+    fn test_macro_hygiene(&self,
+        context: SomeRandomType,
+        schema: SomeRandomType,
+        trait_object: SomeRandomType,
+        get_schema: SomeRandomType,
+        method_number: SomeRandomType,
+        effective_version: SomeRandomType,
+        new: SomeRandomType,
+        result_buffer: SomeRandomType,
+        compatibility_mask: SomeRandomType,
+        callee_method_number: SomeRandomType,
+        info: SomeRandomType,
+        serializer: SomeRandomType,
+        outcome: SomeRandomType,
+        result_receiver: SomeRandomType,
+        abi_result_receiver: SomeRandomType,
+        resval: SomeRandomType,
+        abi_result: SomeRandomType,
+        err_str: SomeRandomType,
+        ret: SomeRandomType,
+        cursor: SomeRandomType,
+        deserializer: SomeRandomType
+    ) {}
 }
 
 #[derive(Default)]
@@ -142,6 +178,7 @@ fn test_basic_call_abi() {
     assert_eq!(conn.tuple_add2((1, 1), (2, 2)), (3, 3));
     assert_eq!(conn.tuple_add3((1, 1, 1), (2, 2, 2)), (3, 3, 3));
     assert_eq!(conn.boxes(Box::new(42u32)), Box::new(42u32));
+    assert_eq!(conn.test_default_impl(), "hello");
 
     assert_eq!(conn.count_chars(&"hejsan".to_string()), 6);
     assert_eq!(conn.count_chars_str("hejsan"), 6);

@@ -1,5 +1,5 @@
 pub use {
-    super::deserialize_slice_as_vec, super::get_schema, super::introspect_item, super::load, super::load_file,
+    super::deserialize_slice_as_vec, super::get_schema, super::get_result_schema, super::introspect_item, super::load, super::load_file,
     super::load_file_noschema, super::load_from_mem, super::load_noschema, super::save, super::save_file,
     super::save_file_noschema, super::save_noschema, super::save_to_mem, super::AbiRemoved, super::Canary1,
     super::Deserialize, super::Deserializer, super::Field, super::Introspect, super::IntrospectItem,

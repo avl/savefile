@@ -2447,6 +2447,39 @@ pub fn get_schema<T: WithSchema + 'static>(version: u32) -> Schema {
     T::schema(version, &mut WithSchemaContext::new())
 }
 
+/// Get the schema for a type Result<OK, ERR>, where OK and ERR
+/// have the schemas given by the parameters.
+pub fn get_result_schema(ok: Schema, err: Schema) -> Schema {
+    Schema::Enum(SchemaEnum {
+        dbg_name: "Result".to_string(),
+        size: None,
+        alignment: None,
+        variants: vec![
+            Variant {
+                name: "Ok".to_string(),
+                discriminant: 0,
+                fields: vec![Field {
+                    name: "ok".to_string(),
+                    value: Box::new(ok),
+                    offset: None,
+                }],
+            },
+            Variant {
+                name: "Err".to_string(),
+                discriminant: 0,
+                fields: vec![Field {
+                    name: "err".to_string(),
+                    value: Box::new(err),
+                    offset: None,
+                }],
+            },
+        ],
+        discriminant_size: 1,
+        has_explicit_repr: false,
+    })
+}
+
+
 /// This trait must be implemented for all data structures you wish to be
 /// able to serialize. To actually serialize data: create a [Serializer],
 /// then call serialize on your data to save, giving the Serializer

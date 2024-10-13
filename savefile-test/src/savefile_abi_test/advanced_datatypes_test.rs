@@ -20,6 +20,9 @@ pub trait AdvancedTestInterface : Send{
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32;
 
     fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>);
+    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>,()>;
+    fn owned_boxed_closure_param(&self, owned: Box<dyn Fn()->u32>);
+
 
 }
 struct SimpleImpl;
@@ -68,6 +71,17 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>) {
         cb(&[1,2,3], "hello".to_string())
     }
+    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>,()> {
+        if fail {
+            Err(())
+        } else {
+            Ok(Box::new(|| 42))
+        }
+    }
+
+    fn owned_boxed_closure_param(&self, owned: Box<dyn Fn() -> u32>) {
+        assert_eq!(owned(), 42);
+    }
 }
 
 struct TestUser(Box<dyn AdvancedTestInterface + 'static>);
@@ -86,6 +100,17 @@ fn require_send<T:Send>(_t: T) {
 fn abi_test_buf_send() {
     let boxed: Box<dyn AdvancedTestInterface + Send + Sync> = Box::new(AdvancedTestInterfaceImpl {});
     require_send(boxed);
+}
+
+#[test]
+fn test_trait_object_in_return_position() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    let ret = conn.return_boxed_closure_result(false);
+    assert_eq!(ret.unwrap()(), 42);
+    let ret = conn.return_boxed_closure_result(true);
+    let Err(()) = ret else {panic!("Expected Err")};
 }
 
 #[test]
@@ -112,13 +137,20 @@ fn abi_test_slice() {
 }
 
 #[test]
-fn test_trait_object_in_return_position() {
+fn test_result_trait_object_in_return_position() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     let ret = conn.return_trait_object();
     assert_eq!(ret.do_call(42), 42);
     assert_eq!(ret.do_call(42), 42);
+}
+#[test]
+fn test_boxed_trait_object_in_arg_position() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    conn.owned_boxed_closure_param(Box::new(||42));
 }
 #[test]
 fn test_return_boxed_closure() {

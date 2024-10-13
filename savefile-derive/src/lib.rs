@@ -1,5 +1,5 @@
 #![recursion_limit = "128"]
-#![deny(warnings)]
+#![allow(warnings)]
 #![allow(clippy::needless_borrowed_reference)]
 #![allow(clippy::match_like_matches_macro)]
 #![allow(clippy::bool_assert_comparison)]
@@ -254,7 +254,7 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, get_result_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
         use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
@@ -508,7 +508,7 @@ pub fn savefile_abi_exportable(
                 #version
             }
 
-            fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), receiver: unsafe extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
+            fn call(trait_object: TraitObject, method_number: u16, effective_version:u32, compatibility_mask: u64, data: &[u8], abi_result: *mut (), __savefile_internal_receiver: unsafe extern "C" fn(outcome: *const RawAbiCallResult, result_receiver: *mut ()/*Result<T,SaveFileError>>*/)) -> Result<(),SavefileError> {
 
                 let mut cursor = Cursor::new(data);
 
@@ -539,10 +539,12 @@ pub fn savefile_abi_exportable(
     let extra_definitions: Vec<_> = extra_definitions.values().map(|(_, x)| x).collect();
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
+        #[allow(unused_variables)]
         #[allow(clippy::needless_late_init)]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         #[allow(non_upper_case_globals)]
         #[allow(clippy::manual_range_contains)]
+        #[allow(non_local_definitions)]
         const _:() = {
             #uses
 
@@ -600,6 +602,7 @@ pub fn savefile_abi_exportable(
 
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
+        #[allow(non_local_definitions)]
         const _:() = {
             #uses
             #[automatically_derived]
