@@ -1,14 +1,6 @@
-
-#![allow(warnings)]
 use savefile_derive::savefile_abi_exportable;
 use savefile_derive::Savefile;
 use std::fmt::{Debug, Formatter};
-/*#[savefile_abi_exportable(version = 0)]
-pub trait AdderInterface {
-    fn do_nothing(&self, sync_fn: Box<dyn Fn() + Send + Sync>);
-}*/
-
-
 
 
 #[derive(Savefile)]
