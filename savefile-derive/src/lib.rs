@@ -544,6 +544,7 @@ pub fn savefile_abi_exportable(
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         #[allow(non_upper_case_globals)]
         #[allow(clippy::manual_range_contains)]
+        #[allow(non_local_definitions)]
         const _:() = {
             #uses
 
@@ -601,6 +602,7 @@ pub fn savefile_abi_exportable(
 
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
+        #[allow(non_local_definitions)]
         const _:() = {
             #uses
             #[automatically_derived]

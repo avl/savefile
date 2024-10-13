@@ -89,6 +89,9 @@ I.e, this signature is now possible with savefile-abi:
 This is a special case, dyn traits are still not possible in arbitrary positions. This particular
 case is important in order to be able to have fallible functions returning boxed dyn traits.
 
+This also silences a warning that started to appear in rust nightly 2024-10-11. I think the warning is in 
+error and will be solved before 1.82
+
 ## 0.17.11
 
 Support Sync + Send-bounds for dyn Fn parameters, in savefile-abi. Also, reduce
