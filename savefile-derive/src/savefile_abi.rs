@@ -50,6 +50,8 @@ fn emit_closure_helpers(
     extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     fnkind: &Ident, //Fn or FnMut
     owning: bool,
+    sync: bool,
+    send: bool,
 ) -> ClosureWrapperNames /*wrapper name*/ {
     let key = FnWrapperKey {
         fnkind: fnkind.clone(),
@@ -58,6 +60,20 @@ fn emit_closure_helpers(
         args: args.iter().cloned().collect(),
         ret: get_type(&return_type),
     };
+
+    let syncsend_bound = match (sync,send) {
+        (false, false) => quote!(),
+        (true, false) => quote!( + Sync),
+        (true, true) => quote!( + Sync + Send),
+        (false, true) => quote!( + Send),
+    };
+    let syncsend_traitbound = match (sync,send) {
+        (false, false) => quote!(),
+        (true, false) => quote!( : Sync),
+        (true, true) => quote!(  : Sync + Send),
+        (false, true) => quote!( : Send),
+    };
+
     if let Some((names, _)) = extra_definitions.get(&key) {
         return names.clone();
     }
@@ -108,15 +124,15 @@ fn emit_closure_helpers(
     }
 
     let funcdef = if owning {
-        quote!( Box <(dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a)> )
+        quote!( Box <(dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl #syncsend_bound +'a)> )
     } else {
-        quote!( *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl +'a) )
+        quote!( *#mutorconst (dyn for<'x> #fnkind( #(#parameter_types,)* ) #ret_type_decl #syncsend_bound +'a) )
     };
 
     let expanded = quote! {
 
         #[savefile_abi_exportable(version=#version)]
-        pub trait #temp_trait_name {
+        pub trait #temp_trait_name #syncsend_traitbound {
             fn docall(& #mutsymbol self, #(#formal_parameter_declarations,)*) -> #ret_type;
         }
 
@@ -148,6 +164,8 @@ pub(crate) enum ArgType {
         Vec<Type>,   /*arg types*/
         ReturnType,  //Ret-type
         bool,        /*ismut (FnMut)*/
+        bool, /*sync*/
+        bool /*send*/ //TODO: Create struct here
     ),
 }
 
@@ -242,7 +260,7 @@ pub(crate) fn parse_box_type(
                         ArgType::Reference(_, _) => {
                             abort!(first_gen_arg.span(), "{}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", location, typ.to_token_stream());
                         }
-                        x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _) => ArgType::Boxed(Box::new(x)),
+                        x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _, _, _) => ArgType::Boxed(Box::new(x)),
                     }
                 }
                 _ => {
@@ -373,6 +391,8 @@ fn parse_type(
                 );
             }
             if trait_obj.dyn_token.is_some() {
+                let mut sync = false;
+                let mut send = false;
                 let type_bounds: Vec<_> = trait_obj
                     .bounds
                     .iter()
@@ -391,7 +411,17 @@ fn parse_type(
                             );
                         }
                     })
-                    .filter(|seg| seg.ident != "Send" && seg.ident != "Sync")
+                    .filter(|seg| {
+                        if seg.ident == "Sync" {
+                            sync = true;
+                            return false;
+                        }
+                        if seg.ident == "Send" {
+                            send = true;
+                            return false;
+                        }
+                        true
+                    })
                     .collect();
                 if type_bounds.len() == 0 {
                     abort!(trait_obj.bounds.span(), "{}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", location);
@@ -431,6 +461,8 @@ fn parse_type(
                                 pararg.inputs.iter().cloned().collect(),
                                 pararg.output.clone(),
                                 is_mut_ref,
+                                sync,
+                                send
                             );
                         }
                         _ => {
@@ -441,6 +473,14 @@ fn parse_type(
                         }
                     }
                 } else {
+                    if sync {
+                        abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Sync instead of adding the bound here, like so: trait {} : Sync.",
+                            location, bound.ident, bound.ident);
+                    }
+                    if send {
+                        abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Send instead of adding the bound here, like so: trait {} : Send.",
+                            location, bound.ident, bound.ident);
+                    }
                     return ArgType::Trait(bound.ident.clone(), is_mut_ref);
                 }
             } else {
@@ -857,7 +897,7 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
-            ArgType::Fn(fndef, args, ret_type, ismut) => {
+            ArgType::Fn(fndef, args, ret_type, ismut, sync, send) => {
                 let temp_arg_name2 = Ident::new(&format!("temp2_{}", arg_orig_name), Span::call_site());
                 let temp_arg_ser_name = Ident::new(&format!("temp_ser_{}", arg_orig_name), Span::call_site());
 
@@ -869,6 +909,8 @@ impl ArgType {
                     extra_definitions,
                     &Ident::new(if *ismut { "FnMut" } else { "Fn" }, Span::call_site()),
                     take_ownership,
+                    *sync,
+                    *send
                 );
 
                 let temp_trait_name_wrapper = wrapper_names.wrapper_struct_name;
