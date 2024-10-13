@@ -25,6 +25,7 @@ mod v1 {
         fn sums(&self, a: Argument, b: Argument) -> u32;
         fn enum_arg(&self, a: EnumArgument) -> String;
         fn function_existing_in_v1(&self);
+        fn closure_test(&self, f: Box<dyn Fn()>);
     }
     #[derive(Default)]
     pub struct Implementation1 {}
@@ -40,6 +41,9 @@ mod v1 {
             }
         }
         fn function_existing_in_v1(&self) {}
+        fn closure_test(&self, f: Box<dyn Fn()>){
+            f()
+        }
     }
 }
 
@@ -75,6 +79,7 @@ mod v2 {
             }
         }
         fn function_existing_in_v2(&self);
+        fn closure_test(&self, f: Box<dyn Fn()>);
     }
 
     #[derive(Default)]
@@ -85,6 +90,9 @@ mod v2 {
         }
 
         fn function_existing_in_v2(&self) {}
+        fn closure_test(&self, f: Box<dyn Fn()>){
+            f()
+        }
     }
 }
 
@@ -171,6 +179,8 @@ pub fn test_caller_has_newer_version() {
     ); //Because implementation expects data1 and data2, but we're only sending data2.
 
     assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant1), "Variant1".to_string());
+
+    conn1.closure_test(Box::new(|| { }));
 }
 
 #[test]

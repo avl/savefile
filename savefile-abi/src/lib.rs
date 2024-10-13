@@ -1039,31 +1039,32 @@ impl FlexBuffer {
 /// or if they are traits and the effective version of the traits are compatible.
 /// For traits, the actual fat pointer is always compatible, so can always be used.
 /// The trait-objects themselves can never be serialized, so they can only be used as references.
+///
+/// b is the callee, a is the caller
 fn arg_layout_compatible(
     a_native: &Schema,
     b_native: &Schema,
     a_effective: &Schema,
     b_effective: &Schema,
     effective_version: u32,
-) -> bool {
+    is_return_position: bool
+) -> Result<bool, SavefileError> {
     match (a_native, b_native) {
         (Schema::FnClosure(a1, _a2), Schema::FnClosure(b1, _b2)) => {
             let (Schema::FnClosure(effective_a1, effective_a2), Schema::FnClosure(effective_b1, effective_b2)) =
                 (a_effective, b_effective)
             else {
-                return false;
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
             };
 
-            a1 == b1
+            effective_a2.verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
+            Ok(a1 == b1
                 && a1 == effective_a1
-                && a1 == effective_b1
-                && effective_a2
-                    .verify_backward_compatible(effective_version, effective_b2)
-                    .is_ok()
+                && a1 == effective_b1)
         }
         (Schema::Boxed(native_a), Schema::Boxed(native_b)) => {
             let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective) else {
-                return false;
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
             };
             arg_layout_compatible(
                 &**native_a,
@@ -1071,25 +1072,26 @@ fn arg_layout_compatible(
                 &**effective_a2,
                 &**effective_b2,
                 effective_version,
+                is_return_position
             )
         }
         (Schema::Trait(s_a, _), Schema::Trait(s_b, _)) => {
             if s_a != s_b {
-                return false;
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
             }
             let (Schema::Trait(e_a2, effective_a2), Schema::Trait(e_b2, effective_b2)) = (a_effective, b_effective)
             else {
-                return false;
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
             };
             if e_a2 != e_b2 {
-                return false;
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
             }
 
             effective_a2
-                .verify_backward_compatible(effective_version, effective_b2)
-                .is_ok()
+                .verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
+            Ok(true)
         }
-        (a, b) => a.layout_compatible(b),
+        (a, b) => Ok(a.layout_compatible(b)),
     }
 }
 
@@ -1204,7 +1206,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                let comp = arg_layout_compatible(native1, native2, effective1, effective2, effective_version);
+                let comp = arg_layout_compatible(native1, native2, effective1, effective2, effective_version, index.is_none())?;
 
                 if comp {
                     if let Some(index) = index {
@@ -1443,10 +1445,14 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                 let mut callee_abi_native_definition = AbiTraitDefinition {
                     name: "".to_string(),
                     methods: vec![],
+                    sync: false,
+                    send: false,
                 };
                 let mut callee_abi_effective_definition = AbiTraitDefinition {
                     name: "".to_string(),
                     methods: vec![],
+                    sync: false,
+                    send: false,
                 };
                 unsafe extern "C" fn definition_receiver(
                     receiver: *mut AbiTraitDefinition,
@@ -1713,7 +1719,7 @@ pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), 
         if std::fs::metadata(&schema_file_name).is_ok() {
             let previous_schema = load_file_noschema(&schema_file_name, 1)?;
 
-            def.verify_backward_compatible(version, &previous_schema)?;
+            def.verify_backward_compatible(version, &previous_schema, false)?;
         } else {
             save_file_noschema(&schema_file_name, 1, &def)?;
         }

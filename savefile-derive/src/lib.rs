@@ -272,6 +272,8 @@ pub fn savefile_abi_exportable(
             "Savefile does not support generic traits."
         );
     }
+    let mut send = false;
+    let mut sync = false;
     for supertrait in parsed.supertraits.iter() {
         match supertrait {
             TypeParamBound::Trait(trait_bound) => {
@@ -283,7 +285,10 @@ pub fn savefile_abi_exportable(
                     match id.as_str() {
                         "Copy" => abort!(seg.span(), "Savefile does not support Copy bounds for traits. The reason is savefile-abi needs to generate a wrapper, and this wrapper can't be copy."),
                         "Clone" => abort!(seg.span(), "Savefile does not support Clone bounds for traits. The reason is savefile-abi needs to generate a wrapper, and this wrapper can't be clone."),
-                        "Sync"|"Send"|"Debug" => {/* these are ok, the wrappers actually do implement these*/}
+                        /* these are ok, the wrappers actually do implement these*/
+                        "Sync" => { sync = true;}
+                        "Send" => { send = true;}
+                        "Debug" => {}
                         _ => abort!(seg.span(), "Savefile does not support bounds for traits. The reason is savefile-abi needs to generate a wrapper, and this wrapper can't fulfill implement arbitrary bounds."),
                     }
                 }
@@ -500,7 +505,9 @@ pub fn savefile_abi_exportable(
             fn get_definition( version: u32) -> AbiTraitDefinition {
                 AbiTraitDefinition {
                     name: #trait_name_str.to_string(),
-                    methods: vec! [ #(#method_metadata,)* ]
+                    methods: vec! [ #(#method_metadata,)* ],
+                    sync: #sync,
+                    send: #send
                 }
             }
 
