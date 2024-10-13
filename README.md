@@ -79,6 +79,12 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.13
+
+Improve handling of Sync- and Send-bounds. This should fix an issue where
+removing the Send-bound of an interface, and then using a client not providing a Send bound to call
+an older implementation that did require it, was not detected. 
+
 ## 0.17.12
 
 Make savefile-abi support Result containing boxed dyn traits in method call return position.
