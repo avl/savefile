@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound, TypeTuple};
+use syn::{GenericArgument, Path, PathArguments, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -158,7 +158,8 @@ pub(crate) enum ArgType {
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
     Result(Box<ArgType>, Box<ArgType>),
-    Trait(Ident, bool /*ismut self*/),
+    Trait(TokenStream, bool /*ismut self*/),
+    Future(TokenStream),
     Fn(
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
         Vec<Type>,   /*arg types*/
@@ -186,6 +187,7 @@ pub(crate) fn parse_box_type(
     extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
+    is_box: bool,
 ) -> ArgType {
     let location;
     if is_return_value {
@@ -224,9 +226,13 @@ pub(crate) fn parse_box_type(
                         is_return_value,
                         &mut *name_generator,
                         extra_definitions,
-                        true,
+                        false,
                         is_mut_ref,
+                        true
                     ) {
+                        ArgType::Future(output) => {
+                            ArgType::Future(output)
+                        }
                         ArgType::Result(_,_) => {
                             abort!(
                                 first_gen_arg.span(),
@@ -295,7 +301,9 @@ fn parse_type(
     extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
+    is_boxed: bool,
 ) -> ArgType {
+    println!("PArsing {}, is ref {:?}", arg_name, is_reference);
     let location;
     if is_return_value {
         location = format!("In return value of method '{}'", method_name);
@@ -325,7 +333,7 @@ fn parse_type(
             } else {
                 is_static_lifetime = false;
             }
-            if is_reference {
+            if is_reference || is_boxed {
                 abort!(typ.span(), "{}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", location, typ.to_token_stream());
             }
 
@@ -339,6 +347,7 @@ fn parse_type(
                 extra_definitions,
                 true,
                 typref.mutability.is_some(),
+                is_boxed
             );
             if let ArgType::Str(_) = inner {
                 return ArgType::Str(is_static_lifetime); //Str is a special case, it is always a reference
@@ -352,7 +361,7 @@ fn parse_type(
             rawtype = typ;
         }
         Type::Slice(slice) => {
-            if !is_reference {
+            if !is_reference || is_boxed {
                 abort!(
                     slice.span(),
                     "{}: Slices must always be behind references. Try adding a '&' to the type: {}",
@@ -378,14 +387,15 @@ fn parse_type(
                 extra_definitions,
                 is_reference,
                 is_mut_ref,
+                is_boxed
             );
             return ArgType::Slice(Box::new(argtype));
         }
         Type::TraitObject(trait_obj) => {
-            if !is_reference {
+            if !is_reference && !is_boxed {
                 abort!(
                     trait_obj.span(),
-                    "{}: Trait objects must always be behind references. Try adding a '&' to the type: {}",
+                    "{}: Trait objects must always be behind references or boxes. Try adding a '&' to the type: {}",
                     location,
                     typ.to_token_stream()
                 );
@@ -448,8 +458,8 @@ fn parse_type(
                         abort!(bound.ident.span(), "{}: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead..", location);
                     }
 
-                    if bound.ident == "FnMut" && !is_mut_ref {
-                        abort!(bound.ident.span(), "{}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", location);
+                    if bound.ident == "FnMut" && !is_boxed && !is_mut_ref {
+                        abort!(bound.ident.span(), "{}: When using FnMut, it must be referenced using &mut or Box<..>, not &. Otherwise, it is impossible to call.", location);
                     }
                     let fn_decl = bound.to_token_stream();
                     match &bound.arguments {
@@ -460,7 +470,7 @@ fn parse_type(
                                 fn_decl,
                                 pararg.inputs.iter().cloned().collect(),
                                 pararg.output.clone(),
-                                is_mut_ref,
+                                bound.ident == "FnMut",
                                 sync,
                                 send
                             );
@@ -472,7 +482,33 @@ fn parse_type(
                             )
                         }
                     }
-                } else {
+                } else if bound.ident == "Future" {
+                    for bound in trait_obj.bounds.iter() {
+                        match bound{
+                            TypeParamBound::Trait(t) => {
+                                if t.lifetimes.is_some() {
+                                    abort!(t.span(), "{}: Savefile does not support lifetimes in Futures", location);
+                                }
+                                match t.modifier {
+                                    TraitBoundModifier::None => {}
+                                    TraitBoundModifier::Maybe(q) => {
+                                        abort!(q.span(), "{}: Unexpected ?-token", location)
+
+                                    }
+                                }
+                                if !is_boxed {
+                                    abort!(bound.span(), "{}: Savefile only supports boxed futures, not unboxed futures.", location);
+                                }
+                                return ArgType::Future(bound.to_token_stream());
+                            }
+                            TypeParamBound::Lifetime(_) => {
+                                abort!(bound.span(), "{}: Savefile does not support lifetimes in Futures", location);
+                            }
+                        }
+                    }
+                    abort!(trait_obj.span(), "{}: Future did not have output type specified. Try adding Future<Output=mytype>.", location);
+                }
+                else {
                     if sync {
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Sync instead of adding the bound here, like so: trait {} : Sync.",
                             location, bound.ident, bound.ident);
@@ -481,7 +517,8 @@ fn parse_type(
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Send instead of adding the bound here, like so: trait {} : Send.",
                             location, bound.ident, bound.ident);
                     }
-                    return ArgType::Trait(bound.ident.clone(), is_mut_ref);
+                    println!("Bound: {:?}", bound);
+                    return ArgType::Trait(bound.to_token_stream(), is_mut_ref);
                 }
             } else {
                 abort!(
@@ -517,8 +554,9 @@ fn parse_type(
                     typ,
                     name_generator,
                     extra_definitions,
-                    is_reference,
+                    false,
                     is_mut_ref,
+                    is_boxed
                 );
             } else if last_seg.ident == "Result"  && is_return_value {
                 if path.path.segments.len() != 1 {
@@ -553,6 +591,7 @@ fn parse_type(
                                             extra_definitions,
                                             is_reference,
                                             is_mut_ref,
+                                            is_boxed
                                         )));
                                 }
                                 GenericArgument::Lifetime(_) => {
@@ -627,6 +666,7 @@ fn mutsymbol(ismut: bool) -> TokenStream {
         quote! {}
     }
 }
+
 
 impl ArgType {
     fn get_instruction(
@@ -1001,6 +1041,9 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
+            ArgType::Future(output) => {
+                compile_error!("implement!")
+            }
             ArgType::Result(ok_type, err_type) => {
                 let ok_instruction = ok_type.get_instruction(
                     version,
@@ -1096,6 +1139,7 @@ pub(super) fn generate_method_definitions(
     ret_type: Type,
     no_return: bool, //Returns ()
     receiver_is_mut: bool,
+    receiver_is_pin: bool, //TODO: Way too many bool parameters! (And too many parameters)
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
     extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
@@ -1127,6 +1171,7 @@ pub(super) fn generate_method_definitions(
             extra_definitions,
             false,
             false,
+            false
         );
         callee_trampoline_variable_declaration.push(quote! {let #prefixed_arg_name;});
 
@@ -1174,17 +1219,30 @@ pub(super) fn generate_method_definitions(
     let callee_real_method_invocation_except_args;
     if receiver_is_mut {
         callee_real_method_invocation_except_args =
-            quote! { unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name };
+            if receiver_is_pin {
+                quote! { unsafe { Pin::new_unchecked( &mut *trait_object.as_mut_ptr::<dyn #trait_name>() ) }.#method_name }
+            } else {
+                quote! { unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name }
+            };
     } else {
         callee_real_method_invocation_except_args =
             quote! { unsafe { &*trait_object.as_const_ptr::<dyn #trait_name>() }.#method_name };
     }
 
+    let receiver_type;
     //let receiver_mut_str = receiver_mut.to_string();
-    let receiver_mut = if receiver_is_mut {
-        quote!(mut)
+    let receiver = if receiver_is_mut {
+        if receiver_is_pin {
+            receiver_type = quote!(ReceiverType::PinMut);
+            quote!(self: Pin<&mut Self>)
+        } else {
+            receiver_type = quote!(ReceiverType::Mut);
+            quote!(&mut self)
+        }
     } else {
-        quote! {}
+        receiver_type = quote!(ReceiverType::Shared);
+        assert!(!receiver_is_pin);
+        quote! {&self}
     };
     let return_value_schema;
 
@@ -1215,6 +1273,7 @@ pub(super) fn generate_method_definitions(
             extra_definitions,
             false,
             false,
+            false
         );
         if let ArgType::Reference(..) = &parsed_ret_type {
             abort!(
@@ -1279,7 +1338,7 @@ pub(super) fn generate_method_definitions(
     let caller_method_trampoline = quote! {
         // TODO: Determine if we should use inline here or not? #[inline]
         #[inline]
-        fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
+        fn #method_name(#receiver, #(#caller_fn_arg_list,)*) #ret_declaration {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
 
             let Some(callee_method_number) = info.callee_method_number else {
@@ -1340,6 +1399,7 @@ pub(super) fn generate_method_definitions(
             name: #method_name_str.to_string(),
             info: AbiMethodInfo {
                 return_value: { let mut context = WithSchemaContext::new(); let context = &mut context; #return_value_schema},
+                receiver: #receiver_type,
                 arguments: vec![ #(#metadata_arguments,)* ],
             }
         }

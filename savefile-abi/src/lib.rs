@@ -313,9 +313,9 @@ use std::mem::MaybeUninit;
 use std::panic::catch_unwind;
 use std::path::Path;
 use std::ptr::null;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::{ptr, slice};
-
+use std::task::Wake;
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
 
@@ -1726,3 +1726,27 @@ pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), 
     }
     Ok(())
 }
+
+
+#[doc(hidden)]
+pub struct AbiWaker {
+    #[doc(hidden)]
+    pub waker: Mutex<Box<dyn FnMut() + Send + Sync>>
+}
+impl Wake for AbiWaker {
+    fn wake(self: Arc<Self>) {
+        println!("Wake called!");
+        match Arc::try_unwrap(self) {
+            Ok(mut waker) => {
+                println!("Single user of waker - optimal");
+                (*waker.waker.get_mut().unwrap())();
+            }
+            Err(arc) => {
+                println!("Mutex locking, calling waker");
+                let mut guard = arc.waker.lock().unwrap();
+                (*guard)();
+            }
+        }
+    }
+}
+

@@ -36,7 +36,7 @@ use syn::__private::bool;
 use syn::spanned::Spanned;
 use syn::token::{Paren};
 use syn::Type::Tuple;
-use syn::{DeriveInput, FnArg, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
+use syn::{DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -254,7 +254,7 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
-        use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, get_result_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
+        use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, get_result_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,ReceiverType,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
         use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
@@ -339,6 +339,7 @@ pub fn savefile_abi_exportable(
                     format!("{}_{}", name_baseplate, current_name_index)
                 };
                 let mut receiver_is_mut = false;
+                let mut receiver_is_pin = false;
                 let ret_type: Type;
                 let ret_declaration;
                 let no_return;
@@ -366,31 +367,84 @@ pub fn savefile_abi_exportable(
                         method_name
                     )
                 });
-                if let FnArg::Receiver(recv) = self_arg {
-                    if let Some(reference) = &recv.reference {
-                        if reference.1.is_some() {
-                            abort!(
+                match self_arg {
+                    FnArg::Receiver(recv) => {
+                        if let Some(reference) = &recv.reference {
+                            if reference.1.is_some() {
+                                abort!(
                                 reference.1.as_ref().unwrap().span(),
                                 "Method '{}' has a lifetime for 'self' argument. This is not supported by savefile-abi",
                                 method_name
                             );
-                        }
-                        if recv.mutability.is_some() {
-                            receiver_is_mut = true;
-                        }
-                    } else {
-                        abort!(
+                            }
+                            if recv.mutability.is_some() {
+                                receiver_is_mut = true;
+                            }
+                        } else {
+                            abort!(
                             self_arg.span(),
                             "Method '{}' takes 'self' by value. This is not supported by savefile-abi. Use &self",
                             method_name
                         );
+                        }
                     }
-                } else {
-                    abort!(
-                        method.sig.span(),
-                        "Method '{}' must have 'self'-parameter (savefile-abi does not support methods without self)",
-                        method_name
-                    );
+                    FnArg::Typed(pat) => {
+                        let unsupported = || {abort!(
+                                        method.sig.span(),
+                                        "Method '{}' has an unsupported 'self'-parameter. Try '&self', '&mut self', or 'self: Pin<&mut Self>'. Not supported: {}",
+                                        method_name, self_arg.to_token_stream()
+                                    );
+                        };
+                        match &*pat.pat {
+                            Pat::Ident(ident) if ident.ident == "self" => {
+                                if ident.by_ref.is_some() || ident.mutability.is_some() {
+                                    println!("1");
+                                    unsupported();
+                                }
+                                if let Type::Path(path) = &*pat.ty {
+                                    if path.path.segments.len() != 1 {
+                                        println!("2");
+                                        unsupported();
+                                    }
+                                    let seg = &path.path.segments[0];
+                                    if seg.ident != "Pin" {
+                                        println!("3");
+                                        unsupported();
+                                    }
+                                    let PathArguments::AngleBracketed(args) = &seg.arguments else {unsupported();unreachable!();};
+                                    if args.args.len() != 1 {
+                                        println!("4");
+                                        unsupported();
+                                    }
+                                    let arg = &args.args[0];
+                                    let GenericArgument::Type(Type::Reference(typref)) = arg else{unsupported();unreachable!();};
+                                    if typref.mutability.is_none() {
+                                        abort!(
+                                            method.sig.span(),
+                                            "Method '{}' has an unsupported 'self'-parameter. Non-mutable references in Pin are presently not supported: {}",
+                                            method_name, self_arg.to_token_stream()
+                                        );
+                                    }
+                                    let Type::Path(typepath) = &*typref.elem else {unsupported();unreachable!();};
+                                    if typepath.path.segments.len() != 1 { unsupported(); unreachable!()};
+                                    if typepath.path.segments[0].ident != "Self" {
+                                        println!("5: {:?}", typepath.path.segments[0].ident);
+                                        unsupported();
+                                    }
+                                    receiver_is_mut = true;
+                                    receiver_is_pin = true;
+
+                                } else {
+                                    println!("6");
+                                    unsupported();
+                                }
+                            }
+                            _ => {
+                                println!("7");
+                                unsupported();
+                            }
+                        }
+                    }
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
                 for arg in method.sig.inputs.iter().skip(1) {
@@ -454,6 +508,7 @@ pub fn savefile_abi_exportable(
                     ret_type,
                     no_return,
                     receiver_is_mut,
+                    receiver_is_pin,
                     args,
                     &mut temp_name_generator,
                     &mut extra_definitions,

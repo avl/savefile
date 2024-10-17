@@ -3106,15 +3106,34 @@ impl Serialize for AbiMethodArgument {
     }
 }
 
+/// The type of the 'self'-parameter
+#[non_exhaustive]
+#[derive(PartialEq,Debug,Clone,Copy)]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+#[repr(u8)]
+pub enum ReceiverType {
+    /// &self
+    Shared, // &self
+    /// &mut self
+    Mut, // &mut self
+    /// self: Pin<&mut Self>
+    PinMut // self: Pin<&mut Self>
+}
+
 /// Return value and argument types for a method
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct AbiMethodInfo {
     /// The return value type of the method
     pub return_value: Schema,
+    /// What type is the 'self'-parameter of this method?
+    pub receiver: ReceiverType,
     /// The arguments of the method.
     pub arguments: Vec<AbiMethodArgument>,
 }
+
+
+
 impl Packed for AbiMethodInfo {}
 impl WithSchema for AbiMethodInfo {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
@@ -3125,6 +3144,12 @@ impl WithSchema for AbiMethodInfo {
 impl Serialize for AbiMethodInfo {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.return_value.serialize(serializer)?;
+        serializer.write_u8(
+            match self.receiver {
+                ReceiverType::Shared => {100}
+                ReceiverType::Mut => {101}
+                ReceiverType::PinMut => {102}
+            })?;
         self.arguments.serialize(serializer)?;
         Ok(())
     }
@@ -3133,6 +3158,12 @@ impl Deserialize for AbiMethodInfo {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(AbiMethodInfo {
             return_value: <_ as Deserialize>::deserialize(deserializer)?,
+            receiver: match deserializer.read_u8()? {
+                100 => ReceiverType::Shared,
+                101 => ReceiverType::Mut,
+                102 => ReceiverType::PinMut,
+                _ => return Err(SavefileError::IncompatibleSavefileLibraryVersion)
+            },
             arguments: <_ as Deserialize>::deserialize(deserializer)?,
         })
     }

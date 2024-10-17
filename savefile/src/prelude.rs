@@ -13,7 +13,7 @@ pub use byteorder::{LittleEndian, ReadBytesExt};
 pub use memoffset::offset_of;
 pub use memoffset::offset_of_tuple;
 pub use memoffset::span_of;
-pub use {super::AbiMethod, super::AbiMethodArgument, super::AbiMethodInfo, super::AbiTraitDefinition};
+pub use {super::AbiMethod, super::AbiMethodArgument, super::AbiMethodInfo, super::AbiTraitDefinition, super::ReceiverType};
 
 #[cfg(feature = "ring")]
 pub use super::{load_encrypted_file, save_encrypted_file, CryptoReader, CryptoWriter};

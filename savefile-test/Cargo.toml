@@ -32,6 +32,7 @@ quickcheck="1.0"
 quickcheck_macros ="1.0"
 insta = { version = "1.38.0", features = ["yaml"] }
 nalgebra="0.33"
+tokio="1.40"
 [build-dependencies]
 rustc_version="0.4"
 
