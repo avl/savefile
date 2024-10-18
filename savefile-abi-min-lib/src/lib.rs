@@ -10,7 +10,7 @@ use savefile_abi::AbiWaker;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait AdderInterface {
-    //fn boxed_future(&self) -> Box<dyn Fn()>;
+    fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin>;
    // fn pinned_self(&self, arg: u32) -> Box<dyn Future<Output = u32>>;
 }
 /*
@@ -26,7 +26,7 @@ pub trait Future {
 */
 
 
-
+/*
 #[savefile_abi_exportable(version = 0)]
 pub trait FutureWrapper {
     fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<u32>;
@@ -70,7 +70,7 @@ impl FutureWrapper for Box<dyn Future<Output = u32>> {
         }
     }
 }
-
+*/
 
 /*
 

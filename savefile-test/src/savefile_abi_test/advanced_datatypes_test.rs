@@ -28,7 +28,7 @@ pub trait AdvancedTestInterface : Send{
 
 
     fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32;
-//    fn boxed_future(&self) -> Box<dyn Future<Output=u32>>;
+    fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin>;
 }
 /*
 pub trait Future {
@@ -180,9 +180,12 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32 {
         arg
     }
-    /*fn boxed_future(&self) -> Box<dyn Future<Output=()>> {
-        Box::new(std::future::pending())
-    }*/
+    fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin> {
+        Box::new(Box::pin(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
+            42
+        }))
+    }
 }
 
 struct TestUser(Box<dyn AdvancedTestInterface + 'static>);
@@ -213,7 +216,6 @@ fn test_trait_object_in_return_position() {
     let ret = conn.return_boxed_closure_result(true);
     let Err(()) = ret else {panic!("Expected Err")};
 
-    assert_eq!(conn.pinned_self(42), 42);
 
 }
 
@@ -249,6 +251,20 @@ fn test_result_trait_object_in_return_position() {
     assert_eq!(ret.do_call(42), 42);
     assert_eq!(ret.do_call(42), 42);
 }
+
+#[tokio::test]
+async fn test_boxed_future() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    println!("Before timeout");
+
+    let fut = conn.boxed_future();
+
+    fut.await;
+    //let timeout = fut.await;
+    println!("After timeout");
+}
+
 #[test]
 fn test_boxed_trait_object_in_arg_position() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});

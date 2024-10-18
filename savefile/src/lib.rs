@@ -3362,6 +3362,7 @@ impl AbiTraitDefinition {
 #[derive(Debug, PartialEq, Clone)]
 #[repr(C, u32)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Schema {
     /// Represents a struct. Custom implementations of Serialize are encouraged to use this format.
     Struct(SchemaStruct),
@@ -3427,6 +3428,8 @@ pub enum Schema {
     Recursion(usize /*depth*/),
     /// std::io::Error
     StdIoError,
+    /// Savefile-abi boxed Future
+    Future(AbiTraitDefinition),
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3463,6 +3466,7 @@ impl Schema {
                 format!("<recursion {}>", depth)
             }
             Schema::StdIoError => "stdioerror".into(),
+            Schema::Future(_) => {"future".into()}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3618,6 +3622,7 @@ impl Schema {
             Schema::Trait(_, _) => None,
             Schema::Recursion(_) => None,
             Schema::StdIoError => None,
+            Schema::Future(_) => None,
         }
     }
 }
@@ -3798,6 +3803,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                     path, adepth, bdepth
                 ));
             }
+        }
+        (Schema::Future(a), Schema::Future( b)) => {
+            return diff_abi_def(a, b, path);
         }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
@@ -4328,6 +4336,11 @@ impl Serialize for Schema {
                 serializer.write_u8(17)?;
                 Ok(())
             }
+            Schema::Future(o) => {
+                serializer.write_u8(18)?;
+                o.serialize(serializer)?;
+                Ok(())
+            }
         }
     }
 }
@@ -4367,6 +4380,9 @@ impl Deserialize for Schema {
             ),
             16 => Schema::Recursion(<_ as Deserialize>::deserialize(deserializer)?),
             17 => Schema::StdIoError,
+            18 => Schema::Future(
+                <_ as Deserialize>::deserialize(deserializer)?
+            ),
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt, or future schema, schema variant {} encountered", c),

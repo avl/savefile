@@ -634,6 +634,10 @@ pub struct AbiConnection<T: ?Sized> {
 unsafe impl<T: ?Sized> Sync for AbiConnection<T> {}
 unsafe impl<T: ?Sized> Send for AbiConnection<T> {}
 
+impl<T> Unpin for AbiConnection<T> {
+
+}
+
 /// A trait object together with its entry point
 #[repr(C)]
 #[derive(Debug)]
@@ -1050,6 +1054,15 @@ fn arg_layout_compatible(
     is_return_position: bool
 ) -> Result<bool, SavefileError> {
     match (a_native, b_native) {
+        (Schema::Future(_a), Schema::Future(_b)) => {
+            let (Schema::Future(effective_a2), Schema::Future(effective_b2)) = (a_effective, b_effective)
+            else {
+                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+            };
+            effective_a2
+                .verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
+            Ok(true)
+        }
         (Schema::FnClosure(a1, _a2), Schema::FnClosure(b1, _b2)) => {
             let (Schema::FnClosure(effective_a1, effective_a2), Schema::FnClosure(effective_b1, effective_b2)) =
                 (a_effective, b_effective)

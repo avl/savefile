@@ -254,11 +254,18 @@ pub fn savefile_abi_exportable(
     let uses = quote_spanned! { defspan =>
         extern crate savefile;
         extern crate savefile_abi;
+        extern crate savefile_derive;
         use savefile::prelude::{Packed, Schema, SchemaPrimitive, WithSchema, WithSchemaContext, get_schema, get_result_schema, Serializer, Serialize, Deserializer, Deserialize, SavefileError, deserialize_slice_as_vec, ReadBytesExt,LittleEndian,ReceiverType,AbiMethodArgument, AbiMethod, AbiMethodInfo,AbiTraitDefinition};
-        use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light};
+        use savefile_abi::{parse_return_value_impl,abi_result_receiver,abi_boxed_trait_receiver, FlexBuffer, AbiExportable, TraitObject, PackagedTraitObject, Owning, AbiErrorMsg, RawAbiCallResult, AbiConnection, AbiConnectionMethod, AbiProtocol, abi_entry_light, AbiWaker};
         use std::collections::HashMap;
         use std::mem::MaybeUninit;
         use std::io::Cursor;
+        use std::pin::Pin;
+        use std::marker::Unpin;
+        use std::future::Future;
+        use std::task::{Waker, Poll, Context};
+        use std::sync::Arc;
+        use savefile_derive::savefile_abi_exportable;
     };
 
     let mut method_metadata: Vec<TokenStream> = vec![];

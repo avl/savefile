@@ -2,10 +2,12 @@ use crate::common::{compile_time_check_reprc, compile_time_size};
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::ToTokens;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{GenericArgument, Path, PathArguments, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
+use crate::savefile_abi::WrapperKey::FutureWrapper;
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -16,6 +18,33 @@ const FAT_POINTER_ALIGNMENT: usize = POINTER_SIZE;
 const MEGA_FAT_POINTER: (usize, usize) = (FAT_POINTER_SIZE + POINTER_SIZE, POINTER_SIZE);
 const FAT_POINTER: (usize, usize) = (2 * POINTER_SIZE, POINTER_SIZE);
 
+
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+pub enum WrapperKey {
+    FnWrapper(FnWrapperKey),
+    FutureWrapper(FutureWrapperKey)
+}
+
+#[derive(Debug, Clone)]
+struct FutureWrapperKey {
+    output_type: TokenStream
+}
+
+impl PartialEq for FutureWrapperKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.output_type.to_string() == other.output_type.to_string()
+    }
+}
+impl Eq for FutureWrapperKey {
+
+}
+impl Hash for FutureWrapperKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.output_type.to_string().hash(state);
+    }
+}
+
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub(crate) struct FnWrapperKey {
     fnkind: Ident,
@@ -23,10 +52,12 @@ pub(crate) struct FnWrapperKey {
     args: Vec<Type>,
     ismut: bool,
     owning: bool,
+    sync: bool,
+    send: bool,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ClosureWrapperNames {
+pub(crate) struct ClosureFutureWrapperNames {
     trait_name: Ident,
     wrapper_struct_name: Ident,
 }
@@ -42,24 +73,112 @@ fn get_type(ret_type: &ReturnType) -> Type {
 
 static ID_GEN: AtomicU64 = AtomicU64::new(0);
 
+
+fn emit_future_helpers(
+    output_type: TokenStream,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
+) -> ClosureFutureWrapperNames {
+    let key = WrapperKey::FutureWrapper(FutureWrapperKey {
+        output_type: output_type.clone(),
+    });
+    if let Some((names, _)) = extra_definitions.get(&key) {
+        return names.clone();
+    }
+
+    let cnt = ID_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let futurer_wrapper_trait_name = Ident::new(
+        &format!("__{}_future_wrapper", cnt),
+        Span::call_site(),
+    );
+    let futurer_wrapper_struct_name = Ident::new(
+        &format!("__{}_future_wrapper_struct", cnt),
+        Span::call_site(),
+    );
+    let names = ClosureFutureWrapperNames {
+        wrapper_struct_name: futurer_wrapper_struct_name.clone(),
+        trait_name: futurer_wrapper_trait_name.clone(),
+    };
+
+    let futureWrapper = futurer_wrapper_trait_name;
+
+
+    let output = quote! {
+
+        pub struct #futurer_wrapper_struct_name {
+            future: AbiConnection<dyn #futureWrapper>
+        }
+
+        #[savefile_abi_exportable(version = 0)]
+        pub trait #futureWrapper {
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type>;
+        }
+        impl Unpin for #futurer_wrapper_struct_name {
+
+        }
+        impl Future for #futurer_wrapper_struct_name {
+            type Output = #output_type;
+
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                let mut waker = Some(cx.waker().clone());
+                //let mut pinned = std::pin::pin!(&mut self.future);
+                match unsafe { self.map_unchecked_mut(|s|&mut s.future)}.abi_poll(Box::new(move ||{waker.take().map(|x|x.wake());})) {
+                    Some(temp) => {
+                        println!("Poll::ready!");
+                        Poll::Ready(temp)
+                    }
+                    None => {
+                        println!("Poll::pending!");
+                        Poll::Pending
+                    }
+                }
+            }
+        }
+        impl #futureWrapper for Box<dyn Future<Output = #output_type> + Unpin> {
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type> {
+                println!("abi_poll");
+                let waker = Waker::from(Arc::new(AbiWaker {
+                    waker: waker.into()
+                }));
+                let mut context = Context::from_waker(&waker);
+
+                println!("delegating");
+                match unsafe { self.map_unchecked_mut(|s|&mut **s)}.poll(&mut context) {
+                    Poll::Ready(t) => {
+                        println!("Done!");
+                        Some(t)
+                    }
+                    Poll::Pending => {
+                        println!("Pending!");
+                        None
+                    }
+                }
+            }
+        }
+    };
+    extra_definitions.insert(key, (names.clone(), output));
+    names
+}
+
 fn emit_closure_helpers(
     version: u32,
     args: &[Type],
     return_type: ReturnType,
     ismut: bool,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     fnkind: &Ident, //Fn or FnMut
     owning: bool,
     sync: bool,
     send: bool,
-) -> ClosureWrapperNames /*wrapper name*/ {
-    let key = FnWrapperKey {
+) -> ClosureFutureWrapperNames /*wrapper name*/ {
+    let key = WrapperKey::FnWrapper(FnWrapperKey {
         fnkind: fnkind.clone(),
         ismut,
         owning,
         args: args.iter().cloned().collect(),
         ret: get_type(&return_type),
-    };
+        sync,
+        send
+    });
 
     let syncsend_bound = match (sync,send) {
         (false, false) => quote!(),
@@ -83,7 +202,7 @@ fn emit_closure_helpers(
         Span::call_site(),
     );
     let temp_trait_name_wrapper = Ident::new(&format!("{}wrapper", temp_trait_name), Span::call_site());
-    let names = ClosureWrapperNames {
+    let names = ClosureFutureWrapperNames {
         wrapper_struct_name: temp_trait_name_wrapper.clone(),
         trait_name: temp_trait_name.clone(),
     };
@@ -184,7 +303,7 @@ pub(crate) fn parse_box_type(
     arg_name: &str,
     typ: &Type,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
     is_box: bool,
@@ -298,12 +417,12 @@ fn parse_type(
     method_name: &Ident,
     is_return_value: bool,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
     is_boxed: bool,
 ) -> ArgType {
-    println!("PArsing {}, is ref {:?}", arg_name, is_reference);
+
     let location;
     if is_return_value {
         location = format!("In return value of method '{}'", method_name);
@@ -430,6 +549,9 @@ fn parse_type(
                             send = true;
                             return false;
                         }
+                        if seg.ident == "Unpin" {
+                            return false; //TODO: IS this safe?
+                        }
                         true
                     })
                     .collect();
@@ -483,6 +605,7 @@ fn parse_type(
                         }
                     }
                 } else if bound.ident == "Future" {
+                    //println!("Bounds: {:#?}", trait_obj);
                     for bound in trait_obj.bounds.iter() {
                         match bound{
                             TypeParamBound::Trait(t) => {
@@ -499,7 +622,38 @@ fn parse_type(
                                 if !is_boxed {
                                     abort!(bound.span(), "{}: Savefile only supports boxed futures, not unboxed futures.", location);
                                 }
-                                return ArgType::Future(bound.to_token_stream());
+                                if t.path.segments.len() != 1 {
+                                    abort!(bound.span(), "{}: Boxed futures can only implement the Future trait", location);
+                                }
+                                let seg = &t.path.segments[0];
+                                match &seg.arguments {
+                                    PathArguments::AngleBracketed(arg) => {
+                                        if arg.args.len() != 1 {
+                                            abort!(arg.args.span(), "{}: Futures must have a a single Output bound.", location);
+                                        }
+                                        let output = &arg.args[0];
+
+                                        match output {
+                                            GenericArgument::Binding(t) => {
+                                                if t.ident != "Output" {
+                                                    abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
+                                                }
+                                                return ArgType::Future(t.ty.to_token_stream());
+                                            }
+                                            GenericArgument::Lifetime(_) |
+                                            GenericArgument::Const(_) |
+                                            GenericArgument::Type(_) |
+                                            GenericArgument::Constraint(_) => {
+                                                abort!(output.span(), "{}: Futures must have a a single associated type binding, named 'Output' (Future<Output=?>).", location);
+                                            }
+                                        }
+
+                                    }
+                                    PathArguments::None |
+                                    PathArguments::Parenthesized(_) => {
+                                        abort!(seg.arguments.span(), "{}: Future must have arguments within angle brackets: Future<...>.", location);
+                                    }
+                                }
                             }
                             TypeParamBound::Lifetime(_) => {
                                 abort!(bound.span(), "{}: Savefile does not support lifetimes in Futures", location);
@@ -677,7 +831,7 @@ impl ArgType {
         arg_name: &TokenStream, //always just 'arg_orig_name'
         nesting_level: u32,
         take_ownership: bool,
-        extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+        extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
         prefixed_arg_name: &Ident,
     ) -> TypeInstruction {
         let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name, nesting_level), Span::call_site());
@@ -724,10 +878,10 @@ impl ArgType {
                         }
                     }
                     ArgType::Boxed(inner) => match &**inner {
-                        ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
+                        ArgType::Fn(..) | ArgType::Trait(..) | ArgType::Future(..) => Some(MEGA_FAT_POINTER),
                         _ => None,
                     },
-                    ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
+                    ArgType::Fn(..) | ArgType::Trait(..)  | ArgType::Future(..) => Some(MEGA_FAT_POINTER),
                     ArgType::Str(_) => None,
                     ArgType::Reference(..) => None,
                     ArgType::Slice(_) => None,
@@ -1042,7 +1196,47 @@ impl ArgType {
                 }
             }
             ArgType::Future(output) => {
-                compile_error!("implement!")
+
+                let wrapper_names = emit_future_helpers(
+                    output.clone(), &mut *extra_definitions
+                );
+
+                let futurer_wrapper_struct_name = wrapper_names.wrapper_struct_name;
+                let temp_trait_type = wrapper_names.trait_name;
+                TypeInstruction {
+                    deserialized_type: quote! { AbiConnection::<dyn #temp_trait_type> },
+                    callee_trampoline_temp_variable_declaration1: quote! {
+                        let #temp_arg_name;
+                    },
+                    callee_trampoline_variable_deserializer1: quote! {
+                        {
+                            #temp_arg_name = Box::new(unsafe {
+                                #futurer_wrapper_struct_name {
+                                    future: AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::Owned)?
+                                }
+                            });
+                            #temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer_temp1: quote! {
+
+                    },
+                    caller_arg_serializer1: quote! {
+                        {
+                            let temp : Box<dyn #temp_trait_type + '_> = Box::new(#prefixed_arg_name );
+                            let temp = std::boxed::Box::into_raw(temp);
+                            PackagedTraitObject::new_from_ptr::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer)
+                        }
+                    },
+                    schema: quote!(
+                         Schema::Future( <dyn #temp_trait_type as AbiExportable >::get_definition(version))
+                    ),
+                    arg_type1: quote!(
+                        Box<dyn Future<Output=#output> + Unpin>
+                    ),
+                    known_size_align1: Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
+                    known_size_align_of_pointer1: None,
+                }
             }
             ArgType::Result(ok_type, err_type) => {
                 let ok_instruction = ok_type.get_instruction(
@@ -1142,7 +1336,7 @@ pub(super) fn generate_method_definitions(
     receiver_is_pin: bool, //TODO: Way too many bool parameters! (And too many parameters)
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
 ) -> MethodDefinitionComponents {
     let method_name_str = method_name.to_string();
 
