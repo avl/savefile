@@ -12,7 +12,7 @@ fn test() {}
 use savefile_derive::savefile_abi_exportable;
 use savefile_derive::Savefile;
 use std::future::Future;
-include!{"AdderInterface.rs"}
+
 
 #[test]
 fn test() {

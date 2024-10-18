@@ -181,6 +181,14 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
         arg
     }
     fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin> {
+        compile_error!("Verify:\
+unpin is right
+send + sync?
+compatibility checks?
+more?
+
+
+        ")
         Box::new(Box::pin(async move {
             tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
             42
