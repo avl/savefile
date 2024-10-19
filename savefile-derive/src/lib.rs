@@ -410,17 +410,14 @@ pub fn savefile_abi_exportable(
                         match &*pat.pat {
                             Pat::Ident(ident) if ident.ident == "self" => {
                                 if ident.by_ref.is_some() || ident.mutability.is_some() {
-                                    println!("1");
                                     unsupported();
                                 }
                                 if let Type::Path(path) = &*pat.ty {
                                     if path.path.segments.len() != 1 {
-                                        println!("2");
                                         unsupported();
                                     }
                                     let seg = &path.path.segments[0];
                                     if seg.ident != "Pin" {
-                                        println!("3");
                                         unsupported();
                                     }
                                     let PathArguments::AngleBracketed(args) = &seg.arguments else {
@@ -428,7 +425,6 @@ pub fn savefile_abi_exportable(
                                         unreachable!();
                                     };
                                     if args.args.len() != 1 {
-                                        println!("4");
                                         unsupported();
                                     }
                                     let arg = &args.args[0];
@@ -452,18 +448,15 @@ pub fn savefile_abi_exportable(
                                         unreachable!()
                                     };
                                     if typepath.path.segments[0].ident != "Self" {
-                                        println!("5: {:?}", typepath.path.segments[0].ident);
                                         unsupported();
                                     }
                                     receiver_is_mut = true;
                                     receiver_is_pin = true;
                                 } else {
-                                    println!("6");
                                     unsupported();
                                 }
                             }
                             _ => {
-                                println!("7");
                                 unsupported();
                             }
                         }

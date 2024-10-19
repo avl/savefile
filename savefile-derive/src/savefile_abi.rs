@@ -183,11 +183,9 @@ fn emit_future_helpers(
                 //let mut pinned = std::pin::pin!(&mut self.future);
                 match unsafe { self.map_unchecked_mut(|s|&mut s.future)}.abi_poll(Box::new(move ||{waker.take().map(|x|x.wake());})) {
                     Some(temp) => {
-                        println!("Poll::ready!");
                         Poll::Ready(temp)
                     }
                     None => {
-                        println!("Poll::pending!");
                         Poll::Pending
                     }
                 }
@@ -195,20 +193,16 @@ fn emit_future_helpers(
         }
         impl #futureWrapper for #box_fut_type {
             fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type> {
-                println!("abi_poll");
                 let waker = Waker::from(Arc::new(AbiWaker {
                     waker: waker.into()
                 }));
                 let mut context = Context::from_waker(&waker);
 
-                println!("delegating");
                 match #self_ref.poll(&mut context) {
                     Poll::Ready(t) => {
-                        println!("Done!");
                         Some(t)
                     }
                     Poll::Pending => {
-                        println!("Pending!");
                         None
                     }
                 }
@@ -679,7 +673,6 @@ fn parse_type(
                         }
                     }
                 } else if bound.ident == "Future" {
-                    //println!("Bounds: {:#?}", trait_obj);
                     let bound = trait_obj.bounds.iter().next().unwrap();
                     match bound {
                         TypeParamBound::Trait(t) => {
