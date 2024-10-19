@@ -24,7 +24,6 @@ pub trait AdderInterface {
     fn do_nothing(&self);
 
     fn async_add(&self, x: u32, y: u32) -> Pin<Box<dyn Future<Output = u32>>>;
-
 }
 impl Debug for dyn AdderInterface {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

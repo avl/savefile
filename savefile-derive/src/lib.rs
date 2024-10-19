@@ -26,17 +26,20 @@ use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
     path_to_string, FieldInfo,
 };
-use proc_macro2::{Span, TokenTree};
 use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenTree};
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 #[allow(unused_imports)]
 use std::iter::IntoIterator;
 use syn::__private::bool;
 use syn::spanned::Spanned;
-use syn::token::{Paren};
+use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple};
+use syn::{
+    DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat,
+    PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple,
+};
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -390,14 +393,15 @@ pub fn savefile_abi_exportable(
                             }
                         } else {
                             abort!(
-                            self_arg.span(),
-                            "Method '{}' takes 'self' by value. This is not supported by savefile-abi. Use &self",
-                            method_name
-                        );
+                                self_arg.span(),
+                                "Method '{}' takes 'self' by value. This is not supported by savefile-abi. Use &self",
+                                method_name
+                            );
                         }
                     }
                     FnArg::Typed(pat) => {
-                        let unsupported = || {abort!(
+                        let unsupported = || {
+                            abort!(
                                         method.sig.span(),
                                         "Method '{}' has an unsupported 'self'-parameter. Try '&self', '&mut self', or 'self: Pin<&mut Self>'. Not supported: {}",
                                         method_name, self_arg.to_token_stream()
@@ -419,13 +423,19 @@ pub fn savefile_abi_exportable(
                                         println!("3");
                                         unsupported();
                                     }
-                                    let PathArguments::AngleBracketed(args) = &seg.arguments else {unsupported();unreachable!();};
+                                    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+                                        unsupported();
+                                        unreachable!();
+                                    };
                                     if args.args.len() != 1 {
                                         println!("4");
                                         unsupported();
                                     }
                                     let arg = &args.args[0];
-                                    let GenericArgument::Type(Type::Reference(typref)) = arg else{unsupported();unreachable!();};
+                                    let GenericArgument::Type(Type::Reference(typref)) = arg else {
+                                        unsupported();
+                                        unreachable!();
+                                    };
                                     if typref.mutability.is_none() {
                                         abort!(
                                             method.sig.span(),
@@ -433,15 +443,20 @@ pub fn savefile_abi_exportable(
                                             method_name, self_arg.to_token_stream()
                                         );
                                     }
-                                    let Type::Path(typepath) = &*typref.elem else {unsupported();unreachable!();};
-                                    if typepath.path.segments.len() != 1 { unsupported(); unreachable!()};
+                                    let Type::Path(typepath) = &*typref.elem else {
+                                        unsupported();
+                                        unreachable!();
+                                    };
+                                    if typepath.path.segments.len() != 1 {
+                                        unsupported();
+                                        unreachable!()
+                                    };
                                     if typepath.path.segments[0].ident != "Self" {
                                         println!("5: {:?}", typepath.path.segments[0].ident);
                                         unsupported();
                                     }
                                     receiver_is_mut = true;
                                     receiver_is_pin = true;
-
                                 } else {
                                     println!("6");
                                     unsupported();
@@ -635,7 +650,7 @@ pub fn savefile_abi_exportable(
 }
 #[proc_macro_error]
 #[proc_macro]
-    pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let tokens = proc_macro2::TokenStream::from(item);
 
     let mut tokens_iter = tokens.into_iter();
@@ -652,7 +667,6 @@ pub fn savefile_abi_exportable(
         }
     } else {
         abort!(comma.span(), "Expected a comma (','). The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements, and these must be separated by a comma.");
-
     }
     let Some(trait_type) = tokens_iter.next() else {
         abort!(Span::call_site(), "The macro savefile_abi_export! requires two parameters. The first parameter must be the implementing type, the second is the trait it implements. Expected trait name.");
@@ -662,14 +676,16 @@ pub fn savefile_abi_exportable(
         abort!(extra.span(), "Unexpected token. The macro savefile_abi_export! requires exactly two parameters. The first parameter must be the implementing type, the second is the trait it implements.");
     }
 
-
     let defspan = Span::call_site();
     let uses = quote_spanned! { defspan =>
         extern crate savefile_abi;
         use savefile_abi::{AbiProtocol, AbiExportableImplementation, abi_entry,parse_return_value_impl};
     };
 
-    let abi_entry = Ident::new(("abi_entry_".to_string() + &trait_type.to_string()).as_str(), Span::call_site());
+    let abi_entry = Ident::new(
+        ("abi_entry_".to_string() + &trait_type.to_string()).as_str(),
+        Span::call_site(),
+    );
 
     let expanded = quote! {
         #[allow(clippy::needless_question_mark)]
@@ -2063,4 +2079,3 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
     expanded
 }
-

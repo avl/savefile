@@ -103,7 +103,6 @@ pub fn assert_roundtrip_by<E: Serialize + Deserialize + Debug>(sample: E, comp: 
     assert_eq!(f.position() as usize, f_internal_size);
 }
 
-
 pub fn assert_roundtrip_debug<E: Serialize + Deserialize + Debug>(sample: E) {
     let sample_debug_string = format!("{:?}", sample);
     let round_tripped = roundtrip(sample);
@@ -1422,9 +1421,7 @@ impl Introspect for ExampleWithoutAutomaticIntrospect {
 
 #[test]
 fn roundtrip_example_without_introspect() {
-    roundtrip(ExampleWithoutAutomaticIntrospect{
-        x: 42
-    });
+    roundtrip(ExampleWithoutAutomaticIntrospect { x: 42 });
 }
 
 #[cfg(test)]
@@ -1524,19 +1521,13 @@ pub fn test_unit_struct() {
 }
 #[test]
 fn roundtrip_io_error() {
-    fn assert_error_roundtrip(err: std::io::Error)  {
-        assert_roundtrip_by(
-            err,
-            |a,b|{
-                a.kind() == b.kind() &&
-                    a.to_string() == b.to_string()
-            }
-        );
+    fn assert_error_roundtrip(err: std::io::Error) {
+        assert_roundtrip_by(err, |a, b| a.kind() == b.kind() && a.to_string() == b.to_string());
     }
-    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrNotAvailable,"Hello"));
-    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrInUse,"Hello2"));
-    assert_error_roundtrip(std::io::Error::new(ErrorKind::Other,"Hello3"));
-    assert_error_roundtrip(std::io::Error::new(ErrorKind::TimedOut,"Hello4"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrNotAvailable, "Hello"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::AddrInUse, "Hello2"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::Other, "Hello3"));
+    assert_error_roundtrip(std::io::Error::new(ErrorKind::TimedOut, "Hello4"));
 }
 
 #[test]
@@ -1604,17 +1595,16 @@ fn test_systemtime() {
 
     roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000));
 
-
     roundtrip(SystemTime::UNIX_EPOCH + Duration::from_nanos(u64::MAX));
     roundtrip(SystemTime::UNIX_EPOCH - Duration::from_nanos(u64::MAX));
     roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(4_000_000_000));
     roundtrip(SystemTime::UNIX_EPOCH - Duration::from_secs(4_000_000_000));
 
-    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(58_000_000_000) + Duration::from_nanos((1u64)<<55));
-    roundtrip(SystemTime::UNIX_EPOCH - (Duration::from_secs(8_000_000_000) + Duration::from_nanos((1u64)<<55)));
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(58_000_000_000) + Duration::from_nanos((1u64) << 55));
+    roundtrip(SystemTime::UNIX_EPOCH - (Duration::from_secs(8_000_000_000) + Duration::from_nanos((1u64) << 55)));
 
-    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(365u64*86400 * 150_000_000_000)); //Test we can roundtrip dates 150 billion years into the future. It should be enough (oh man if this would ever come back to hurt us it would be funny ...)
-    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_secs(365u64*86400 * 15_000_000_000));
+    roundtrip(SystemTime::UNIX_EPOCH + Duration::from_secs(365u64 * 86400 * 150_000_000_000)); //Test we can roundtrip dates 150 billion years into the future. It should be enough (oh man if this would ever come back to hurt us it would be funny ...)
+    roundtrip(SystemTime::UNIX_EPOCH - Duration::from_secs(365u64 * 86400 * 15_000_000_000));
 }
 #[test]
 fn test_duration() {
@@ -1752,18 +1742,24 @@ fn dummy_test() {
 #[test]
 fn test_isometry() {
     let iso = nalgebra::Isometry3::<f64>::from_parts(
-        nalgebra::Point3::new(0.0,1.0,2.0).into(),
-        nalgebra::UnitQuaternion::from_euler_angles(0.0,1.0,2.0),
+        nalgebra::Point3::new(0.0, 1.0, 2.0).into(),
+        nalgebra::UnitQuaternion::from_euler_angles(0.0, 1.0, 2.0),
     );
     assert_roundtrip(iso);
 }
 #[test]
 fn test_points() {
-    let a = [nalgebra::Point3::new(1.0,2.0,3.0),nalgebra::Point3::new(4.0,5.0,6.0)];
+    let a = [
+        nalgebra::Point3::new(1.0, 2.0, 3.0),
+        nalgebra::Point3::new(4.0, 5.0, 6.0),
+    ];
     assert_roundtrip(a);
 }
 #[test]
 fn test_vector() {
-    let a = [nalgebra::Point3::new(1.5,2.5,3.0),nalgebra::Point3::new(4.0,5.5,6.0)];
+    let a = [
+        nalgebra::Point3::new(1.5, 2.5, 3.0),
+        nalgebra::Point3::new(4.0, 5.5, 6.0),
+    ];
     assert_roundtrip(a);
 }

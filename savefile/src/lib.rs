@@ -879,8 +879,8 @@ use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{ErrorKind, Write};
 use std::io::{BufReader, BufWriter, Read};
+use std::io::{ErrorKind, Write};
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8,
     AtomicUsize, Ordering,
@@ -889,7 +889,7 @@ use std::sync::atomic::{
 pub use ::byteorder::LittleEndian;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
-use std::collections::{BTreeMap,BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 #[allow(unused_imports)]
 use std::mem::MaybeUninit;
@@ -1203,12 +1203,15 @@ impl IsPacked {
 /// See method repr_c_optimization_safe.
 /// Note! The name Packed is a little misleading. A better name would be
 /// 'packed'
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be serialized or deserialized by Savefile, since it doesn't implement trait `savefile::Packed`",
-    label = "This cannot be serialized or deserialized",
-    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
-    note = "Or you can manually implement the `savefile::Packed` trait."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be serialized or deserialized by Savefile, since it doesn't implement trait `savefile::Packed`",
+        label = "This cannot be serialized or deserialized",
+        note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+        note = "Or you can manually implement the `savefile::Packed` trait."
+    )
+)]
 pub trait Packed {
     /// This method returns true if the optimization is allowed
     /// for the protocol version given as an argument.
@@ -1258,11 +1261,14 @@ pub struct DeliberatelyUnimplementable {
 
 #[deprecated(since = "0.17.0", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "ReprC has been deprecated and must not be used. Use trait `savefile::Packed` instead!",
-    label = "ReprC was erroneously required here",
-    note = "Please change any `ReprC` bounds into `Packed` bounds.",
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "ReprC has been deprecated and must not be used. Use trait `savefile::Packed` instead!",
+        label = "ReprC was erroneously required here",
+        note = "Please change any `ReprC` bounds into `Packed` bounds.",
+    )
+)]
 pub trait ReprC {
     #[deprecated(since = "0.17.0", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
@@ -1370,29 +1376,27 @@ impl Packed for std::io::Error {}
 impl Serialize for std::io::Error {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let kind = match self.kind() {
-            ErrorKind::NotFound => {1}
-            ErrorKind::PermissionDenied => {2}
-            ErrorKind::ConnectionRefused => {3}
-            ErrorKind::ConnectionReset => {4}
-            ErrorKind::ConnectionAborted => {7}
-            ErrorKind::NotConnected => {8}
-            ErrorKind::AddrInUse => {9}
-            ErrorKind::AddrNotAvailable => {10}
-            ErrorKind::BrokenPipe => {12}
-            ErrorKind::AlreadyExists => {13}
-            ErrorKind::WouldBlock => {14}
-            ErrorKind::InvalidInput => {21}
-            ErrorKind::InvalidData => {22}
-            ErrorKind::TimedOut => {23}
-            ErrorKind::WriteZero => {24}
-            ErrorKind::Interrupted => {36}
-            ErrorKind::Unsupported => {37}
-            ErrorKind::UnexpectedEof => {38}
-            ErrorKind::OutOfMemory => {39}
-            ErrorKind::Other => {40}
-            _ => {
-                42
-            }
+            ErrorKind::NotFound => 1,
+            ErrorKind::PermissionDenied => 2,
+            ErrorKind::ConnectionRefused => 3,
+            ErrorKind::ConnectionReset => 4,
+            ErrorKind::ConnectionAborted => 7,
+            ErrorKind::NotConnected => 8,
+            ErrorKind::AddrInUse => 9,
+            ErrorKind::AddrNotAvailable => 10,
+            ErrorKind::BrokenPipe => 12,
+            ErrorKind::AlreadyExists => 13,
+            ErrorKind::WouldBlock => 14,
+            ErrorKind::InvalidInput => 21,
+            ErrorKind::InvalidData => 22,
+            ErrorKind::TimedOut => 23,
+            ErrorKind::WriteZero => 24,
+            ErrorKind::Interrupted => 36,
+            ErrorKind::Unsupported => 37,
+            ErrorKind::UnexpectedEof => 38,
+            ErrorKind::OutOfMemory => 39,
+            ErrorKind::Other => 40,
+            _ => 42,
         };
         serializer.write_u16(kind as u16)?;
         serializer.write_string(&self.to_string())?;
@@ -1423,9 +1427,7 @@ impl Deserialize for std::io::Error {
             38 => ErrorKind::UnexpectedEof,
             39 => ErrorKind::OutOfMemory,
             40 => ErrorKind::Other,
-            _ => {
-                ErrorKind::Other
-            }
+            _ => ErrorKind::Other,
         };
 
         let string = String::deserialize(deserializer)?;
@@ -2442,13 +2444,16 @@ impl WithSchemaContext {
 /// This is only for increased safety, the file format does not in fact use the schema for any other
 /// purpose, the design is schema-less at the core, the schema is just an added layer of safety (which
 /// can be disabled).
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` does not have a defined schema for savefile, since it doesn't implement the trait `savefile::WithSchema`",
-    label = "This cannot be serialized or deserialized with a schema",
-    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
-    note = "Or you can manually implement the `savefile::WithSchema` trait.",
-    note = "You can also use one of the `*_noschema` functions to save/load without a schema."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` does not have a defined schema for savefile, since it doesn't implement the trait `savefile::WithSchema`",
+        label = "This cannot be serialized or deserialized with a schema",
+        note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+        note = "Or you can manually implement the `savefile::WithSchema` trait.",
+        note = "You can also use one of the `*_noschema` functions to save/load without a schema."
+    )
+)]
 pub trait WithSchema {
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
     /// The WithSchemaContext can be used to guard against recursive data structures.
@@ -2494,7 +2499,6 @@ pub fn get_result_schema(ok: Schema, err: Schema) -> Schema {
     })
 }
 
-
 /// This trait must be implemented for all data structures you wish to be
 /// able to serialize.
 ///
@@ -2506,12 +2510,15 @@ pub fn get_result_schema(ok: Schema, err: Schema) -> Schema {
 /// `use savefile-derive::Savefile;`
 ///
 /// and the use #\[derive(Serialize)]
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be serialized by Savefile, since it doesn't implement the trait `savefile::Serialize`",
-    label = "This cannot be serialized",
-    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
-    note = "Or you can manually implement the `savefile::Serialize` trait."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be serialized by Savefile, since it doesn't implement the trait `savefile::Serialize`",
+        label = "This cannot be serialized",
+        note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+        note = "Or you can manually implement the `savefile::Serialize` trait."
+    )
+)]
 pub trait Serialize: WithSchema {
     /// Serialize self into the given serializer.
     ///
@@ -2526,11 +2533,14 @@ pub trait Serialize: WithSchema {
 /// simply (String, &dyn Introspect) is that Mutex wouldn't be introspectable in that case.
 /// Mutex needs something like `(String, MutexGuard<T>)`. By having this a trait,
 /// different types can have whatever reference holder needed (MutexGuard, RefMut etc).
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be an introspected value used by Savefile, since it doesn't implement the trait `savefile::IntrospectItem`",
-    label = "This cannot be the type of an introspected field value",
-    note = "You can possibly implement IntrospectItem manually for the type `{Self}`, or try to use `String` instead of `{Self}`."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be an introspected value used by Savefile, since it doesn't implement the trait `savefile::IntrospectItem`",
+        label = "This cannot be the type of an introspected field value",
+        note = "You can possibly implement IntrospectItem manually for the type `{Self}`, or try to use `String` instead of `{Self}`."
+    )
+)]
 pub trait IntrospectItem<'a> {
     /// Should return a descriptive string for the given child. For structures,
     /// this would be the field name, for instance.
@@ -2585,13 +2595,16 @@ impl IntrospectItem<'_> for String {
 pub const MAX_CHILDREN: usize = 10000;
 
 /// Gives the ability to look into an object, inspecting any children (fields).
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be introspected by Savefile, since it doesn't implement trait `savefile::Introspect`",
-    label = "This cannot be introspected",
-    note = "If you get this message after having used the #[savefile_ignore] attribute on a field, consider adding #[savefile_introspect_ignore].",
-    note = "You can implement it by adding `#[derive(Savefile)]` or `#[derive(SavefileIntrospectOnly)]` before the declaration of `{Self}`",
-    note = "Or you can manually implement the `savefile::Introspect` trait."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be introspected by Savefile, since it doesn't implement trait `savefile::Introspect`",
+        label = "This cannot be introspected",
+        note = "If you get this message after having used the #[savefile_ignore] attribute on a field, consider adding #[savefile_introspect_ignore].",
+        note = "You can implement it by adding `#[derive(Savefile)]` or `#[derive(SavefileIntrospectOnly)]` before the declaration of `{Self}`",
+        note = "Or you can manually implement the `savefile::Introspect` trait."
+    )
+)]
 pub trait Introspect {
     /// Returns the value of the object, excluding children, as a string.
     /// Exactly what the value returned here is depends on the type.
@@ -2632,12 +2645,15 @@ pub trait Introspect {
 /// `use savefile-derive::Savefile`
 ///
 /// and the use #\[derive(Deserialize)]
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be deserialized by Savefile, since it doesn't implement the trait `savefile::Deserialize`",
-    label = "This cannot be deserialized",
-    note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
-    note = "Or you can manually implement the `savefile::Deserialize` trait."
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be deserialized by Savefile, since it doesn't implement the trait `savefile::Deserialize`",
+        label = "This cannot be deserialized",
+        note = "You can implement it by adding `#[derive(Savefile)]` before the declaration of `{Self}`",
+        note = "Or you can manually implement the `savefile::Deserialize` trait."
+    )
+)]
 pub trait Deserialize: WithSchema + Sized {
     /// Deserialize and return an instance of Self from the given deserializer.
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError>; //TODO: Do error handling
@@ -3136,7 +3152,7 @@ impl Serialize for AbiMethodArgument {
 
 /// The type of the 'self'-parameter
 #[non_exhaustive]
-#[derive(PartialEq,Debug,Clone,Copy)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 #[repr(u8)]
 pub enum ReceiverType {
@@ -3145,7 +3161,7 @@ pub enum ReceiverType {
     /// &mut self
     Mut, // &mut self
     /// self: Pin<&mut Self>
-    PinMut // self: Pin<&mut Self>
+    PinMut, // self: Pin<&mut Self>
 }
 
 /// Return value and argument types for a method
@@ -3160,8 +3176,6 @@ pub struct AbiMethodInfo {
     pub arguments: Vec<AbiMethodArgument>,
 }
 
-
-
 impl Packed for AbiMethodInfo {}
 impl WithSchema for AbiMethodInfo {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
@@ -3172,12 +3186,11 @@ impl WithSchema for AbiMethodInfo {
 impl Serialize for AbiMethodInfo {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.return_value.serialize(serializer)?;
-        serializer.write_u8(
-            match self.receiver {
-                ReceiverType::Shared => {100}
-                ReceiverType::Mut => {101}
-                ReceiverType::PinMut => {102}
-            })?;
+        serializer.write_u8(match self.receiver {
+            ReceiverType::Shared => 100,
+            ReceiverType::Mut => 101,
+            ReceiverType::PinMut => 102,
+        })?;
         self.arguments.serialize(serializer)?;
         Ok(())
     }
@@ -3190,7 +3203,7 @@ impl Deserialize for AbiMethodInfo {
                 100 => ReceiverType::Shared,
                 101 => ReceiverType::Mut,
                 102 => ReceiverType::PinMut,
-                _ => return Err(SavefileError::IncompatibleSavefileLibraryVersion)
+                _ => return Err(SavefileError::IncompatibleSavefileLibraryVersion),
             },
             arguments: <_ as Deserialize>::deserialize(deserializer)?,
         })
@@ -3264,7 +3277,7 @@ impl Serialize for AbiTraitDefinition {
 }
 impl Deserialize for AbiTraitDefinition {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let name:String = <_ as Deserialize>::deserialize(deserializer)?;
+        let name: String = <_ as Deserialize>::deserialize(deserializer)?;
 
         let actual_name = name.split('+').next().unwrap();
         let mut sync = false;
@@ -3273,7 +3286,7 @@ impl Deserialize for AbiTraitDefinition {
             match segment {
                 "Sync" => sync = true,
                 "Send" => send = true,
-                _ => panic!("Unexpected trait name encountered: {}", name)
+                _ => panic!("Unexpected trait name encountered: {}", name),
             }
         }
 
@@ -3281,7 +3294,7 @@ impl Deserialize for AbiTraitDefinition {
             name: actual_name.to_string(),
             methods: <_ as Deserialize>::deserialize(deserializer)?,
             sync,
-            send
+            send,
         };
         Ok(t)
     }
@@ -3300,8 +3313,12 @@ impl AbiTraitDefinition {
     /// The version number is only for the data types of the arguments.
     ///
     /// old is the callee, self is the caller
-    fn verify_compatible_with_old_impl(&self, old_version: u32, old: &AbiTraitDefinition, is_return_position: bool) -> Result<(), String> {
-
+    fn verify_compatible_with_old_impl(
+        &self,
+        old_version: u32,
+        old: &AbiTraitDefinition,
+        is_return_position: bool,
+    ) -> Result<(), String> {
         if is_return_position {
             if !old.sync && self.sync {
                 return Err(format!("Trait {} was not Sync in version {}, but the Sync-bound has since been added. This is not a backward-compatible change.",
@@ -3337,7 +3354,12 @@ impl AbiTraitDefinition {
                                    self.name, old_method.name, old_method.info.arguments.len(), old_version, new_method.info.arguments.len()
                 ));
             }
-            if let Some(diff) = diff_schema(&new_method.info.return_value, &old_method.info.return_value, "".into(), is_return_position) {
+            if let Some(diff) = diff_schema(
+                &new_method.info.return_value,
+                &old_method.info.return_value,
+                "".into(),
+                is_return_position,
+            ) {
                 return Err(format!("In trait {}, method {}, the return value type has changed from version {}: {}. This is not a backward-compatible change.",
                                    self.name, old_method.name, old_version, diff
                 ));
@@ -3365,7 +3387,12 @@ impl AbiTraitDefinition {
     /// To guarantee compatibility, all versions must be checked
     ///
     /// old is the callee, self is the caller
-    pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition, is_return_position: bool) -> Result<(), SavefileError> {
+    pub fn verify_backward_compatible(
+        &self,
+        old_version: u32,
+        old: &AbiTraitDefinition,
+        is_return_position: bool,
+    ) -> Result<(), SavefileError> {
         self.verify_compatible_with_old_impl(old_version, old, is_return_position)
             .map_err(|x| SavefileError::IncompatibleSchema { message: x })
     }
@@ -3459,7 +3486,12 @@ pub enum Schema {
     /// std::io::Error
     StdIoError,
     /// Savefile-abi boxed Future
-    Future(AbiTraitDefinition, /*send*/bool, /*sync*/bool,  /*unpin*/bool),
+    Future(
+        AbiTraitDefinition,
+        /*send*/ bool,
+        /*sync*/ bool,
+        /*unpin*/ bool,
+    ),
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3496,7 +3528,7 @@ impl Schema {
                 format!("<recursion {}>", depth)
             }
             Schema::StdIoError => "stdioerror".into(),
-            Schema::Future(_, _,_,_) => {"future".into()}
+            Schema::Future(_, _, _, _) => "future".into(),
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3652,7 +3684,7 @@ impl Schema {
             Schema::Trait(_, _) => None,
             Schema::Recursion(_) => None,
             Schema::StdIoError => None,
-            Schema::Future(_,_,_,_) => None,
+            Schema::Future(_, _, _, _) => None,
         }
     }
 }
@@ -3755,7 +3787,7 @@ fn diff_fields(
             &a[i].value,
             &b[i].value,
             (path.to_string() + "/" + &b[i].name).to_string(),
-            false
+            false,
         );
         if let Some(err) = r {
             return Some(err);
@@ -3841,15 +3873,15 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
                 ));
             }
         }
-        (Schema::Future(a,a_send,a_sync,a_unpin), Schema::Future( b,b_send,b_sync,b_unpin)) => {
+        (Schema::Future(a, a_send, a_sync, a_unpin), Schema::Future(b, b_send, b_sync, b_unpin)) => {
             if !is_return_pos {
                 #[allow(warnings)]
                 return Some(panic!("Futures are only supported in return position"));
             }
-            for (a,b,bound) in [
-                (*a_send,*b_send,"Send"),
-                (*a_sync,*b_sync,"Sync"),
-                (*a_unpin,*b_unpin,"Unpin")
+            for (a, b, bound) in [
+                (*a_send, *b_send, "Send"),
+                (*a_sync, *b_sync, "Sync"),
+                (*a_unpin, *b_unpin, "Unpin"),
             ] {
                 if a && !b {
                     return Some(format!(
@@ -3857,7 +3889,6 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
                         path, bound
                     ));
                 }
-
             }
             return diff_abi_def(a, b, path, is_return_pos);
         }
@@ -3887,7 +3918,7 @@ fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String, is
                     &a_arg.schema,
                     &b_arg.schema,
                     format!("{}(arg #{})", amet.name, arg_index),
-                    is_return_pos
+                    is_return_pos,
                 ) {
                     return Some(diff);
                 }
@@ -4391,13 +4422,10 @@ impl Serialize for Schema {
                 serializer.write_u8(17)?;
                 Ok(())
             }
-            Schema::Future(o, send,sync,unpin) => {
+            Schema::Future(o, send, sync, unpin) => {
                 serializer.write_u8(18)?;
-                serializer.write_u8(
-                    if *send {1} else {0}|
-                    if *sync {2} else {0}|
-                    if *unpin {4} else {0}
-                )?;
+                serializer
+                    .write_u8(if *send { 1 } else { 0 } | if *sync { 2 } else { 0 } | if *unpin { 4 } else { 0 })?;
                 o.serialize(serializer)?;
                 Ok(())
             }
@@ -4442,14 +4470,11 @@ impl Deserialize for Schema {
             17 => Schema::StdIoError,
             18 => {
                 let mask = deserializer.read_u8()?;
-                let send = (mask&1)!=0;
-                let sync = (mask&2)!=0;
-                let unpin = (mask&4)!=0;
-                Schema::Future(
-                    <_ as Deserialize>::deserialize(deserializer)?,
-                    send,sync,unpin
-                )
-            },
+                let send = (mask & 1) != 0;
+                let sync = (mask & 2) != 0;
+                let unpin = (mask & 4) != 0;
+                Schema::Future(<_ as Deserialize>::deserialize(deserializer)?, send, sync, unpin)
+            }
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt, or future schema, schema variant {} encountered", c),
@@ -4875,7 +4900,6 @@ impl<K: Introspect> Introspect for BTreeSet<K> {
     }
 }
 
-
 impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
     fn introspect_value(&self) -> String {
         format!(
@@ -4953,7 +4977,6 @@ impl<K: Deserialize + Ord + 'static, V: Deserialize + 'static> Deserialize for B
     }
 }
 
-
 impl<K> Packed for BTreeSet<K> {}
 impl<K: WithSchema + 'static> WithSchema for BTreeSet<K> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
@@ -4972,7 +4995,7 @@ impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
         Ok(())
     }
 }
-impl<K: Deserialize+'static+Ord> Deserialize for BTreeSet<K> {
+impl<K: Deserialize + 'static + Ord> Deserialize for BTreeSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
         let mut ret = BTreeSet::new();
@@ -4982,9 +5005,6 @@ impl<K: Deserialize+'static+Ord> Deserialize for BTreeSet<K> {
         Ok(ret)
     }
 }
-
-
-
 
 impl<K, S: ::std::hash::BuildHasher> Packed for HashSet<K, S> {}
 impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
@@ -5291,12 +5311,15 @@ impl<K: Deserialize + Eq + Hash + 'static> Deserialize for IndexSet<K> {
 ///     }
 /// }
 /// ```
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot serve as a factory generating default values of type {T}, since it doesn't implement the trait `savefile::ValueConstructor<{T}>`-",
-    label = "`{Self}` cannot produce values of type `{T}`",
-    note = "Check that any type used as 2nd type parameter to AbiRemoved implements `savefile::ValueConstructor<{T}>`.",
-    note = "Alternatively, skip the 2nd parameter entirely, and ensure that `{T}` implements `Default`.",
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot serve as a factory generating default values of type {T}, since it doesn't implement the trait `savefile::ValueConstructor<{T}>`-",
+        label = "`{Self}` cannot produce values of type `{T}`",
+        note = "Check that any type used as 2nd type parameter to AbiRemoved implements `savefile::ValueConstructor<{T}>`.",
+        note = "Alternatively, skip the 2nd parameter entirely, and ensure that `{T}` implements `Default`.",
+    )
+)]
 pub trait ValueConstructor<T> {
     /// Create a value of type T.
     /// This is used by the AbiRemoved trait to be able to invent
@@ -5390,9 +5413,9 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
 /// Regular Savefile does not support serializing older versions, whereas
 /// SavefileAbi does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AbiRemoved<T, D=DefaultValueConstructor<T>>
-    where
-        D: ValueConstructor<T>,
+pub struct AbiRemoved<T, D = DefaultValueConstructor<T>>
+where
+    D: ValueConstructor<T>,
 {
     phantom: std::marker::PhantomData<(*const T, *const D)>,
 }
@@ -5400,11 +5423,11 @@ pub struct AbiRemoved<T, D=DefaultValueConstructor<T>>
 /// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
 /// it doesn't implement Send or Sync per default. However, implementing these
 /// is actually safe, so implement it manually.
-unsafe impl<T, D: ValueConstructor<T>> Send for AbiRemoved<T,D> {}
+unsafe impl<T, D: ValueConstructor<T>> Send for AbiRemoved<T, D> {}
 /// Removed is a zero-sized type. It contains a PhantomData<*const T>, which means
 /// it doesn't implement Send or Sync per default. However, implementing these
 /// is actually safe, so implement it manually.
-unsafe impl<T, D: ValueConstructor<T>> Sync for AbiRemoved<T,D> {}
+unsafe impl<T, D: ValueConstructor<T>> Sync for AbiRemoved<T, D> {}
 
 impl<T, D: ValueConstructor<T>> AbiRemoved<T, D> {
     /// Helper to create an instance of `AbiRemoved<T>`. `AbiRemoved<T>` has no data.
@@ -5624,7 +5647,7 @@ impl<T: Deserialize, R: Deserialize> Deserialize for Result<T, R> {
     }
 }
 
-#[cfg(any(feature = "bit-vec", feature="bit-vec08"))]
+#[cfg(any(feature = "bit-vec", feature = "bit-vec08"))]
 #[cfg(target_endian = "big")]
 compile_error!("savefile bit-vec feature does not support big-endian machines");
 
@@ -5794,10 +5817,6 @@ impl Deserialize for bit_set::BitSet<u32> {
     }
 }
 
-
-
-
-
 #[cfg(feature = "bit-vec08")]
 impl WithSchema for bit_vec08::BitVec {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
@@ -5963,10 +5982,6 @@ impl Deserialize for bit_set08::BitSet<u32> {
         Ok(bit_set08::BitSet::from_bit_vec(bit_vec))
     }
 }
-
-
-
-
 
 impl<T: Introspect> Introspect for BinaryHeap<T> {
     fn introspect_value(&self) -> String {
@@ -6716,7 +6731,9 @@ impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
                 let num_bytes: usize = std::mem::size_of::<T>() * N;
                 let slice: &mut [MaybeUninit<u8>] =
                     unsafe { std::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, num_bytes) };
-                deserializer.reader.read_exact(unsafe { std::mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(slice) })?;
+                deserializer
+                    .reader
+                    .read_exact(unsafe { std::mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(slice) })?;
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
@@ -6870,29 +6887,8 @@ impl<T1: Deserialize> Deserialize for (T1,) {
     }
 }
 
-
-#[cfg(feature="nalgebra")]
-impl<T:nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
-    fn introspect_value(&self) -> String {
-        format!("{:?}", self)
-    }
-
-    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
-        None
-    }
-}
-#[cfg(feature="nalgebra")]
-impl<T:nalgebra::Scalar> Introspect for nalgebra::Vector3<T> {
-    fn introspect_value(&self) -> String {
-        format!("{:?}", self)
-    }
-
-    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
-        None
-    }
-}
-#[cfg(feature="nalgebra")]
-impl<T:nalgebra::Scalar> Introspect for nalgebra::Isometry3<T> {
+#[cfg(feature = "nalgebra")]
+impl<T: nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
     fn introspect_value(&self) -> String {
         format!("{:?}", self)
     }
@@ -6902,15 +6898,36 @@ impl<T:nalgebra::Scalar> Introspect for nalgebra::Isometry3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Point3<T> {
+impl<T: nalgebra::Scalar> Introspect for nalgebra::Vector3<T> {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T: nalgebra::Scalar> Introspect for nalgebra::Isometry3<T> {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+#[cfg(feature = "nalgebra")]
+impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Point3<T> {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        let d = nalgebra::Point3::<T>::new(T::default(),T::default(),T::default());
+        let d = nalgebra::Point3::<T>::new(T::default(), T::default(), T::default());
         let p1 = &d.x as *const T;
         let p2 = &d.y as *const T;
         let p3 = &d.z as *const T;
 
-        if std::mem::size_of::<nalgebra::Point3<T>>() ==  3 * std::mem::size_of::<T>() &&
-            p1.offset(1) ==p2 && p1.offset(2) == p3
+        if std::mem::size_of::<nalgebra::Point3<T>>() == 3 * std::mem::size_of::<T>()
+            && p1.offset(1) == p2
+            && p1.offset(2) == p3
         {
             IsPacked::yes()
         } else {
@@ -6919,7 +6936,7 @@ impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Point3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Point3<T> {
+impl<T: WithSchema + nalgebra::Scalar> WithSchema for nalgebra::Point3<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -6928,7 +6945,7 @@ impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Point3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Point3<T> {
+impl<T: Serialize + Packed + WithSchema + nalgebra::Scalar> Serialize for nalgebra::Point3<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.coords.x.serialize(serializer)?;
         self.coords.y.serialize(serializer)?;
@@ -6938,26 +6955,29 @@ impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::P
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Point3<T> {
+impl<T: Deserialize + Packed + WithSchema + nalgebra::Scalar + nalgebra::SimdValue + nalgebra::RealField> Deserialize
+    for nalgebra::Point3<T>
+{
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        Ok(
-            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?),
-        )
+        Ok(nalgebra::Point3::new(
+            <T as Deserialize>::deserialize(deserializer)?,
+            <T as Deserialize>::deserialize(deserializer)?,
+            <T as Deserialize>::deserialize(deserializer)?,
+        ))
     }
 }
 
-
-
 #[cfg(feature = "nalgebra")]
-impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Vector3<T> {
+impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Vector3<T> {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        let d = nalgebra::Vector3::<T>::new(T::default(),T::default(),T::default());
+        let d = nalgebra::Vector3::<T>::new(T::default(), T::default(), T::default());
         let p1 = &d.x as *const T;
         let p2 = &d.y as *const T;
         let p3 = &d.z as *const T;
 
-        if std::mem::size_of::<nalgebra::Point3<T>>() ==  3 * std::mem::size_of::<T>() &&
-            p1.offset(1) ==p2 && p1.offset(2) == p3
+        if std::mem::size_of::<nalgebra::Point3<T>>() == 3 * std::mem::size_of::<T>()
+            && p1.offset(1) == p2
+            && p1.offset(2) == p3
         {
             IsPacked::yes()
         } else {
@@ -6966,7 +6986,7 @@ impl<T:Packed+nalgebra::Scalar+Default> Packed for nalgebra::Vector3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Vector3<T> {
+impl<T: WithSchema + nalgebra::Scalar> WithSchema for nalgebra::Vector3<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -6975,7 +6995,7 @@ impl<T:WithSchema+nalgebra::Scalar> WithSchema for nalgebra::Vector3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Vector3<T> {
+impl<T: Serialize + Packed + WithSchema + nalgebra::Scalar> Serialize for nalgebra::Vector3<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.x.serialize(serializer)?;
         self.y.serialize(serializer)?;
@@ -6985,20 +7005,22 @@ impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::V
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Vector3<T> {
+impl<T: Deserialize + Packed + WithSchema + nalgebra::Scalar + nalgebra::SimdValue + nalgebra::RealField> Deserialize
+    for nalgebra::Vector3<T>
+{
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        Ok(
-            nalgebra::Vector3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?),
-        )
+        Ok(nalgebra::Vector3::new(
+            <T as Deserialize>::deserialize(deserializer)?,
+            <T as Deserialize>::deserialize(deserializer)?,
+            <T as Deserialize>::deserialize(deserializer)?,
+        ))
     }
 }
 
-
 #[cfg(feature = "nalgebra")]
-impl<T:Packed> Packed for nalgebra::Isometry3<T> {
-}
+impl<T: Packed> Packed for nalgebra::Isometry3<T> {}
 #[cfg(feature = "nalgebra")]
-impl<T:WithSchema> WithSchema for nalgebra::Isometry3<T> {
+impl<T: WithSchema> WithSchema for nalgebra::Isometry3<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -7007,7 +7029,7 @@ impl<T:WithSchema> WithSchema for nalgebra::Isometry3<T> {
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::Isometry3<T> {
+impl<T: Serialize + Packed + WithSchema + nalgebra::Scalar> Serialize for nalgebra::Isometry3<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.translation.vector.x.serialize(serializer)?;
         self.translation.vector.y.serialize(serializer)?;
@@ -7022,22 +7044,26 @@ impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::I
     }
 }
 #[cfg(feature = "nalgebra")]
-impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Isometry3<T> {
+impl<T: Deserialize + Packed + WithSchema + nalgebra::Scalar + nalgebra::SimdValue + nalgebra::RealField> Deserialize
+    for nalgebra::Isometry3<T>
+{
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(nalgebra::Isometry3::from_parts(
-            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
-            nalgebra::UnitQuaternion::new_unchecked(
-                nalgebra::Quaternion::new(
+            nalgebra::Point3::new(
+                <T as Deserialize>::deserialize(deserializer)?,
+                <T as Deserialize>::deserialize(deserializer)?,
+                <T as Deserialize>::deserialize(deserializer)?,
+            )
+            .into(),
+            nalgebra::UnitQuaternion::new_unchecked(nalgebra::Quaternion::new(
                 <T as Deserialize>::deserialize(deserializer)?,
                 <T as Deserialize>::deserialize(deserializer)?,
                 <T as Deserialize>::deserialize(deserializer)?,
                 <T as Deserialize>::deserialize(deserializer)?,
-                )
-            ))
-        )
+            )),
+        ))
     }
 }
-
 
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> Packed for arrayvec::ArrayString<C> {}
@@ -7215,8 +7241,10 @@ impl<T: Deserialize + 'static> Deserialize for Arc<T> {
         Ok(Arc::new(T::deserialize(deserializer)?))
     }
 }
+use byteorder::{ReadBytesExt, WriteBytesExt};
 #[cfg(feature = "bzip2")]
 use bzip2::Compression;
+use memoffset::offset_of_tuple;
 use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
@@ -7230,8 +7258,6 @@ use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use byteorder::{ReadBytesExt, WriteBytesExt};
-use memoffset::offset_of_tuple;
 
 impl<T> Packed for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
@@ -8086,23 +8112,19 @@ impl WithSchema for Canary1 {
 
 impl WithSchema for Duration {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
-        Schema::Struct(SchemaStruct{
+        Schema::Struct(SchemaStruct {
             dbg_name: "Duration".to_string(),
             size: None,
             alignment: None,
-            fields: vec![
-                Field {
-                    name: "Duration".to_string(),
-                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
-                    offset: None,
-                }
-            ],
+            fields: vec![Field {
+                name: "Duration".to_string(),
+                value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                offset: None,
+            }],
         })
     }
 }
-impl Packed for Duration {
-
-}
+impl Packed for Duration {}
 impl Serialize for Duration {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_u128(self.as_nanos())
@@ -8111,7 +8133,7 @@ impl Serialize for Duration {
 impl Deserialize for Duration {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let temp = deserializer.read_u128()?;
-        Ok(Duration::from_secs((temp/1_000_000_000) as u64) + Duration::from_nanos((temp % 1_000_000_000) as u64))
+        Ok(Duration::from_secs((temp / 1_000_000_000) as u64) + Duration::from_nanos((temp % 1_000_000_000) as u64))
     }
 }
 
@@ -8143,39 +8165,40 @@ impl Introspect for SystemTime {
 }
 impl WithSchema for SystemTime {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
-        Schema::Struct(SchemaStruct{
+        Schema::Struct(SchemaStruct {
             dbg_name: "SystemTime".to_string(),
             size: None,
             alignment: None,
-            fields: vec![
-                Field {
-                    name: "SystemTimeDuration".to_string(),
-                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
-                    offset: None,
-                }
-            ],
+            fields: vec![Field {
+                name: "SystemTimeDuration".to_string(),
+                value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                offset: None,
+            }],
         })
     }
 }
-impl Packed for SystemTime {
-
-}
+impl Packed for SystemTime {}
 impl Serialize for SystemTime {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         match self.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(nanos) => {
                 let temp = nanos.as_nanos();
-                if temp >= 1u128<<120 {
-                    return Err(SavefileError::GeneralError {msg: "Savefile cannot handle dates where the year is larger than ca 10^19 years.".to_string()});
+                if temp >= 1u128 << 120 {
+                    return Err(SavefileError::GeneralError {
+                        msg: "Savefile cannot handle dates where the year is larger than ca 10^19 years.".to_string(),
+                    });
                 }
                 serializer.write_u128(temp)?;
             }
-            Err(err) => { //Before UNIX Epoch
+            Err(err) => {
+                //Before UNIX Epoch
                 let mut temp = err.duration().as_nanos();
-                if temp >= 1u128<<120 {
-                    return Err(SavefileError::GeneralError {msg: "Savefile cannot handle dates much earlier than the creation of the universe.".to_string()});
+                if temp >= 1u128 << 120 {
+                    return Err(SavefileError::GeneralError {
+                        msg: "Savefile cannot handle dates much earlier than the creation of the universe.".to_string(),
+                    });
                 }
-                temp |= 1u128<<127;
+                temp |= 1u128 << 127;
                 serializer.write_u128(temp)?;
             }
         }
@@ -8192,10 +8215,9 @@ impl Introspect for std::time::Instant {
     }
 }
 
-
 fn u128_duration_nanos(nanos: u128) -> Duration {
     if nanos > u64::MAX as u128 {
-        Duration::from_nanos((nanos % 1_000_000_000) as u64) + Duration::from_secs((nanos/1_000_000_000) as u64)
+        Duration::from_nanos((nanos % 1_000_000_000) as u64) + Duration::from_secs((nanos / 1_000_000_000) as u64)
     } else {
         Duration::from_nanos(nanos as u64)
     }
@@ -8203,8 +8225,8 @@ fn u128_duration_nanos(nanos: u128) -> Duration {
 impl Deserialize for SystemTime {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let mut temp = deserializer.read_u128()?;
-        if temp >= (1u128<<127) {
-            temp &= (1u128<<127)-1; //Before UNIX Epoch
+        if temp >= (1u128 << 127) {
+            temp &= (1u128 << 127) - 1; //Before UNIX Epoch
             return Ok(SystemTime::UNIX_EPOCH - u128_duration_nanos(temp));
         } else {
             return Ok(SystemTime::UNIX_EPOCH + u128_duration_nanos(temp));

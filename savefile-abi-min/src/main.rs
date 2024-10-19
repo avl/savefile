@@ -53,10 +53,9 @@ fn main() {
 
     assert_eq!(call_add(&connection, 1, 2), 3);
 
-    let rt  = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let result = connection.async_add(1,2).await;
+        let result = connection.async_add(1, 2).await;
         assert_eq!(result, 3);
     });
-
 }

@@ -299,6 +299,8 @@ called by value are always serialized.
 
 extern crate savefile;
 extern crate savefile_derive;
+use byteorder::ReadBytesExt;
+use libloading::{Library, Symbol};
 use savefile::{
     diff_schema, load_file_noschema, load_noschema, save_file_noschema, AbiMethodInfo, AbiTraitDefinition, Deserialize,
     Deserializer, LittleEndian, SavefileError, Schema, Serializer, CURRENT_SAVEFILE_LIB_VERSION,
@@ -314,10 +316,8 @@ use std::panic::catch_unwind;
 use std::path::Path;
 use std::ptr::null;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::{ptr, slice};
 use std::task::Wake;
-use byteorder::ReadBytesExt;
-use libloading::{Library, Symbol};
+use std::{ptr, slice};
 
 /// This trait is meant to be exported for a 'dyn SomeTrait'.
 /// It can be automatically implemented by using the
@@ -340,11 +340,14 @@ use libloading::{Library, Symbol};
 ///  * Has a correct 'get_definition' function, which must return a AbiTraitDefinition instance
 ///    that is truthful.
 ///  * Implement 'call' correctly
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be used across an ABI-boundary. Try adding a `#[savefile_abi_exportable(version=X)]` attribute to the declaration of the relevant trait.",
-    label = "`{Self}` cannot be called across an ABI-boundary",
-    note = "This error probably occurred because `{Self}` occurred as a return-value or argument to a method in a trait marked with `#[savefile_abi_exportable(version=X)]`, or because savefile_abi_export!-macro was used to export `{Self}`.",
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be used across an ABI-boundary. Try adding a `#[savefile_abi_exportable(version=X)]` attribute to the declaration of the relevant trait.",
+        label = "`{Self}` cannot be called across an ABI-boundary",
+        note = "This error probably occurred because `{Self}` occurred as a return-value or argument to a method in a trait marked with `#[savefile_abi_exportable(version=X)]`, or because savefile_abi_export!-macro was used to export `{Self}`.",
+    )
+)]
 pub unsafe trait AbiExportable {
     /// A function which implements the savefile-abi contract.
     const ABI_ENTRY: unsafe extern "C" fn(AbiProtocol);
@@ -391,11 +394,14 @@ pub unsafe trait AbiExportable {
 /// * ABI_ENTRY must be a valid function, implementing the AbiProtocol-protocol.
 /// * AbiInterface must be 'dyn SomeTrait', where 'SomeTrait' is an exported trait.
 ///
-#[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be the concrete type of an AbiExportable dyn trait.",
-    label = "Does not implement `AbiExportableImplementation`",
-    note = "You should not be using this trait directly, and should never see this error.",
-))]
+#[cfg_attr(
+    feature = "rust1_78",
+    diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be the concrete type of an AbiExportable dyn trait.",
+        label = "Does not implement `AbiExportableImplementation`",
+        note = "You should not be using this trait directly, and should never see this error.",
+    )
+)]
 pub unsafe trait AbiExportableImplementation {
     /// An entry point which implements the AbiProtocol protocol
     const ABI_ENTRY: unsafe extern "C" fn(AbiProtocol);
@@ -636,9 +642,7 @@ pub struct AbiConnection<T: ?Sized> {
 unsafe impl<T: ?Sized> Sync for AbiConnection<T> {}
 unsafe impl<T: ?Sized> Send for AbiConnection<T> {}
 
-impl<T> Unpin for AbiConnection<T> {
-
-}
+impl<T> Unpin for AbiConnection<T> {}
 
 /// A trait object together with its entry point
 #[repr(C)]
@@ -994,10 +998,8 @@ pub unsafe extern "C" fn abi_result_receiver<T: Deserialize>(
 
 /// Raw entry point for receiving return values from other shared libraries
 #[doc(hidden)]
-pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(
-    outcome: *const RawAbiCallResult,
-    result_receiver: *mut (),
-) where
+pub unsafe extern "C" fn abi_boxed_trait_receiver<T>(outcome: *const RawAbiCallResult, result_receiver: *mut ())
+where
     T: AbiExportable + ?Sized + 'static,
 {
     let outcome = unsafe { &*outcome };
@@ -1054,18 +1056,23 @@ fn arg_layout_compatible(
     a_effective: &Schema,
     b_effective: &Schema,
     effective_version: u32,
-    is_return_position: bool
+    is_return_position: bool,
 ) -> Result<bool, SavefileError> {
     match (a_native, b_native) {
-        (Schema::Future(_a,_,_,_), Schema::Future(_b,_,_,_)) => {
-            let (Schema::Future(effective_a2,a_send,a_sync,a_unpin), Schema::Future(effective_b2,b_send,b_sync,b_unpin)) = (a_effective, b_effective)
+        (Schema::Future(_a, _, _, _), Schema::Future(_b, _, _, _)) => {
+            let (
+                Schema::Future(effective_a2, a_send, a_sync, a_unpin),
+                Schema::Future(effective_b2, b_send, b_sync, b_unpin),
+            ) = (a_effective, b_effective)
             else {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             };
-            for (a,b,bound) in [
-                (*a_send,*b_send,"Send"),
-                (*a_sync,*b_sync,"Sync"),
-                (*a_unpin,*b_unpin,"Unpin")
+            for (a, b, bound) in [
+                (*a_send, *b_send, "Send"),
+                (*a_sync, *b_sync, "Sync"),
+                (*a_unpin, *b_unpin, "Unpin"),
             ] {
                 if a && !b {
                     return Err(SavefileError::IncompatibleSchema{message: format!(
@@ -1075,25 +1082,26 @@ fn arg_layout_compatible(
                 }
             }
 
-            effective_a2
-                .verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
+            effective_a2.verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
             Ok(true)
         }
         (Schema::FnClosure(a1, _a2), Schema::FnClosure(b1, _b2)) => {
             let (Schema::FnClosure(effective_a1, effective_a2), Schema::FnClosure(effective_b1, effective_b2)) =
                 (a_effective, b_effective)
             else {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             };
 
             effective_a2.verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
-            Ok(a1 == b1
-                && a1 == effective_a1
-                && a1 == effective_b1)
+            Ok(a1 == b1 && a1 == effective_a1 && a1 == effective_b1)
         }
         (Schema::Boxed(native_a), Schema::Boxed(native_b)) => {
             let (Schema::Boxed(effective_a2), Schema::Boxed(effective_b2)) = (a_effective, b_effective) else {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             };
             arg_layout_compatible(
                 native_a,
@@ -1101,23 +1109,28 @@ fn arg_layout_compatible(
                 effective_a2,
                 effective_b2,
                 effective_version,
-                is_return_position
+                is_return_position,
             )
         }
         (Schema::Trait(s_a, _), Schema::Trait(s_b, _)) => {
             if s_a != s_b {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             }
             let (Schema::Trait(e_a2, effective_a2), Schema::Trait(e_b2, effective_b2)) = (a_effective, b_effective)
             else {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             };
             if e_a2 != e_b2 {
-                return Err(SavefileError::IncompatibleSchema {message: "Type has changed".to_string()});
+                return Err(SavefileError::IncompatibleSchema {
+                    message: "Type has changed".to_string(),
+                });
             }
 
-            effective_a2
-                .verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
+            effective_a2.verify_backward_compatible(effective_version, effective_b2, is_return_position)?;
             Ok(true)
         }
         (a, b) => Ok(a.layout_compatible(b)),
@@ -1206,7 +1219,8 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
             let retval_effective_schema_diff = diff_schema(
                 &caller_effective_method.info.return_value,
                 &callee_effective_method.info.return_value,
-                "".to_string(),true
+                "".to_string(),
+                true,
             );
             if let Some(diff) = retval_effective_schema_diff {
                 return Err(SavefileError::IncompatibleSchema {
@@ -1235,7 +1249,14 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                let comp = arg_layout_compatible(native1, native2, effective1, effective2, effective_version, index.is_none())?;
+                let comp = arg_layout_compatible(
+                    native1,
+                    native2,
+                    effective1,
+                    effective2,
+                    effective_version,
+                    index.is_none(),
+                )?;
 
                 if comp {
                     if let Some(index) = index {
@@ -1305,9 +1326,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
         }
 
         match entry_guard.entry((filename.clone(), trait_name.clone())) {
-            Entry::Occupied(item) => {
-                Ok(*item.get())
-            }
+            Entry::Occupied(item) => Ok(*item.get()),
             Entry::Vacant(vacant) => {
                 let symbol_name = format!("abi_entry_{}\0", trait_name);
                 let symbol: Symbol<unsafe extern "C" fn(flag: AbiProtocol)> = unsafe {
@@ -1758,11 +1777,10 @@ pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), 
     Ok(())
 }
 
-
 #[doc(hidden)]
 pub struct AbiWaker {
     #[doc(hidden)]
-    pub waker: Mutex<Box<dyn FnMut() + Send + Sync>>
+    pub waker: Mutex<Box<dyn FnMut() + Send + Sync>>,
 }
 impl Wake for AbiWaker {
     fn wake(self: Arc<Self>) {
@@ -1780,4 +1798,3 @@ impl Wake for AbiWaker {
         }
     }
 }
-

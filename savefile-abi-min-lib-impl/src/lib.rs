@@ -1,11 +1,11 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::time::Duration;
 use async_std::future;
 use async_std::future::timeout;
 use async_std::net::UdpSocket;
 use savefile_abi_min_lib::{AdderCallback, AdderInterface, MyStuff};
 use savefile_derive::savefile_abi_export;
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
 
 pub struct AdderImplementation {
     _name: String,
@@ -43,7 +43,7 @@ impl AdderInterface for AdderImplementation {
 
     fn do_nothing(&self) {}
 
-    fn async_add(&self, x: u32, y: u32) -> Pin<Box<dyn Future<Output=u32>>> {
+    fn async_add(&self, x: u32, y: u32) -> Pin<Box<dyn Future<Output = u32>>> {
         Box::pin(async move {
             println!("Begin async-std timeout");
             let udp = UdpSocket::bind(("0.0.0.0", 7777)).await.unwrap();
