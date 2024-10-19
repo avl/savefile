@@ -924,7 +924,7 @@ extern crate savefile_derive;
 /// There is an ambition that savefiles created by earlier versions
 /// will be possible to open using later versions. The other way
 /// around is not supported.
-pub const CURRENT_SAVEFILE_LIB_VERSION: u16 = 1;
+pub const CURRENT_SAVEFILE_LIB_VERSION: u16 = 2;
 
 /// This object represents an error in deserializing or serializing
 /// an item.
@@ -3186,25 +3186,34 @@ impl WithSchema for AbiMethodInfo {
 impl Serialize for AbiMethodInfo {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.return_value.serialize(serializer)?;
-        serializer.write_u8(match self.receiver {
-            ReceiverType::Shared => 100,
-            ReceiverType::Mut => 101,
-            ReceiverType::PinMut => 102,
-        })?;
+        if serializer.file_version >= 2 {
+            serializer.write_u8(match self.receiver {
+                ReceiverType::Shared => 100,
+                ReceiverType::Mut => 101,
+                ReceiverType::PinMut => 102,
+            })?;
+        }
         self.arguments.serialize(serializer)?;
         Ok(())
     }
 }
 impl Deserialize for AbiMethodInfo {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        Ok(AbiMethodInfo {
-            return_value: <_ as Deserialize>::deserialize(deserializer)?,
-            receiver: match deserializer.read_u8()? {
+        let receiver = if deserializer.file_version >= 2 {
+            match deserializer.read_u8()? {
                 100 => ReceiverType::Shared,
                 101 => ReceiverType::Mut,
                 102 => ReceiverType::PinMut,
-                _ => return Err(SavefileError::IncompatibleSavefileLibraryVersion),
-            },
+                _ => return Err(SavefileError::WrongVersion {
+                    msg: "Version 0.17.x of the savefile-library detected. It is not compatible with the current version. Please upgrade to version >0.18.".to_string(),
+                }),
+            }
+        } else {
+            ReceiverType::Shared
+        };
+        Ok(AbiMethodInfo {
+            return_value: <_ as Deserialize>::deserialize(deserializer)?,
+            receiver,
             arguments: <_ as Deserialize>::deserialize(deserializer)?,
         })
     }

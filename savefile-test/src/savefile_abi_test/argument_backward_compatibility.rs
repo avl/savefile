@@ -106,7 +106,8 @@ pub fn test_abi_schemas_get_def() {
 #[test]
 #[cfg(not(miri))]
 pub fn test_backward_compatibility() -> Result<(), SavefileError> {
-    verify_compatiblity::<dyn ArgInterfaceV2>("schemas")
+    let res = verify_compatiblity::<dyn ArgInterfaceV2>("schemas");
+    res
 }
 
 #[test]

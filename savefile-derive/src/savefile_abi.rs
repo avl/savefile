@@ -772,7 +772,6 @@ fn parse_type(
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Send instead of adding the bound here, like so: trait {} : Send.",
                             location, bound.ident, bound.ident);
                     }
-                    println!("Bound: {:?}", bound);
                     return ArgType::Trait(bound.to_token_stream(), is_mut_ref);
                 }
             } else {
