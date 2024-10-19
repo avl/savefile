@@ -27,7 +27,10 @@ pub enum WrapperKey {
 
 #[derive(Debug, Clone)]
 struct FutureWrapperKey {
-    output_type: TokenStream
+    output_type: TokenStream,
+    send:bool,
+    sync:bool,
+    unpin: bool,
 }
 
 impl PartialEq for FutureWrapperKey {
@@ -75,11 +78,17 @@ static ID_GEN: AtomicU64 = AtomicU64::new(0);
 
 
 fn emit_future_helpers(
+    wrapped_in_pin: bool,
     output_type: TokenStream,
     extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
+    send: bool,
+    sync: bool,
+    unpin: bool,
 ) -> ClosureFutureWrapperNames {
     let key = WrapperKey::FutureWrapper(FutureWrapperKey {
         output_type: output_type.clone(),
+        send,sync,
+        unpin
     });
     if let Some((names, _)) = extra_definitions.get(&key) {
         return names.clone();
@@ -101,6 +110,70 @@ fn emit_future_helpers(
 
     let futureWrapper = futurer_wrapper_trait_name;
 
+    let unpin_impl = unpin.then(||{
+        quote! {
+            impl Unpin for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let unpin_bound = unpin.then(||{
+        quote! {
+            + Unpin
+        }
+    });
+
+
+    let send_impl = send.then(||{
+        quote! {
+            impl Send for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let send_bound = send.then(||{
+        quote! {
+            + Send
+        }
+    });
+
+
+
+    let sync_impl = sync.then(||{
+        quote! {
+            impl Sync for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let sync_bound = sync.then(||{
+        quote! {
+            + Sync
+        }
+    });
+
+    let box_fut_type = if wrapped_in_pin {
+        quote! {
+            Pin<Box<dyn Future<Output = #output_type> #send_bound #sync_bound #unpin_bound>>
+        }
+    } else {
+        quote! {
+            Box<dyn Future<Output = #output_type> #send_bound #sync_bound #unpin_bound>
+        }
+    };
+
+    let sized = wrapped_in_pin.then(||{
+        quote!{
+            : Sized
+        }
+    });
+
+    let self_ref = if wrapped_in_pin {
+        quote!(
+            self
+        )
+    } else {
+        quote!(
+            unsafe { self.map_unchecked_mut(|s|&mut **s)}
+        )
+    };
 
     let output = quote! {
 
@@ -108,13 +181,17 @@ fn emit_future_helpers(
             future: AbiConnection<dyn #futureWrapper>
         }
 
+        impl Unpin for #futurer_wrapper_struct_name {
+
+        }
+
         #[savefile_abi_exportable(version = 0)]
         pub trait #futureWrapper {
             fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type>;
         }
-        impl Unpin for #futurer_wrapper_struct_name {
+        #send_impl
+        #sync_impl
 
-        }
         impl Future for #futurer_wrapper_struct_name {
             type Output = #output_type;
 
@@ -133,7 +210,7 @@ fn emit_future_helpers(
                 }
             }
         }
-        impl #futureWrapper for Box<dyn Future<Output = #output_type> + Unpin> {
+        impl #futureWrapper for #box_fut_type {
             fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type> {
                 println!("abi_poll");
                 let waker = Waker::from(Arc::new(AbiWaker {
@@ -142,7 +219,7 @@ fn emit_future_helpers(
                 let mut context = Context::from_waker(&waker);
 
                 println!("delegating");
-                match unsafe { self.map_unchecked_mut(|s|&mut **s)}.poll(&mut context) {
+                match #self_ref.poll(&mut context) {
                     Poll::Ready(t) => {
                         println!("Done!");
                         Some(t)
@@ -278,7 +355,7 @@ pub(crate) enum ArgType {
     Slice(Box<ArgType>),
     Result(Box<ArgType>, Box<ArgType>),
     Trait(TokenStream, bool /*ismut self*/),
-    Future(TokenStream),
+    Future(/*pin*/bool, TokenStream, /*send*/bool, /*sync*/bool, /*unpin*/bool),
     Fn(
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
         Vec<Type>,   /*arg types*/
@@ -349,8 +426,8 @@ pub(crate) fn parse_box_type(
                         is_mut_ref,
                         true
                     ) {
-                        ArgType::Future(output) => {
-                            ArgType::Future(output)
+                        ArgType::Future(pin, output, send,sync,unpin) => {
+                            ArgType::Future(pin, output, send,sync,unpin)
                         }
                         ArgType::Result(_,_) => {
                             abort!(
@@ -522,6 +599,7 @@ fn parse_type(
             if trait_obj.dyn_token.is_some() {
                 let mut sync = false;
                 let mut send = false;
+                let mut unpin = false;
                 let type_bounds: Vec<_> = trait_obj
                     .bounds
                     .iter()
@@ -550,6 +628,7 @@ fn parse_type(
                             return false;
                         }
                         if seg.ident == "Unpin" {
+                            unpin = true;
                             return false; //TODO: IS this safe?
                         }
                         true
@@ -569,6 +648,13 @@ fn parse_type(
                 let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
 
                 if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
+                    if unpin {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support Unpin bounds on closure types, only on futures.",
+                            location,
+                        );
+                    }
                     if bound.ident == "FnOnce" {
                         abort!(
                             bound.ident.span(),
@@ -606,63 +692,70 @@ fn parse_type(
                     }
                 } else if bound.ident == "Future" {
                     //println!("Bounds: {:#?}", trait_obj);
-                    for bound in trait_obj.bounds.iter() {
-                        match bound{
-                            TypeParamBound::Trait(t) => {
-                                if t.lifetimes.is_some() {
-                                    abort!(t.span(), "{}: Savefile does not support lifetimes in Futures", location);
-                                }
-                                match t.modifier {
-                                    TraitBoundModifier::None => {}
-                                    TraitBoundModifier::Maybe(q) => {
-                                        abort!(q.span(), "{}: Unexpected ?-token", location)
+                    let bound = trait_obj.bounds.iter().next().unwrap();
+                    match bound{
+                        TypeParamBound::Trait(t) => {
+                            if t.lifetimes.is_some() {
+                                abort!(t.span(), "{}: Savefile does not support lifetimes in Futures", location);
+                            }
+                            match t.modifier {
+                                TraitBoundModifier::None => {}
+                                TraitBoundModifier::Maybe(q) => {
+                                    abort!(q.span(), "{}: Unexpected ?-token", location)
 
-                                    }
-                                }
-                                if !is_boxed {
-                                    abort!(bound.span(), "{}: Savefile only supports boxed futures, not unboxed futures.", location);
-                                }
-                                if t.path.segments.len() != 1 {
-                                    abort!(bound.span(), "{}: Boxed futures can only implement the Future trait", location);
-                                }
-                                let seg = &t.path.segments[0];
-                                match &seg.arguments {
-                                    PathArguments::AngleBracketed(arg) => {
-                                        if arg.args.len() != 1 {
-                                            abort!(arg.args.span(), "{}: Futures must have a a single Output bound.", location);
-                                        }
-                                        let output = &arg.args[0];
-
-                                        match output {
-                                            GenericArgument::Binding(t) => {
-                                                if t.ident != "Output" {
-                                                    abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
-                                                }
-                                                return ArgType::Future(t.ty.to_token_stream());
-                                            }
-                                            GenericArgument::Lifetime(_) |
-                                            GenericArgument::Const(_) |
-                                            GenericArgument::Type(_) |
-                                            GenericArgument::Constraint(_) => {
-                                                abort!(output.span(), "{}: Futures must have a a single associated type binding, named 'Output' (Future<Output=?>).", location);
-                                            }
-                                        }
-
-                                    }
-                                    PathArguments::None |
-                                    PathArguments::Parenthesized(_) => {
-                                        abort!(seg.arguments.span(), "{}: Future must have arguments within angle brackets: Future<...>.", location);
-                                    }
                                 }
                             }
-                            TypeParamBound::Lifetime(_) => {
-                                abort!(bound.span(), "{}: Savefile does not support lifetimes in Futures", location);
+                            if !is_boxed {
+                                abort!(bound.span(), "{}: Savefile only supports boxed futures, not unboxed futures.", location);
                             }
+                            if t.path.segments.len() != 1 {
+                                abort!(bound.span(), "{}: Boxed futures can only implement the Future trait", location);
+                            }
+                            let seg = &t.path.segments[0];
+                            match &seg.arguments {
+                                PathArguments::AngleBracketed(arg) => {
+                                    if arg.args.len() != 1 {
+                                        abort!(arg.args.span(), "{}: Futures must have a a single Output bound.", location);
+                                    }
+                                    let output = &arg.args[0];
+
+                                    match output {
+                                        GenericArgument::Binding(t) => {
+                                            if t.ident != "Output" {
+                                                abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
+                                            }
+                                            return ArgType::Future(false, t.ty.to_token_stream(), send,sync,unpin);
+                                        }
+                                        GenericArgument::Lifetime(_) |
+                                        GenericArgument::Const(_) |
+                                        GenericArgument::Type(_) |
+                                        GenericArgument::Constraint(_) => {
+                                            abort!(output.span(), "{}: Futures must have a a single associated type binding, named 'Output' (Future<Output=?>).", location);
+                                        }
+                                    }
+
+                                }
+                                PathArguments::None |
+                                PathArguments::Parenthesized(_) => {
+                                    abort!(seg.arguments.span(), "{}: Future must have arguments within angle brackets: Future<...>.", location);
+                                }
+                            }
+                        }
+                        TypeParamBound::Lifetime(_) => {
+                            abort!(bound.span(), "{}: Savefile does not support lifetimes in Futures", location);
                         }
                     }
                     abort!(trait_obj.span(), "{}: Future did not have output type specified. Try adding Future<Output=mytype>.", location);
                 }
                 else {
+                    if unpin {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support Unpin bounds on arbitrary trait types, only on futures.",
+                            location,
+                        );
+                    }
+
                     if sync {
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Sync instead of adding the bound here, like so: trait {} : Sync.",
                             location, bound.ident, bound.ident);
@@ -695,6 +788,68 @@ fn parse_type(
                     );
                 }
                 return ArgType::Str(false); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
+            } else if last_seg.ident == "Pin" {
+                if path.path.segments.len() != 1 {
+                    abort!(path.path.segments.span(), "Savefile does not support types named 'Pin', unless it is the standard type Pin, and it must be specified as 'Pin', without any namespace");
+                }
+                if is_reference {
+                    abort!(last_seg.ident.span(), "Savefile does not presently support reference to Pin");
+                }
+                match &last_seg.arguments {
+                    PathArguments::Parenthesized(_) |
+                    PathArguments::None => {
+                        abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with one type parameters within angle-brackets.");
+                    }
+                    PathArguments::AngleBracketed(params)  => {
+                        let argvec: Vec<_> = params.args.iter().collect();
+                        if argvec.len() != 1 {
+                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with one type parameter within angle-brackets. Got {} type arguments", argvec.len());
+                        }
+                        let arg = argvec[0];
+                        match arg {
+                            GenericArgument::Type(argtyp) => {
+
+
+                                let ty = parse_type(
+                                        version,
+                                        arg_name,
+                                        argtyp,
+                                        method_name,
+                                        is_return_value,
+                                        &mut *name_generator,
+                                        extra_definitions,
+                                        is_reference,
+                                        is_mut_ref,
+                                        is_boxed
+                                    );
+                                if let ArgType::Future(pin,typ,send,sync,unpin) = ty {
+                                    if pin {
+                                        abort!(arg.span(), "Savefile only supports Pin<Box<Future>>, not Pin<Pin<..>> or any other usage of Pin");
+                                    }
+                                    return ArgType::Future(true,typ,send,sync,unpin);
+                                } else {
+                                    abort!(arg.span(), "Savefile only supports Pin<Box<Future>>, not any other usage of Pin");
+                                }
+                            }
+                            GenericArgument::Lifetime(_) => {
+                                abort!(arg.span(), "Savefile does not support lifetime specifications.");
+                            }
+                            GenericArgument::Const(_) => {
+                                abort!(arg.span(), "Savefile does not support const in this location.");
+                            }
+                            GenericArgument::Binding(_) => {
+                                abort!(arg.span(), "Savefile does not support the syntax expressed here.");
+                            }
+                            GenericArgument::Constraint(_) => {
+                                abort!(arg.span(), "Savefile does not support constraints at this position.");
+                            }
+                        }
+                        abort!(last_seg.arguments.span(), "Savefile: Unexpected error processing type Pin");
+                    }
+                }
+
+
+
             } else if last_seg.ident == "Box" {
                 if is_reference {
                     abort!(last_seg.ident.span(), "Savefile does not support reference to Box. This is also generally not very useful, just use a regular reference for arguments.");
@@ -717,7 +872,7 @@ fn parse_type(
                     abort!(path.path.segments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result', without any namespace");
                 }
                 if is_reference {
-                    abort!(last_seg.ident.span(), "Savefile does not presently support reference to Result in return position. Consider removing the '&'.");
+                    abort!(last_seg.ident.span(), "Savefile does not presently support reference to Result. Consider removing the '&'.");
                 }
 
                 match &last_seg.arguments {
@@ -1195,26 +1350,37 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
-            ArgType::Future(output) => {
+            ArgType::Future(pin, output, send,sync,unpin) => {
 
                 let wrapper_names = emit_future_helpers(
-                    output.clone(), &mut *extra_definitions
+                    *pin, output.clone(), &mut *extra_definitions, *send,*sync,*unpin
                 );
 
                 let futurer_wrapper_struct_name = wrapper_names.wrapper_struct_name;
                 let temp_trait_type = wrapper_names.trait_name;
+                let wrap_in_pin = if *pin {
+                  quote!(
+                      let t = Pin::new(t);
+                  )
+                }  else {
+                    quote! {  }
+                };
                 TypeInstruction {
                     deserialized_type: quote! { AbiConnection::<dyn #temp_trait_type> },
                     callee_trampoline_temp_variable_declaration1: quote! {
-                        let #temp_arg_name;
+                        let mut #temp_arg_name;
                     },
                     callee_trampoline_variable_deserializer1: quote! {
                         {
-                            #temp_arg_name = Box::new(unsafe {
+                            let t = Box::new(unsafe {
                                 #futurer_wrapper_struct_name {
                                     future: AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::Owned)?
                                 }
                             });
+                            #wrap_in_pin
+
+                            #temp_arg_name = t;
+
                             #temp_arg_name
                         }
                     },
@@ -1229,7 +1395,7 @@ impl ArgType {
                         }
                     },
                     schema: quote!(
-                         Schema::Future( <dyn #temp_trait_type as AbiExportable >::get_definition(version))
+                         Schema::Future( <dyn #temp_trait_type as AbiExportable >::get_definition(version), #send,#sync,#unpin)
                     ),
                     arg_type1: quote!(
                         Box<dyn Future<Output=#output> + Unpin>

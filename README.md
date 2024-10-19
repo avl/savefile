@@ -79,17 +79,32 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
-## 0.17.13
+## 0.18.0
 
-Improve handling of Sync- and Send-bounds. This should fix an issue where
-removing the Send-bound of an interface, and then using a client not providing a Send bound to call
-an older implementation that did require it, was not detected. 
+WARNING! 0.18.x is not binary compatible with 0.17.x, for SavefileAbi. Data stored to disk should still
+be compatible.
+
+The major new feature in 0.18.0 is the support for returning boxed futures in SavefileAbi.
+
+This allows exposing async API:s more easily using SavefileAbi.
+
+
+For example, method prototypes such as this are now allowed:
+
+```rust
+fn boxed_future(&self) -> Pin<Box<dyn Future<Output=u32>>>;
+```
+
+
+This release also improves Sync- and Send-bounds. This should fix an issue where
+removing the Send-bound of an interface, still allowed older clients to use the interface
+as if it had a Send-bound, which would be unsound.
 
 ## 0.17.12
 
 Make savefile-abi support Result containing boxed dyn traits in method call return position.
 I.e, this signature is now possible with savefile-abi:
-```
+```rust
     fn return_boxed_closure_result(&self) -> Result<Box<dyn Fn() -> u32>,()>;
 ```
 This is a special case, dyn traits are still not possible in arbitrary positions. This particular

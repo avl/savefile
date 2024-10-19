@@ -28,7 +28,7 @@ pub trait AdvancedTestInterface : Send{
 
 
     fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32;
-    fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin>;
+    fn boxed_future(&self) -> Pin<Box<dyn Future<Output=u32>>>;
 }
 /*
 pub trait Future {
@@ -180,19 +180,12 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32 {
         arg
     }
-    fn boxed_future(&self) -> Box<dyn Future<Output=u32> + Unpin> {
-        compile_error!("Verify:\
-unpin is right
-send + sync?
-compatibility checks?
-more?
+    fn boxed_future(&self) -> Pin<Box<dyn Future<Output=u32>>> {
 
-
-        ")
-        Box::new(Box::pin(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
+        Box::pin(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
             42
-        }))
+        })
     }
 }
 

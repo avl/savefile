@@ -8,6 +8,7 @@ methods:
     info:
       return_value:
         Primitive: schema_u32
+      receiver: Shared
       arguments:
         - schema:
             Struct:
@@ -42,6 +43,7 @@ methods:
       return_value:
         Primitive:
           schema_string: CapacityDataLength
+      receiver: Shared
       arguments:
         - schema:
             Enum:
@@ -60,10 +62,12 @@ methods:
   - name: function_existing_in_v2
     info:
       return_value: ZeroSize
+      receiver: Shared
       arguments: []
   - name: closure_test
     info:
       return_value: ZeroSize
+      receiver: Shared
       arguments:
         - schema:
             Boxed:
@@ -74,6 +78,7 @@ methods:
                     - name: docall
                       info:
                         return_value: ZeroSize
+                        receiver: Shared
                         arguments: []
                   sync: false
                   send: false

@@ -3,6 +3,7 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 #![deny(missing_docs)]
 #![deny(warnings)]
+#![allow(clippy::bool_comparison)]
 #![allow(clippy::box_default)]
 #![allow(clippy::needless_question_mark)]
 #![allow(clippy::needless_return)]
@@ -257,579 +258,579 @@ Rules for using the #\[savefile_versions] attribute:
  * You may add enum variants in future versions, but you may not change the size of the discriminant.
 
 
- ## The savefile_default_val attribute
+## The savefile_default_val attribute
 
- The default_val attribute is used to provide a custom default value for
- primitive types, when fields are added.
+The default_val attribute is used to provide a custom default value for
+primitive types, when fields are added.
 
- Example:
+Example:
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- #[derive(Savefile)]
- struct SomeType {
-     old_field: u32,
-     #[savefile_default_val="42"]
-     #[savefile_versions="1.."]
-     new_field: u32
- }
+#[derive(Savefile)]
+struct SomeType {
+ old_field: u32,
+ #[savefile_default_val="42"]
+ #[savefile_versions="1.."]
+ new_field: u32
+}
 
- # fn main() {}
+# fn main() {}
 
- ```
+```
 
- In the above example, the field `new_field` will have the value 42 when
- deserializing from version 0 of the protocol. If the default_val attribute
- is not used, new_field will have u32::default() instead, which is 0.
+In the above example, the field `new_field` will have the value 42 when
+deserializing from version 0 of the protocol. If the default_val attribute
+is not used, new_field will have u32::default() instead, which is 0.
 
- The default_val attribute only works for simple types.
+The default_val attribute only works for simple types.
 
- ## The savefile_default_fn attribute
+## The savefile_default_fn attribute
 
- The default_fn attribute allows constructing more complex values as defaults.
+The default_fn attribute allows constructing more complex values as defaults.
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- fn make_hello_pair() -> (String,String) {
-     ("Hello".to_string(),"World".to_string())
- }
- #[derive(Savefile)]
- struct SomeType {
-     old_field: u32,
-     #[savefile_default_fn="make_hello_pair"]
-     #[savefile_versions="1.."]
-     new_field: (String,String)
- }
- # fn main() {}
+fn make_hello_pair() -> (String,String) {
+ ("Hello".to_string(),"World".to_string())
+}
+#[derive(Savefile)]
+struct SomeType {
+ old_field: u32,
+ #[savefile_default_fn="make_hello_pair"]
+ #[savefile_versions="1.."]
+ new_field: (String,String)
+}
+# fn main() {}
 
- ```
+```
 
- ## The savefile_ignore attribute
+## The savefile_ignore attribute
 
- The savefile_ignore attribute can be used to exclude certain fields from serialization. They still
- need to be constructed during deserialization (of course), so you need to use one of the
- default-attributes to make sure the field can be constructed. If none of the  default-attributes
- (described above) are used, savefile will attempt to use the Default trait.
+The savefile_ignore attribute can be used to exclude certain fields from serialization. They still
+need to be constructed during deserialization (of course), so you need to use one of the
+default-attributes to make sure the field can be constructed. If none of the  default-attributes
+(described above) are used, savefile will attempt to use the Default trait.
 
- Here is an example, where a cached value is not to be deserialized.
- In this example, the value will be 0.0 after deserialization, regardless
- of the value when serializing.
+Here is an example, where a cached value is not to be deserialized.
+In this example, the value will be 0.0 after deserialization, regardless
+of the value when serializing.
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- #[derive(Savefile)]
- struct IgnoreExample {
-     a: f64,
-     b: f64,
-     #[savefile_ignore]
-     cached_product: f64
- }
- # fn main() {}
+#[derive(Savefile)]
+struct IgnoreExample {
+ a: f64,
+ b: f64,
+ #[savefile_ignore]
+ cached_product: f64
+}
+# fn main() {}
 
- ```
+```
 
- savefile_ignore does not stop the generator from generating an implementation for [Introspect] for the given field. To stop
- this as well, also supply the attribute savefile_introspect_ignore .
+savefile_ignore does not stop the generator from generating an implementation for [Introspect] for the given field. To stop
+this as well, also supply the attribute savefile_introspect_ignore .
 
- ## The savefile_versions_as attribute
+## The savefile_versions_as attribute
 
- The savefile_versions_as attribute can be used to support changing the type of a field.
+The savefile_versions_as attribute can be used to support changing the type of a field.
 
- Let's say the first version of our protocol uses the following struct:
+Let's say the first version of our protocol uses the following struct:
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- #[derive(Savefile)]
- struct Employee {
-     name : String,
-     phone_number : u64
- }
- # fn main() {}
+#[derive(Savefile)]
+struct Employee {
+ name : String,
+ phone_number : u64
+}
+# fn main() {}
 
- ```
+```
 
- After a while, we realize that u64 is a bad choice for datatype for a phone number,
- since it can't represent a number with leading 0, and also can't represent special characters
- which sometimes appear in phone numbers, like '+' or '-' etc.
+After a while, we realize that u64 is a bad choice for datatype for a phone number,
+since it can't represent a number with leading 0, and also can't represent special characters
+which sometimes appear in phone numbers, like '+' or '-' etc.
 
- So, we change the type of phone_number to String:
+So, we change the type of phone_number to String:
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- fn convert(phone_number:u64) -> String {
-     phone_number.to_string()
- }
- #[derive(Savefile)]
- struct Employee {
-     name : String,
-     #[savefile_versions_as="0..0:convert:u64"]
-     #[savefile_versions="1.."]
-     phone_number : String
- }
- # fn main() {}
+fn convert(phone_number:u64) -> String {
+ phone_number.to_string()
+}
+#[derive(Savefile)]
+struct Employee {
+ name : String,
+ #[savefile_versions_as="0..0:convert:u64"]
+ #[savefile_versions="1.."]
+ phone_number : String
+}
+# fn main() {}
 
- ```
+```
 
- This will cause version 0 of the protocol to be deserialized expecting a u64 for the phone number,
- which will then be converted using the provided function `convert` into a String.
+This will cause version 0 of the protocol to be deserialized expecting a u64 for the phone number,
+which will then be converted using the provided function `convert` into a String.
 
- Note, that conversions which are supported by the From trait are done automatically, and the
- function need not be specified in these cases.
+Note, that conversions which are supported by the From trait are done automatically, and the
+function need not be specified in these cases.
 
- Let's say we have the following struct:
+Let's say we have the following struct:
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- #[derive(Savefile)]
- struct Racecar {
-     max_speed_kmh : u8,
- }
- # fn main() {}
- ```
+#[derive(Savefile)]
+struct Racecar {
+ max_speed_kmh : u8,
+}
+# fn main() {}
+```
 
- We realize that we need to increase the range of the max_speed_kmh variable, and change it like this:
+We realize that we need to increase the range of the max_speed_kmh variable, and change it like this:
 
- ```
- # use savefile_derive::Savefile;
+```
+# use savefile_derive::Savefile;
 
- #[derive(Savefile)]
- struct Racecar {
-     #[savefile_versions_as="0..0:u8"]
-     #[savefile_versions="1.."]
-     max_speed_kmh : u16,
- }
- # fn main() {}
- ```
+#[derive(Savefile)]
+struct Racecar {
+ #[savefile_versions_as="0..0:u8"]
+ #[savefile_versions="1.."]
+ max_speed_kmh : u16,
+}
+# fn main() {}
+```
 
- Note that in this case we don't need to tell Savefile how the deserialized u8 is to be converted
- to an u16.
-
-
-
- # Speeding things up
- Note: This entire chapter can safely be ignored. Savefile will, in most circumstances,
- perform very well without any special work by the programmer.
-
- Continuing the example from previous chapters, let's say we want to add a list of all
- positions that our player have visited, so that we can provide an instant-replay function to
- our game. The list can become really long, so we want to make sure that the overhead when
- serializing this is as low as possible.
+Note that in this case we don't need to tell Savefile how the deserialized u8 is to be converted
+to an u16.
 
 
- ```
- use savefile::prelude::*;
- use std::path::Path;
- use savefile_derive::Savefile;
+
+# Speeding things up
+Note: This entire chapter can safely be ignored. Savefile will, in most circumstances,
+perform very well without any special work by the programmer.
+
+Continuing the example from previous chapters, let's say we want to add a list of all
+positions that our player have visited, so that we can provide an instant-replay function to
+our game. The list can become really long, so we want to make sure that the overhead when
+serializing this is as low as possible.
+
+
+```
+use savefile::prelude::*;
+use std::path::Path;
+use savefile_derive::Savefile;
 # #[cfg(miri)] fn main() {}
 # #[cfg(not(miri))]
 # fn main() {
 
 
- #[derive(Clone, Copy, Savefile)]
- #[repr(C)] // Memory layout will become equal to savefile disk format - optimization possible!
- struct Position {
-     x : u32,
-     y : u32,
- }
+#[derive(Clone, Copy, Savefile)]
+#[repr(C)] // Memory layout will become equal to savefile disk format - optimization possible!
+struct Position {
+ x : u32,
+ y : u32,
+}
 
- const GLOBAL_VERSION:u32 = 2;
- #[derive(Savefile)]
- struct Player {
-     name : String,
-     #[savefile_versions="0..0"] //Only version 0 had this field
-     strength : Removed<u32>,
-     inventory : Vec<String>,
-     #[savefile_versions="1.."] //Only versions 1 and later have this field
-     skills : Vec<String>,
-     #[savefile_versions="2.."] //Only versions 2 and later have this field
-     history : Vec<Position>
- }
+const GLOBAL_VERSION:u32 = 2;
+#[derive(Savefile)]
+struct Player {
+ name : String,
+ #[savefile_versions="0..0"] //Only version 0 had this field
+ strength : Removed<u32>,
+ inventory : Vec<String>,
+ #[savefile_versions="1.."] //Only versions 1 and later have this field
+ skills : Vec<String>,
+ #[savefile_versions="2.."] //Only versions 2 and later have this field
+ history : Vec<Position>
+}
 
- fn save_player(file:&'static str, player:&Player) {
-     save_file(file, GLOBAL_VERSION, player).unwrap();
- }
+fn save_player(file:&'static str, player:&Player) {
+ save_file(file, GLOBAL_VERSION, player).unwrap();
+}
 
- fn load_player(file:&'static str) -> Player {
-     load_file(file, GLOBAL_VERSION).unwrap()
- }
+fn load_player(file:&'static str) -> Player {
+ load_file(file, GLOBAL_VERSION).unwrap()
+}
 
- fn main() {
+fn main() {
 
-     if Path::new("newsave.bin").exists() == false { /* error handling */ return;}
+ if Path::new("newsave.bin").exists() == false { /* error handling */ return;}
 
-     let mut player = load_player("newsave.bin"); //Load from previous save
-     player.history.push(Position{x:1,y:1});
-     player.history.push(Position{x:2,y:1});
-     player.history.push(Position{x:2,y:2});
-     save_player("newersave.bin", &player);
- }
+ let mut player = load_player("newsave.bin"); //Load from previous save
+ player.history.push(Position{x:1,y:1});
+ player.history.push(Position{x:2,y:1});
+ player.history.push(Position{x:2,y:2});
+ save_player("newersave.bin", &player);
+}
 # }
- ```
- Savefile can speed up serialization of arrays/vectors of certain types, when it can
- detect that the type consists entirely of packed plain binary data.
+```
 
- The above will be very fast, even if 'history' contains millions of position-instances.
+Savefile can speed up serialization of arrays/vectors of certain types, when it can
+detect that the type consists entirely of packed plain binary data.
 
-
- Savefile has a trait [crate::Packed] that must be implemented for each T. The savefile-derive
- macro implements this automatically.
-
- This trait has an unsafe function [crate::Packed::repr_c_optimization_safe] which answers the question:
- - Is this type such that it can safely be copied byte-per-byte?
- Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
- a very fast, raw memory copy.
- The exact criteria is that the in-memory representation of the type must be identical to what
- the Serialize trait does for the type.
+The above will be very fast, even if 'history' contains millions of position-instances.
 
 
- Most of the time, the user doesn't need to implement Packed, as it can be derived automatically
- by the savefile derive macro.
+Savefile has a trait [crate::Packed] that must be implemented for each T. The savefile-derive
+macro implements this automatically.
 
- However, implementing it manually can be done, with care. You, as implementor of the `Packed`
- trait take full responsibility that all the following rules are upheld:
-
- * The type T is Copy
- * The in-memory representation of T is identical to the savefile disk format.
- * The host platform is little endian. The savefile disk format uses little endian.
- * The type is represented in memory in an ordered, packed representation. Savefile is not
- clever enough to inspect the actual memory layout and adapt to this, so the memory representation
- has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
- that the #\[repr(C)] attribute is not enough to do this - it will include padding if needed for alignment
- reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
- Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
- If the type is an enum, it must be #\[repr(u8)], #\[repr(u16)] or #\[repr(u32)].
- Enums with fields are not presently optimized.
+This trait has an unsafe function [crate::Packed::repr_c_optimization_safe] which answers the question:
+ "Is this type such that it can safely be copied byte-per-byte"?
+Answering yes for a specific type T, causes savefile to optimize serialization of `Vec<T>` into being
+a very fast, raw memory copy.
+The exact criteria is that the in-memory representation of the type must be identical to what
+the Serialize trait does for the type.
 
 
- Regarding padding, don't do:
- ```
- #[repr(C)]
- struct Bad {
-     f1 : u8,
-     f2 : u32,
- }
- ```
- Since the compiler is likely to insert 3 bytes of padding after f1, to ensure that f2 is aligned to 4 bytes.
+Most of the time, the user doesn't need to implement Packed, as it can be derived automatically
+by the savefile derive macro.
 
- Instead, do this:
+However, implementing it manually can be done, with care. You, as implementor of the `Packed`
+trait take full responsibility that all the following rules are upheld:
 
- ```
- #[repr(C)]
- struct Good {
-     f1 : u8,
-     pad1 :u8,
-     pad2 :u8,
-     pad3 :u8,
-     f2 : u32,
- }
- ```
+* The type T is Copy
+* The in-memory representation of T is identical to the savefile disk format.
+* The host platform is little endian. The savefile disk format uses little endian.
+* The type is represented in memory in an ordered, packed representation. Savefile is not
 
- And simpy don't use the pad1, pad2 and pad3 fields. Note, at time of writing, Savefile requires that the struct
- be free of all padding. Even padding at the end is not allowed. This means that the following does not work:
+clever enough to inspect the actual memory layout and adapt to this, so the memory representation
+has to be all the types of the struct fields in a consecutive sequence without any gaps. Note
+that the #\[repr(C)] attribute is not enough to do this - it will include padding if needed for alignment
+reasons. You should not use #\[repr(packed)], since that may lead to unaligned struct fields.
+Instead, you should use #\[repr(C)] combined with manual padding, if necessary.
+If the type is an enum, it must be #\[repr(u8)], #\[repr(u16)] or #\[repr(u32)].
+Enums with fields are not presently optimized.
 
- ```
- #[repr(C)]
- struct Bad2 {
-     f1 : u32,
-     f2 : u8,
- }
- ```
- This restriction may be lifted at a later time.
 
- When it comes to enums, there are requirements to enable the optimization:
+Regarding padding, don't do:
+```
+#[repr(C)]
+struct Bad {
+ f1 : u8,
+ f2 : u32,
+}
+```
+Since the compiler is likely to insert 3 bytes of padding after f1, to ensure that f2 is aligned to 4 bytes.
 
- This enum is not optimizable, since it doesn't have a defined discrminant size:
- ```
- enum BadEnum1 {
-    Variant1,
-    Variant2,
- }
- ```
+Instead, do this:
 
- This will be optimized:
- ```
- #[repr(u8)]
- enum GoodEnum1 {
-    Variant1,
-    Variant2,
- }
- ```
+```
+#[repr(C)]
+struct Good {
+ f1 : u8,
+ pad1 :u8,
+ pad2 :u8,
+ pad3 :u8,
+ f2 : u32,
+}
+```
 
- This also:
- ```
- #[repr(u8)]
- enum GoodEnum2 {
-    Variant1(u8),
-    Variant2(u8),
- }
- ```
+And simpy don't use the pad1, pad2 and pad3 fields. Note, at time of writing, Savefile requires that the struct
+be free of all padding. Even padding at the end is not allowed. This means that the following does not work:
 
- However, the following will not be optimized, since there will be padding after Variant1.
- To have the optimization enabled, all variants must be the same size, and without any padding.
+```
+#[repr(C)]
+struct Bad2 {
+ f1 : u32,
+ f2 : u8,
+}
+```
+This restriction may be lifted at a later time.
 
- ```
- #[repr(u8)]
- enum BadEnum2 {
-    Variant1,
-    Variant2(u8),
- }
- ```
+When it comes to enums, there are requirements to enable the optimization:
+
+This enum is not optimizable, since it doesn't have a defined discrminant size:
+```
+enum BadEnum1 {
+Variant1,
+Variant2,
+}
+```
+
+This will be optimized:
+```
+#[repr(u8)]
+enum GoodEnum1 {
+Variant1,
+Variant2,
+}
+```
+
+This also:
+```
+#[repr(u8)]
+enum GoodEnum2 {
+Variant1(u8),
+Variant2(u8),
+}
+```
+
+However, the following will not be optimized, since there will be padding after Variant1.
+To have the optimization enabled, all variants must be the same size, and without any padding.
+
+```
+#[repr(u8)]
+enum BadEnum2 {
+Variant1,
+Variant2(u8),
+}
+```
 
 This can be fixed with manual padding:
- ```
- #[repr(u8)]
- enum BadEnum2Fixed {
-    Variant1{padding:u8},
-    Variant2(u8),
+```
+#[repr(u8)]
+enum BadEnum2Fixed {
+Variant1{padding:u8},
+Variant2(u8),
+}
+```
+
+
+This will be optimized:
+```
+#[repr(u8)]
+enum GoodEnum3 {
+Variant1{x:u8,y:u16,z:u16,w:u16},
+Variant2{x:u8,y:u16,z:u32},
+}
+```
+
+However, the following will not be:
+```
+#[repr(u8,C)]
+enum BadEnum3 {
+Variant1{x:u8,y:u16,z:u16,w:u16},
+Variant2{x:u8,y:u16,z:u32},
+}
+```
+The reason is that the format `#[repr(u8,C)]` will layout the struct as if the fields of each
+variant were a C-struct. This means alignment of Variant2 will be 4, and the offset of 'x' will be 4.
+This in turn means there will be padding between the discriminant and the fields, making the optimization
+impossible.
+
+
+### The attribute savefile_require_fast
+
+When deriving the savefile-traits automatically, specify the attribute ```#[savefile_require_fast]``` to require
+the optimized behaviour. If the type doesn't fulfill the required characteristics, a diagnostic will be printed in
+many situations. Presently, badly aligned data structures are detected at compile time. Other problems are
+only detected at runtime, and result in lower performance but still correct behaviour.
+Using 'savefile_require_fast' is not unsafe, although it used to be in an old version.
+Since the speedups it produces are now produced regardless, it is mostly recommended to not use
+savefile_require_fast, unless compilation failure on bad alignment is desired.
+
+
+# Custom serialization
+
+For most user types, the savefile-derive crate can be used to automatically derive serializers
+and deserializers. This is not always possible, however.
+
+By implementing the traits Serialize, Deserialize and WithSchema, it's possible to create custom
+serializers for any type.
+
+Let's create a custom serializer for an object MyPathBuf, as an example (this is just an example, because of
+the rust 'orphan rules', only Savefile can actually implement the Savefile-traits for PathBuf. However,
+you can implement the Savefile traits for your own data types in your own crates!)
+
+The first thing we need to do is implement WithSchema. This trait requires us to return an instance
+of Schema. The Schema is used to 'sanity-check' stored data, so that an attempt to deserialize a
+file which was serialized using a different schema will fail predictably.
+
+Schema is an enum, with a few built-in variants. See documentation: [crate::Schema] .
+
+In our case, we choose to handle a MyPathBuf as a string, so we choose Schema::Primitive, with the
+argument SchemaPrimitive::schema_string . If your data is a collection of some sort, Schema::Vector
+may be appropriate.
+
+Note that the implementor of Serialize and Deserialize have total freedom to serialize data
+to/from the binary stream. It is important that the Schema accurately describes the format
+produced by Serialize and expected by Deserialize. Deserialization from a file is always sound,
+even if the Schema is wrong. However, the process may allocate too much memory, and data
+deserialized may be gibberish.
+
+When the Schema is used by the savefile-abi crate, unsoundness can occur if the Schema is
+incorrect. However, the responsibility for ensuring correctness falls on the savefile-abi crate.
+The savefile-library itself produces correct Schema-instances for all types it supports.
+
+````rust
+use savefile::prelude::*;
+pub struct MyPathBuf {
+ path: String,
+}
+impl WithSchema for MyPathBuf {
+ fn schema(_version: u32, context: &mut WithSchemaContext) -> Schema {
+     Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
  }
- ```
-
-
- This will be optimized:
- ```
- #[repr(u8)]
- enum GoodEnum3 {
-    Variant1{x:u8,y:u16,z:u16,w:u16},
-    Variant2{x:u8,y:u16,z:u32},
+}
+impl Packed for MyPathBuf {
+}
+impl Serialize for MyPathBuf {
+ fn serialize<'a>(&self, serializer: &mut Serializer<impl std::io::Write>) -> Result<(), SavefileError> {
+     self.path.serialize(serializer)
  }
- ```
-
- However, the following will not be:
- ```
- #[repr(u8,C)]
- enum BadEnum3 {
-    Variant1{x:u8,y:u16,z:u16,w:u16},
-    Variant2{x:u8,y:u16,z:u32},
+}
+impl Deserialize for MyPathBuf {
+ fn deserialize(deserializer: &mut Deserializer<impl std::io::Read>) -> Result<Self, SavefileError> {
+     Ok(MyPathBuf { path : String::deserialize(deserializer)? } )
  }
- ```
- The reason is that the format `#[repr(u8,C)]` will layout the struct as if the fields of each
- variant were a C-struct. This means alignment of Variant2 will be 4, and the offset of 'x' will be 4.
- This in turn means there will be padding between the discriminant and the fields, making the optimization
- impossible.
+}
+
+````
 
 
- ### The attribute savefile_require_fast
+# Introspection
 
- When deriving the savefile-traits automatically, specify the attribute ```#[savefile_require_fast]``` to require
- the optimized behaviour. If the type doesn't fulfill the required characteristics, a diagnostic will be printed in
- many situations. Presently, badly aligned data structures are detected at compile time. Other problems are
- only detected at runtime, and result in lower performance but still correct behaviour.
- Using 'savefile_require_fast' is not unsafe, although it used to be in an old version.
- Since the speedups it produces are now produced regardless, it is mostly recommended to not use
- savefile_require_fast, unless compilation failure on bad alignment is desired.
+The Savefile crate also provides an introspection feature, meant for diagnostics. This is implemented
+through the trait [Introspect]. Any type implementing this can be introspected.
 
+The savefile-derive crate supports automatically generating an implementation for most types.
 
- # Custom serialization
+The introspection is purely 'read only'. There is no provision for using the framework to mutate
+data.
 
- For most user types, the savefile-derive crate can be used to automatically derive serializers
- and deserializers. This is not always possible, however.
-
- By implementing the traits Serialize, Deserialize and WithSchema, it's possible to create custom
- serializers for any type.
-
- Let's create a custom serializer for an object MyPathBuf, as an example (this is just an example, because of
- the rust 'orphan rules', only Savefile can actually implement the Savefile-traits for PathBuf. However,
- you can implement the Savefile traits for your own data types in your own crates!)
-
- The first thing we need to do is implement WithSchema. This trait requires us to return an instance
- of Schema. The Schema is used to 'sanity-check' stored data, so that an attempt to deserialize a
- file which was serialized using a different schema will fail predictably.
-
- Schema is an enum, with a few built-in variants. See documentation: [crate::Schema] .
-
- In our case, we choose to handle a MyPathBuf as a string, so we choose Schema::Primitive, with the
- argument SchemaPrimitive::schema_string . If your data is a collection of some sort, Schema::Vector
- may be appropriate.
-
- Note that the implementor of Serialize and Deserialize have total freedom to serialize data
- to/from the binary stream. It is important that the Schema accurately describes the format
- produced by Serialize and expected by Deserialize. Deserialization from a file is always sound,
- even if the Schema is wrong. However, the process may allocate too much memory, and data
- deserialized may be gibberish.
-
- When the Schema is used by the savefile-abi crate, unsoundness can occur if the Schema is
- incorrect. However, the responsibility for ensuring correctness falls on the savefile-abi crate.
- The savefile-library itself produces correct Schema-instances for all types it supports.
-
- ````rust
- use savefile::prelude::*;
- pub struct MyPathBuf {
-     path: String,
- }
- impl WithSchema for MyPathBuf {
-     fn schema(_version: u32, context: &mut WithSchemaContext) -> Schema {
-         Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
-     }
- }
- impl Packed for MyPathBuf {
- }
- impl Serialize for MyPathBuf {
-     fn serialize<'a>(&self, serializer: &mut Serializer<impl std::io::Write>) -> Result<(), SavefileError> {
-         self.path.serialize(serializer)
-     }
- }
- impl Deserialize for MyPathBuf {
-     fn deserialize(deserializer: &mut Deserializer<impl std::io::Read>) -> Result<Self, SavefileError> {
-         Ok(MyPathBuf { path : String::deserialize(deserializer)? } )
-     }
- }
-
- ````
+Here is an example of using the trait directly:
 
 
- # Introspection
+````rust
+use savefile::prelude::*;
+use savefile_derive::Savefile;
+use savefile::Introspect;
+use savefile::IntrospectItem;
+#[derive(Savefile)]
+struct Weight {
+ value: u32,
+ unit: String
+}
+#[derive(Savefile)]
+struct Person {
+ name : String,
+ age: u16,
+ weight: Weight,
+}
+let a_person = Person {
+ name: "Leo".into(),
+ age: 8,
+ weight: Weight { value: 26, unit: "kg".into() }
+};
+assert_eq!(a_person.introspect_len(), 3); //There are three fields
+assert_eq!(a_person.introspect_value(), "Person"); //Value of structs is the struct type, per default
+assert_eq!(a_person.introspect_child(0).unwrap().key(), "name"); //Each child has a name and a value. The value is itself a &dyn Introspect, and can be introspected recursively
+assert_eq!(a_person.introspect_child(0).unwrap().val().introspect_value(), "Leo"); //In this case, the child (name) is a simple string with value "Leo".
+assert_eq!(a_person.introspect_child(1).unwrap().key(), "age");
+assert_eq!(a_person.introspect_child(1).unwrap().val().introspect_value(), "8");
+assert_eq!(a_person.introspect_child(2).unwrap().key(), "weight");
+let weight = a_person.introspect_child(2).unwrap();
+assert_eq!(weight.val().introspect_child(0).unwrap().key(), "value"); //Here the child 'weight' has an introspectable weight obj as value
+assert_eq!(weight.val().introspect_child(0).unwrap().val().introspect_value(), "26");
+assert_eq!(weight.val().introspect_child(1).unwrap().key(), "unit");
+ assert_eq!(weight.val().introspect_child(1).unwrap().val().introspect_value(), "kg");
 
- The Savefile crate also provides an introspection feature, meant for diagnostics. This is implemented
- through the trait [Introspect]. Any type implementing this can be introspected.
+````
 
- The savefile-derive crate supports automatically generating an implementation for most types.
+## Introspect Details
 
- The introspection is purely 'read only'. There is no provision for using the framework to mutate
- data.
+By using #\[derive(SavefileIntrospectOnly)] it is possible to have only the Introspect-trait implemented,
+and not the serialization traits. This can be useful for types which aren't possible to serialize,
+but you still wish to have introspection for.
 
- Here is an example of using the trait directly:
+By using the #\[savefile_introspect_key] attribute on a field, it is possible to make the
+generated [crate::Introspect::introspect_value] return the string representation of the field.
+This can be useful, to have the primary key (name) of an object more prominently visible in the
+introspection output.
 
+Example:
 
- ````rust
- use savefile::prelude::*;
- use savefile_derive::Savefile;
- use savefile::Introspect;
- use savefile::IntrospectItem;
- #[derive(Savefile)]
- struct Weight {
-     value: u32,
-     unit: String
- }
- #[derive(Savefile)]
- struct Person {
-     name : String,
-     age: u16,
-     weight: Weight,
- }
- fn main() {
-     let a_person = Person {
-         name: "Leo".into(),
-         age: 8,
-         weight: Weight { value: 26, unit: "kg".into() }
-     };
-     assert_eq!(a_person.introspect_len(), 3); //There are three fields
-     assert_eq!(a_person.introspect_value(), "Person"); //Value of structs is the struct type, per default
-     assert_eq!(a_person.introspect_child(0).unwrap().key(), "name"); //Each child has a name and a value. The value is itself a &dyn Introspect, and can be introspected recursively
-     assert_eq!(a_person.introspect_child(0).unwrap().val().introspect_value(), "Leo"); //In this case, the child (name) is a simple string with value "Leo".
-     assert_eq!(a_person.introspect_child(1).unwrap().key(), "age");
-     assert_eq!(a_person.introspect_child(1).unwrap().val().introspect_value(), "8");
-     assert_eq!(a_person.introspect_child(2).unwrap().key(), "weight");
-     let weight = a_person.introspect_child(2).unwrap();
-     assert_eq!(weight.val().introspect_child(0).unwrap().key(), "value"); //Here the child 'weight' has an introspectable weight obj as value
-     assert_eq!(weight.val().introspect_child(0).unwrap().val().introspect_value(), "26");
-     assert_eq!(weight.val().introspect_child(1).unwrap().key(), "unit");
-     assert_eq!(weight.val().introspect_child(1).unwrap().val().introspect_value(), "kg");
- }
- ````
+````rust
+# use savefile::prelude::*;
+# use savefile_derive::Savefile;
+# use savefile::prelude::*;
 
- ## Introspect Details
+#[derive(Savefile)]
+pub struct StructWithName {
+ #[savefile_introspect_key]
+ name: String,
+ value: String
+}
+# fn main(){}
+````
 
- By using #\[derive(SavefileIntrospectOnly)] it is possible to have only the Introspect-trait implemented,
- and not the serialization traits. This can be useful for types which aren't possible to serialize,
- but you still wish to have introspection for.
+## Higher level introspection functions
 
- By using the #\[savefile_introspect_key] attribute on a field, it is possible to make the
- generated [crate::Introspect::introspect_value] return the string representation of the field.
- This can be useful, to have the primary key (name) of an object more prominently visible in the
- introspection output.
+There is a helper called [crate::Introspector] which allows to get a structured representation
+of parts of an introspectable object. The Introspector has a 'path' which looks in to the
+introspection tree and shows values for this tree. The advantage of using this compared to
+just using ```format!("{:#?}",mystuff)``` is that for very large data structures, unconditionally
+dumping all data may be unwieldy. The author has a struct which becomes hundreds of megabytes
+when formatted using the Debug-trait in this way.
 
- Example:
+An example:
+````rust
 
- ````rust
- # use savefile::prelude::*;
- # use savefile_derive::Savefile;
- # use savefile::prelude::*;
+use savefile_derive::Savefile;
+use savefile::Introspect;
+use savefile::IntrospectItem;
+use savefile::prelude::*;
+#[derive(Savefile)]
+struct Weight {
+ value: u32,
+ unit: String
+}
+#[derive(Savefile)]
+struct Person {
+ name : String,
+ age: u16,
+ weight: Weight,
+}
 
- #[derive(Savefile)]
- pub struct StructWithName {
-     #[savefile_introspect_key]
-     name: String,
-     value: String
- }
- # fn main(){}
- ````
+let a_person = Person {
+ name: "Leo".into(),
+ age: 8,
+ weight: Weight { value: 26, unit: "kg".into() }
+};
 
- ## Higher level introspection functions
+let mut introspector = Introspector::new();
 
- There is a helper called [crate::Introspector] which allows to get a structured representation
- of parts of an introspectable object. The Introspector has a 'path' which looks in to the
- introspection tree and shows values for this tree. The advantage of using this compared to
- just using ```format!("{:#?}",mystuff)``` is that for very large data structures, unconditionally
- dumping all data may be unwieldy. The author has a struct which becomes hundreds of megabytes
- when formatted using the Debug-trait in this way.
+let result = introspector.do_introspect(&a_person,
+ IntrospectorNavCommand::SelectNth{select_depth:0, select_index: 2}).unwrap();
 
- An example:
- ````rust
+println!("{}",result);
+/*
+Output is:
 
- use savefile_derive::Savefile;
- use savefile::Introspect;
- use savefile::IntrospectItem;
- use savefile::prelude::*;
- #[derive(Savefile)]
- struct Weight {
-     value: u32,
-     unit: String
- }
- #[derive(Savefile)]
- struct Person {
-     name : String,
-     age: u16,
-     weight: Weight,
- }
- fn main() {
-     let a_person = Person {
-         name: "Leo".into(),
-         age: 8,
-         weight: Weight { value: 26, unit: "kg".into() }
-     };
+Introspectionresult:
+name = Leo
+age = 8
+eight = Weight
+value = 26
+unit = kg
 
-     let mut introspector = Introspector::new();
-
-     let result = introspector.do_introspect(&a_person,
-         IntrospectorNavCommand::SelectNth{select_depth:0, select_index: 2}).unwrap();
-
-     println!("{}",result);
-     /*
-     Output is:
-
-    Introspectionresult:
-        name = Leo
-        age = 8
-        eight = Weight
-        value = 26
-        unit = kg
-
-      */
-     // Note, that there is no point in using the Introspection framework just to get
-     // a debug output like above, the point is that for larger data structures, the
-     // introspection data can be programmatically used and shown in a live updating GUI,
-     // or possibly command line interface or similar. The [crate::IntrospectionResult] does
-     // implement Display, but this is just for convenience.
-
- }
+*/
+// Note, that there is no point in using the Introspection framework just to get
+// a debug output like above, the point is that for larger data structures, the
+// introspection data can be programmatically used and shown in a live updating GUI,
+// or possibly command line interface or similar. The [crate::IntrospectionResult] does
+// implement Display, but this is just for convenience.
 
 
- ````
 
- ## Navigating using the Introspector
+````
 
- The [crate::Introspector] object can be used to navigate inside an object being introspected.
- A GUI-program could allow an operator to use arrow keys to navigate the introspected object.
+## Navigating using the Introspector
 
- Every time [crate::Introspector::do_introspect] is called, a [crate::IntrospectorNavCommand] is given
- which can traverse the tree downward or upward. In the example in the previous chapter,
- SelectNth is used to select the 2nd children at the 0th level in the tree.
+The [crate::Introspector] object can be used to navigate inside an object being introspected.
+A GUI-program could allow an operator to use arrow keys to navigate the introspected object.
+
+Every time [crate::Introspector::do_introspect] is called, a [crate::IntrospectorNavCommand] is given
+which can traverse the tree downward or upward. In the example in the previous chapter,
+SelectNth is used to select the 2nd children at the 0th level in the tree.
 
 
 # Troubleshooting
@@ -918,6 +919,7 @@ extern crate memoffset;
 extern crate savefile_derive;
 
 /// The current savefile version.
+///
 /// This versions number is used for serialized schemas.
 /// There is an ambition that savefiles created by earlier versions
 /// will be possible to open using later versions. The other way
@@ -1100,6 +1102,7 @@ impl SavefileError {
 }
 
 /// Object to which serialized data is to be written.
+///
 /// This is basically just a wrapped `std::io::Write` object
 /// and a file protocol version number.
 /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
@@ -1114,6 +1117,7 @@ pub struct Serializer<'a, W: Write> {
 }
 
 /// Object from which bytes to be deserialized are read.
+///
 /// This is basically just a wrapped `std::io::Read` object,
 /// the version number of the file being read, and the
 /// current version number of the data structures in memory.
@@ -1127,7 +1131,9 @@ pub struct Deserializer<'a, R: Read> {
     pub ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
-impl<'a, TR: Read> Deserializer<'a, TR> {
+impl<TR: Read> Deserializer<'_, TR> {
+    /// Get deserializer state.
+    ///
     /// This function constructs a temporary state object of type R, and returns a mutable
     /// reference to it. This object can be used to store data that needs to live for the entire
     /// deserialization session. An example is de-duplicating Arc and other reference counted objects.
@@ -1151,7 +1157,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
 pub struct IsPacked(bool);
 
 #[doc(hidden)]
-#[deprecated(since = "0.17", note = "The 'IsReprC' type has been renamed to 'IsPacked'.")]
+#[deprecated(since = "0.17.0", note = "The 'IsReprC' type has been renamed to 'IsPacked'.")]
 pub type IsReprC = IsPacked;
 
 impl std::ops::BitAnd<IsPacked> for IsPacked {
@@ -1244,13 +1250,13 @@ pub trait Packed {
 /// If you somehow end up here, what you really want is to find instances of ReprC and change them
 /// to Packed.
 #[doc(hidden)]
-#[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
+#[deprecated(since = "0.17.0", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 pub struct DeliberatelyUnimplementable {
     #[allow(dead_code)]
     private: (),
 }
 
-#[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
+#[deprecated(since = "0.17.0", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
 #[doc(hidden)]
 #[cfg_attr(feature = "rust1_78", diagnostic::on_unimplemented(
     message = "ReprC has been deprecated and must not be used. Use trait `savefile::Packed` instead!",
@@ -1258,7 +1264,7 @@ pub struct DeliberatelyUnimplementable {
     note = "Please change any `ReprC` bounds into `Packed` bounds.",
 ))]
 pub trait ReprC {
-    #[deprecated(since = "0.17", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
+    #[deprecated(since = "0.17.0", note = "The 'ReprC' trait has been renamed to 'Packed'.")]
     #[doc(hidden)]
     #[allow(non_snake_case)]
     #[allow(deprecated)]
@@ -1534,7 +1540,7 @@ mod crypto {
 
     const CRYPTO_BUFSIZE: usize = 100_000;
 
-    impl<'a> Drop for CryptoWriter<'a> {
+    impl Drop for CryptoWriter<'_> {
         fn drop(&mut self) {
             self.flush().expect("The implicit flush in the Drop of CryptoWriter failed. This causes this panic. If you want to be able to handle this, make sure to call flush() manually. If a manual flush has failed, Drop won't panic.");
         }
@@ -1568,7 +1574,7 @@ mod crypto {
         }
     }
 
-    impl<'a> Read for CryptoReader<'a> {
+    impl Read for CryptoReader<'_> {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
             loop {
                 if buf.len() <= self.buf.len() - self.offset {
@@ -1635,7 +1641,7 @@ mod crypto {
         }
     }
 
-    impl<'a> Write for CryptoWriter<'a> {
+    impl Write for CryptoWriter<'_> {
         fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
             if self.failed {
                 panic!("Call to failed CryptoWriter");
@@ -1984,7 +1990,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     }
 }
 
-impl<'a, TR: Read> Deserializer<'a, TR> {
+impl<TR: Read> Deserializer<'_, TR> {
     /// Reads a u8 and return true if equal to 1
     pub fn read_bool(&mut self) -> Result<bool, SavefileError> {
         Ok(self.reader.read_u8()? == 1)
@@ -2192,7 +2198,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
                     let memory_schema = memory_schema(file_ver);
                     let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
-                    if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
+                    if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string(), false) {
                         return Err(SavefileError::IncompatibleSchema {
                             message: format!(
                                 "Saved schema differs from in-memory schema for version {}. Error: {}",
@@ -2218,7 +2224,7 @@ impl<'a, TR: Read> Deserializer<'a, TR> {
                 let memory_schema = memory_schema(file_ver);
                 let file_schema = Schema::deserialize(&mut schema_deserializer)?;
 
-                if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string()) {
+                if let Some(err) = diff_schema(&memory_schema, &file_schema, ".".to_string(), false) {
                     return Err(SavefileError::IncompatibleSchema {
                         message: format!(
                             "Saved schema differs from in-memory schema for version {}. Error: {}",
@@ -2249,6 +2255,7 @@ pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16)
 }
 
 /// Deserialize an instance of type T from the given `reader` .
+///
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
@@ -2257,6 +2264,7 @@ pub fn load<T: WithSchema + Deserialize>(reader: &mut impl Read, version: u32) -
 }
 
 /// Deserialize an instance of type T from the given u8 slice .
+///
 /// The current type of T in memory must be equal to `version`.
 /// The deserializer will use the actual protocol version in the
 /// file to do the deserialization.
@@ -2266,12 +2274,14 @@ pub fn load_from_mem<T: WithSchema + Deserialize>(input: &[u8], version: u32) ->
 }
 
 /// Write the given `data` to the `writer`.
+///
 /// The current version of data must be `version`.
 pub fn save<T: WithSchema + Serialize>(writer: &mut impl Write, version: u32, data: &T) -> Result<(), SavefileError> {
     Serializer::save::<T>(writer, version, data, false)
 }
 
 /// Write the given `data` to the `writer`. Compresses data using 'bzip2' compression format.
+///
 /// The current version of data must be `version`.
 /// The resultant data can be loaded using the regular load-function (it autodetects if compressions was
 /// active or not).
@@ -2313,7 +2323,8 @@ pub fn load_noschema<T: Deserialize>(reader: &mut impl Read, version: u32) -> Re
     Deserializer::<_>::load_noschema::<T>(reader, version)
 }
 
-/// Write the given `data` to the `writer`.
+/// Write the given `data` to the `writer`, without a schema.
+///
 /// The current version of data must be `version`.
 /// Do this write without writing any schema to disk.
 /// As long as all the serializers and deserializers
@@ -2352,7 +2363,9 @@ pub fn load_file_noschema<T: Deserialize, P: AsRef<Path>>(filepath: P, version: 
 }
 
 /// Like [crate::save_noschema] , except it opens a file on the filesystem and writes
-/// the data to it. This is a pure convenience function.
+/// the data to it.
+///
+/// This is a pure convenience function.
 pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
     filepath: P,
     version: u32,
@@ -2363,6 +2376,7 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
 }
 
 /// Context object used to keep track of recursion.
+///
 /// Datastructures which cannot contain recursion do not need to concern themselves with
 /// this. Recursive data structures in rust require the use of Box, Vec, Arc or similar.
 /// The most common of these datatypes from std are supported by savefile, and will guard
@@ -2421,6 +2435,7 @@ impl WithSchemaContext {
 }
 
 /// This trait must be implemented by all data structures you wish to be able to save.
+///
 /// It must encode the schema for the datastructure when saved using the given version number.
 /// When files are saved, the schema is encoded into the file.
 /// when loading, the schema is inspected to make sure that the load will safely succeed.
@@ -2481,7 +2496,9 @@ pub fn get_result_schema(ok: Schema, err: Schema) -> Schema {
 
 
 /// This trait must be implemented for all data structures you wish to be
-/// able to serialize. To actually serialize data: create a [Serializer],
+/// able to serialize.
+///
+/// To actually serialize data: create a [Serializer],
 /// then call serialize on your data to save, giving the Serializer
 /// as an argument.
 ///
@@ -2497,12 +2514,15 @@ pub fn get_result_schema(ok: Schema, err: Schema) -> Schema {
 ))]
 pub trait Serialize: WithSchema {
     /// Serialize self into the given serializer.
+    ///
     /// In versions prior to 0.15, 'Serializer' did not accept a type parameter.
     /// It now requires a type parameter with the type of writer expected.
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError>; //TODO: Do error handling
 }
 
-/// A child of an object implementing Introspect. Is a key-value pair. The only reason this is not
+/// A child of an object implementing Introspect.
+///
+/// Is a key-value pair. The only reason this is not
 /// simply (String, &dyn Introspect) is that Mutex wouldn't be introspectable in that case.
 /// Mutex needs something like `(String, MutexGuard<T>)`. By having this a trait,
 /// different types can have whatever reference holder needed (MutexGuard, RefMut etc).
@@ -2537,7 +2557,7 @@ impl Introspect for NullIntrospectable {
     }
 }
 
-impl<'a> IntrospectItem<'a> for str {
+impl IntrospectItem<'_> for str {
     fn key(&self) -> &str {
         self
     }
@@ -2547,7 +2567,7 @@ impl<'a> IntrospectItem<'a> for str {
     }
 }
 
-impl<'a> IntrospectItem<'a> for String {
+impl IntrospectItem<'_> for String {
     fn key(&self) -> &str {
         self
     }
@@ -2557,6 +2577,8 @@ impl<'a> IntrospectItem<'a> for String {
     }
 }
 
+/// Max number of introspect children.
+///
 /// As a sort of guard against infinite loops, the default 'len'-implementation only
 /// ever iterates this many times. This is so that broken 'introspect_child'-implementations
 /// won't cause introspect_len to iterate forever.
@@ -2695,6 +2717,8 @@ impl SchemaArray {
     }
 }
 
+/// Schema for a struct.
+///
 /// A struct is serialized by serializing its fields one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
@@ -2766,7 +2790,7 @@ impl SchemaStruct {
             return false;
         }
         for (a, b) in self.fields.iter().zip(other.fields.iter()) {
-            if !a.layout_compatible(&b) {
+            if !a.layout_compatible(b) {
                 return false;
             }
         }
@@ -2813,6 +2837,8 @@ impl Variant {
     }
 }
 
+/// Schema for an enum.
+///
 /// An enum is serialized as its u8 variant discriminant
 /// followed by all the field for that variant.
 /// The name of each variant, as well as its order in
@@ -2939,6 +2965,8 @@ impl SchemaEnum {
     }
 }
 
+/// Schema of a primitive type.
+///
 /// A primitive is serialized as the little endian
 /// representation of its type, except for string,
 /// which is serialized as an usize length followed
@@ -3058,13 +3086,13 @@ pub enum VecOrStringLayout {
     DataCapacityLength,
     /// Data pointer, plus length and capacity usize
     DataLengthCapacity,
-    ///
+    /// One of the possible vec layouts, capacity-data-length
     CapacityDataLength,
-    ///
+    /// One of the possible vec layouts, length-data-capacity
     LengthDataCapacity,
-    ///
+    /// One of the possible vec layouts, capacity-length-data
     CapacityLengthData,
-    ///
+    /// One of the possible vec layouts, length-capacity-data
     LengthCapacityData,
     /// Length, then data
     LengthData,
@@ -3309,7 +3337,7 @@ impl AbiTraitDefinition {
                                    self.name, old_method.name, old_method.info.arguments.len(), old_version, new_method.info.arguments.len()
                 ));
             }
-            if let Some(diff) = diff_schema(&new_method.info.return_value, &old_method.info.return_value, "".into()) {
+            if let Some(diff) = diff_schema(&new_method.info.return_value, &old_method.info.return_value, "".into(), is_return_position) {
                 return Err(format!("In trait {}, method {}, the return value type has changed from version {}: {}. This is not a backward-compatible change.",
                                    self.name, old_method.name, old_version, diff
                 ));
@@ -3321,7 +3349,7 @@ impl AbiTraitDefinition {
                 .zip(old_method.info.arguments.iter())
                 .enumerate()
             {
-                if let Some(diff) = diff_schema(&new_arg.schema, &old_arg.schema, "".into()) {
+                if let Some(diff) = diff_schema(&new_arg.schema, &old_arg.schema, "".into(), is_return_position) {
                     return Err(format!("In trait {}, method {}, argument {}, the type has changed from version {}: {}. This is not a backward-compatible change.",
                                        self.name, old_method.name, arg_index , old_version, diff
                     ));
@@ -3344,7 +3372,9 @@ impl AbiTraitDefinition {
 }
 
 /// The schema represents the save file format
-/// of your data structure. It is a tree,
+/// of your data structure.
+///
+/// It is a tree,
 /// consisting of various types of nodes in the savefile
 /// format. Custom Serialize-implementations cannot add new types to
 /// this tree, but must reuse these existing ones.
@@ -3429,7 +3459,7 @@ pub enum Schema {
     /// std::io::Error
     StdIoError,
     /// Savefile-abi boxed Future
-    Future(AbiTraitDefinition),
+    Future(AbiTraitDefinition, /*send*/bool, /*sync*/bool,  /*unpin*/bool),
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3466,7 +3496,7 @@ impl Schema {
                 format!("<recursion {}>", depth)
             }
             Schema::StdIoError => "stdioerror".into(),
-            Schema::Future(_) => {"future".into()}
+            Schema::Future(_, _,_,_) => {"future".into()}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3499,10 +3529,10 @@ impl Schema {
                 // Trait pointers (which are fat) could conceivably differ, but we don't
                 // actually rely on memory layout compatibility for them, and this expression
                 // will also return false (since Schema::Trait 'layout_compatible' always returns false).
-                a.layout_compatible(&*b)
+                a.layout_compatible(b)
             }
-            (Schema::Reference(a), Schema::Reference(b)) => a.layout_compatible(&*b),
-            (Schema::Slice(a), Schema::Slice(b)) => a.layout_compatible(&*b),
+            (Schema::Reference(a), Schema::Reference(b)) => a.layout_compatible(b),
+            (Schema::Slice(a), Schema::Slice(b)) => a.layout_compatible(b),
             _ => false,
         }
     }
@@ -3622,13 +3652,13 @@ impl Schema {
             Schema::Trait(_, _) => None,
             Schema::Recursion(_) => None,
             Schema::StdIoError => None,
-            Schema::Future(_) => None,
+            Schema::Future(_,_,_,_) => None,
         }
     }
 }
 
 fn diff_vector(a: &Schema, b: &Schema, path: String) -> Option<String> {
-    diff_schema(a, b, path + "/*")
+    diff_schema(a, b, path + "/*", false)
 }
 
 fn diff_array(a: &SchemaArray, b: &SchemaArray, path: String) -> Option<String> {
@@ -3639,11 +3669,11 @@ fn diff_array(a: &SchemaArray, b: &SchemaArray, path: String) -> Option<String> 
         ));
     }
 
-    diff_schema(&a.item_type, &b.item_type, format!("{}/[{}]", path, a.count))
+    diff_schema(&a.item_type, &b.item_type, format!("{}/[{}]", path, a.count), false)
 }
 
 fn diff_option(a: &Schema, b: &Schema, path: String) -> Option<String> {
-    diff_schema(a, b, path + "/?")
+    diff_schema(a, b, path + "/?", false)
 }
 
 fn diff_enum(a: &SchemaEnum, b: &SchemaEnum, path: String) -> Option<String> {
@@ -3725,6 +3755,7 @@ fn diff_fields(
             &a[i].value,
             &b[i].value,
             (path.to_string() + "/" + &b[i].name).to_string(),
+            false
         );
         if let Some(err) = r {
             return Some(err);
@@ -3733,11 +3764,17 @@ fn diff_fields(
     None
 }
 /// Return a (kind of) human-readable description of the difference
-/// between the two schemas. The schema 'a' is assumed to be the current
+/// between the two schemas.
+///
+/// The schema 'a' is assumed to be the current
 /// schema (used in memory).
 /// Returns None if both schemas are equivalent
 /// This does not care about memory layout, only serializability.
-pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
+///
+/// for ABI calls:
+/// a is the caller
+/// b is the callee
+pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) -> Option<String> {
     let (atype, btype) = match (a, b) {
         (Schema::Struct(a), Schema::Struct(b)) => return diff_struct(a, b, path),
         (Schema::Enum(a), Schema::Enum(b)) => return diff_enum(a, b, path),
@@ -3769,13 +3806,13 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
             return None;
         }
         (Schema::Boxed(a), Schema::Boxed(b)) => {
-            return diff_schema(&**a, &**b, path);
+            return diff_schema(a, b, path, is_return_pos);
         }
         (Schema::Reference(a), Schema::Reference(b)) => {
-            return diff_schema(&**a, &**b, path);
+            return diff_schema(a, b, path, is_return_pos);
         }
         (Schema::Slice(a), Schema::Slice(b)) => {
-            return diff_schema(&**a, &**b, path);
+            return diff_schema(a, b, path, is_return_pos);
         }
         (Schema::Trait(amut, a), Schema::Trait(bmut, b)) | (Schema::FnClosure(amut, a), Schema::FnClosure(bmut, b)) => {
             if amut != bmut {
@@ -3792,7 +3829,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                     ));
                 }
             }
-            return diff_abi_def(a, b, path);
+            return diff_abi_def(a, b, path, is_return_pos);
         }
         (Schema::Recursion(adepth), Schema::Recursion(bdepth)) => {
             if adepth == bdepth {
@@ -3804,8 +3841,25 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
                 ));
             }
         }
-        (Schema::Future(a), Schema::Future( b)) => {
-            return diff_abi_def(a, b, path);
+        (Schema::Future(a,a_send,a_sync,a_unpin), Schema::Future( b,b_send,b_sync,b_unpin)) => {
+            if !is_return_pos {
+                #[allow(warnings)]
+                return Some(panic!("Futures are only supported in return position"));
+            }
+            for (a,b,bound) in [
+                (*a_send,*b_send,"Send"),
+                (*a_sync,*b_sync,"Sync"),
+                (*a_unpin,*b_unpin,"Unpin")
+            ] {
+                if a && !b {
+                    return Some(format!(
+                        "At location [{}]: Caller expects a future with an {}-bound, but implementation provides one without. This is an incompatible difference.",
+                        path, bound
+                    ));
+                }
+
+            }
+            return diff_abi_def(a, b, path, is_return_pos);
         }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
@@ -3816,7 +3870,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String) -> Option<String> {
     ))
 }
 
-fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String) -> Option<String> {
+fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String, is_return_pos: bool) -> Option<String> {
     for amet in a.methods.iter() {
         if let Some(bmet) = b.methods.iter().find(|x| x.name == amet.name) {
             if amet.info.arguments.len() != bmet.info.arguments.len() {
@@ -3833,6 +3887,7 @@ fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String) ->
                     &a_arg.schema,
                     &b_arg.schema,
                     format!("{}(arg #{})", amet.name, arg_index),
+                    is_return_pos
                 ) {
                     return Some(diff);
                 }
@@ -4336,8 +4391,13 @@ impl Serialize for Schema {
                 serializer.write_u8(17)?;
                 Ok(())
             }
-            Schema::Future(o) => {
+            Schema::Future(o, send,sync,unpin) => {
                 serializer.write_u8(18)?;
+                serializer.write_u8(
+                    if *send {1} else {0}|
+                    if *sync {2} else {0}|
+                    if *unpin {4} else {0}
+                )?;
                 o.serialize(serializer)?;
                 Ok(())
             }
@@ -4380,9 +4440,16 @@ impl Deserialize for Schema {
             ),
             16 => Schema::Recursion(<_ as Deserialize>::deserialize(deserializer)?),
             17 => Schema::StdIoError,
-            18 => Schema::Future(
-                <_ as Deserialize>::deserialize(deserializer)?
-            ),
+            18 => {
+                let mask = deserializer.read_u8()?;
+                let send = (mask&1)!=0;
+                let sync = (mask&2)!=0;
+                let unpin = (mask&4)!=0;
+                Schema::Future(
+                    <_ as Deserialize>::deserialize(deserializer)?,
+                    send,sync,unpin
+                )
+            },
             c => {
                 return Err(SavefileError::GeneralError {
                     msg: format!("Corrupt, or future schema, schema variant {} encountered", c),
@@ -4570,7 +4637,7 @@ impl<'a, T: Introspect> IntrospectItem<'a> for IntrospectItemRwLock<'a, T> {
     }
 }
 
-impl<'a, T: Introspect> Introspect for std::cell::Ref<'a, T> {
+impl<T: Introspect> Introspect for std::cell::Ref<'_, T> {
     fn introspect_value(&self) -> String {
         let sub_value = (**self).introspect_value();
         format!("Ref({})", sub_value)
@@ -5250,7 +5317,8 @@ impl<T: Default> ValueConstructor<T> for DefaultValueConstructor<T> {
     }
 }
 
-/// Helper struct which represents a field which has been removed
+/// Helper struct which represents a field which has been removed.
+///
 /// In contrast to AbiRemoved, this type only supports deserialization.
 /// It is thus not recommended for use when SavefileAbi is to be used, and
 /// forward compatibility is desired.
@@ -5314,7 +5382,9 @@ impl<T: WithSchema + Deserialize> Deserialize for Removed<T> {
     }
 }
 
-/// Helper struct which represents a field which has been removed.
+/// Helper struct which represents a field which has been removed, for use with
+/// SavefileAbi - supporting both serialization and deserialization.
+///
 /// In contrast to `Removed`, this type supports both serialization and
 /// deserialization, and is preferred when SavefileAbi is to be used.
 /// Regular Savefile does not support serializing older versions, whereas
@@ -6176,13 +6246,13 @@ impl<T: Deserialize + Packed + 'static> Deserialize for Box<[T]> {
         Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
 }
-impl<'a> WithSchema for &'a str {
+impl WithSchema for &'_ str {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<'a> Serialize for &'a str {
+impl Serialize for &'_ str {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
@@ -6190,7 +6260,7 @@ impl<'a> Serialize for &'a str {
     }
 }
 
-impl<'a, T: WithSchema + 'static> WithSchema for &'a [T] {
+impl<T: WithSchema + 'static> WithSchema for &'_ [T] {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6199,7 +6269,7 @@ impl<'a, T: WithSchema + 'static> WithSchema for &'a [T] {
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<'a, T: Serialize + Packed + 'static> Serialize for &'a [T] {
+impl<T: Serialize + Packed + 'static> Serialize for &'_ [T] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6269,7 +6339,9 @@ impl RawVecInspector {
     }
 }
 
-/// Calculate the memory layout of `&[T]`. I.e, of the reference to the data.
+/// Calculate the memory layout of `&[T]`.
+///
+/// I.e, of the reference to the data.
 /// This type is typically 16 bytes, consisting of two words, one being the length,
 /// the other being a pointer to the start of the data.
 pub const fn calculate_slice_memory_layout<T>() -> VecOrStringLayout {
@@ -6295,7 +6367,10 @@ pub fn calculate_vec_memory_layout<T>() -> VecOrStringLayout {
 fn calculate_string_memory_layout() -> VecOrStringLayout {
     let mut is_std = STRING_IS_STANDARD_LAYOUT.load(Ordering::Relaxed);
     if is_std != 255 {
-        return unsafe { std::mem::transmute(is_std) };
+        // SAFETY
+        // We 'is_std' is always initialized using a valid VecOrStringLayout enum value,
+        // unless it's 255.
+        return unsafe { std::mem::transmute::<u8, VecOrStringLayout>(is_std) };
     }
     if std::mem::size_of::<String>() != 24 || std::mem::size_of::<RawVecInspector>() != 24 {
         is_std = VecOrStringLayout::Unknown as u8;
@@ -6310,7 +6385,7 @@ fn calculate_string_memory_layout() -> VecOrStringLayout {
     }
 
     STRING_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
-    return unsafe { std::mem::transmute(is_std) };
+    return unsafe { std::mem::transmute::<u8, VecOrStringLayout>(is_std) };
 }
 impl<T: WithSchema + 'static> WithSchema for Vec<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
@@ -6641,7 +6716,7 @@ impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
                 let num_bytes: usize = std::mem::size_of::<T>() * N;
                 let slice: &mut [MaybeUninit<u8>] =
                     unsafe { std::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, num_bytes) };
-                deserializer.reader.read_exact(unsafe { std::mem::transmute(slice) })?;
+                deserializer.reader.read_exact(unsafe { std::mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(slice) })?;
             }
             let ptr = &mut data as *mut _ as *mut [T; N];
             let res = unsafe { ptr.read() };
@@ -6866,7 +6941,7 @@ impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::P
 impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Point3<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(
-            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
+            nalgebra::Point3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?),
         )
     }
 }
@@ -6913,7 +6988,7 @@ impl<T:Serialize+Packed+WithSchema + nalgebra::Scalar> Serialize for nalgebra::V
 impl<T:Deserialize+Packed+WithSchema+nalgebra::Scalar+nalgebra::SimdValue+nalgebra::RealField> Deserialize for nalgebra::Vector3<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(
-            nalgebra::Vector3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?).into(),
+            nalgebra::Vector3::new(<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?,<T as Deserialize>::deserialize(deserializer)?),
         )
     }
 }
@@ -7959,7 +8034,9 @@ impl Packed for AtomicU64 {}
 impl Packed for AtomicIsize {}
 impl Packed for AtomicUsize {}
 
-/// Useful zero-sized marker. It serializes to a magic value,
+/// A zero-sized marker for troubleshooting purposes.
+///
+/// It serializes to a magic value,
 /// and verifies this value on deserialization. Does not consume memory
 /// data structure. Useful to troubleshoot broken Serialize/Deserialize implementations.
 #[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
@@ -8366,7 +8443,7 @@ impl Introspector {
     pub fn new() -> Introspector {
         Introspector {
             path: vec![],
-            child_load_count: std::usize::MAX,
+            child_load_count: usize::MAX,
         }
     }
     /// Returns a new Introspector which will not enumerate more than 'child_load_count'

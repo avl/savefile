@@ -2,6 +2,7 @@ use savefile_abi::AbiConnection;
 use savefile_abi_min_lib::{AdderCallback, AdderInterface, MyStuff};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
+use tokio::runtime::Runtime;
 
 struct MyCallback {
     value: Arc<Mutex<u32>>,
@@ -51,4 +52,11 @@ fn main() {
     println!("Result2: {} {:?}", res2, my_arc.lock().unwrap().deref());
 
     assert_eq!(call_add(&connection, 1, 2), 3);
+
+    let rt  = Runtime::new().unwrap();
+    rt.block_on(async {
+        let result = connection.async_add(1,2).await;
+        assert_eq!(result, 3);
+    });
+
 }

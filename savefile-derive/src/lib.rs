@@ -295,8 +295,9 @@ pub fn savefile_abi_exportable(
                         /* these are ok, the wrappers actually do implement these*/
                         "Sync" => { sync = true;}
                         "Send" => { send = true;}
+                        "Sized" => {}
                         "Debug" => {}
-                        _ => abort!(seg.span(), "Savefile does not support bounds for traits. The reason is savefile-abi needs to generate a wrapper, and this wrapper can't fulfill implement arbitrary bounds."),
+                        _ => abort!(seg.span(), "Savefile does not support bounds for traits. The reason is savefile-abi needs to generate a wrapper, and this wrapper doesn't know how to implement arbitrary bounds."),
                     }
                 }
             }
@@ -608,6 +609,7 @@ pub fn savefile_abi_exportable(
     let extra_definitions: Vec<_> = extra_definitions.values().map(|(_, x)| x).collect();
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
+        #[allow(clippy::needless_question_mark)]
         #[allow(unused_variables)]
         #[allow(clippy::needless_late_init)]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -670,6 +672,7 @@ pub fn savefile_abi_exportable(
     let abi_entry = Ident::new(("abi_entry_".to_string() + &trait_type.to_string()).as_str(), Span::call_site());
 
     let expanded = quote! {
+        #[allow(clippy::needless_question_mark)]
         #[allow(clippy::double_comparisons)]
         #[allow(non_local_definitions)]
         const _:() = {
