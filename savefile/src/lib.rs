@@ -3185,6 +3185,10 @@ pub struct AbiTraitDefinition {
     pub name: String,
     /// The set of methods available on the trait
     pub methods: Vec<AbiMethod>,
+    /// True if this object is 'Sync'
+    pub sync: bool,
+    /// True if this object is 'Send'
+    pub send: bool,
 }
 impl Packed for AbiTraitDefinition {}
 impl WithSchema for AbiTraitDefinition {
@@ -3194,17 +3198,38 @@ impl WithSchema for AbiTraitDefinition {
 }
 impl Serialize for AbiTraitDefinition {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        self.name.serialize(serializer)?;
+        let mut effective_name = self.name.clone();
+        if self.sync {
+            effective_name += "+Sync";
+        }
+        if self.send {
+            effective_name += "+Send";
+        }
+        effective_name.serialize(serializer)?;
         self.methods.serialize(serializer)?;
         Ok(())
     }
 }
 impl Deserialize for AbiTraitDefinition {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let name = <_ as Deserialize>::deserialize(deserializer)?;
+        let name:String = <_ as Deserialize>::deserialize(deserializer)?;
+
+        let actual_name = name.split('+').next().unwrap();
+        let mut sync = false;
+        let mut send = false;
+        for segment in name.split('+').skip(1) {
+            match segment {
+                "Sync" => sync = true,
+                "Send" => send = true,
+                _ => panic!("Unexpected trait name encountered: {}", name)
+            }
+        }
+
         let t = AbiTraitDefinition {
-            name,
+            name: actual_name.to_string(),
             methods: <_ as Deserialize>::deserialize(deserializer)?,
+            sync,
+            send
         };
         Ok(t)
     }
@@ -3222,7 +3247,33 @@ impl AbiTraitDefinition {
     ///
     /// The version number is only for the data types of the arguments.
     ///
-    fn verify_compatible_with_old_impl(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), String> {
+    /// old is the callee, self is the caller
+    fn verify_compatible_with_old_impl(&self, old_version: u32, old: &AbiTraitDefinition, is_return_position: bool) -> Result<(), String> {
+
+        if is_return_position {
+            if !old.sync && self.sync {
+                return Err(format!("Trait {} was not Sync in version {}, but the Sync-bound has since been added. This is not a backward-compatible change.",
+                                   self.name, old_version,
+                ));
+            }
+            if !old.send && self.send {
+                return Err(format!("Trait {} was not Send in version {}, but the Send-bound has since been added. This is not a backward-compatible change.",
+                                   self.name, old_version,
+                ));
+            }
+        } else {
+            if old.sync && !self.sync {
+                return Err(format!("Trait {} was Sync in version {}, but the Sync-bound has since been removed. This is not a backward-compatible change.",
+                                   self.name, old_version,
+                ));
+            }
+            if old.send && !self.send {
+                return Err(format!("Trait {} was Send in version {}, but the Send-bound has since been removed. This is not a backward-compatible change.",
+                                   self.name, old_version,
+                ));
+            }
+        }
+
         for old_method in old.methods.iter() {
             let Some(new_method) = self.methods.iter().find(|x| x.name == old_method.name) else {
                 return Err(format!("In trait {}, the method {} existed in version {}, but has been removed. This is not a backward-compatible change.",
@@ -3260,8 +3311,10 @@ impl AbiTraitDefinition {
     /// Verify that 'self' represents a newer version of a trait, that is backward compatible
     /// with 'old'. 'old_version' is the version number of the old version being inspected.
     /// To guarantee compatibility, all versions must be checked
-    pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition) -> Result<(), SavefileError> {
-        self.verify_compatible_with_old_impl(old_version, old)
+    ///
+    /// old is the callee, self is the caller
+    pub fn verify_backward_compatible(&self, old_version: u32, old: &AbiTraitDefinition, is_return_position: bool) -> Result<(), SavefileError> {
+        self.verify_compatible_with_old_impl(old_version, old, is_return_position)
             .map_err(|x| SavefileError::IncompatibleSchema { message: x })
     }
 }

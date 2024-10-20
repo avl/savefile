@@ -61,3 +61,21 @@ methods:
     info:
       return_value: ZeroSize
       arguments: []
+  - name: closure_test
+    info:
+      return_value: ZeroSize
+      arguments:
+        - schema:
+            Boxed:
+              FnClosure:
+                - false
+                - name: __1_owning_
+                  methods:
+                    - name: docall
+                      info:
+                        return_value: ZeroSize
+                        arguments: []
+                  sync: false
+                  send: false
+sync: false
+send: false

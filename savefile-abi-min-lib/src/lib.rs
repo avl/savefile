@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use savefile_derive::savefile_abi_exportable;
 use savefile_derive::Savefile;
 use std::fmt::{Debug, Formatter};
