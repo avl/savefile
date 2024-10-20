@@ -1434,9 +1434,9 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
+                /*if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
                     return Err(SavefileError::IncompatibleSavefileLibraryVersion);
-                }
+                }*/
 
                 let effective_version = own_version.min(callee_abi_version);
 
@@ -1459,7 +1459,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     let mut cursor = Cursor::new(slice);
 
                     let schema = load_noschema(&mut cursor, schema_version.into());
-                    *receiver = schema.unwrap_or(Default::default());
+                    *receiver = schema.unwrap();
                 }
 
                 unsafe {
