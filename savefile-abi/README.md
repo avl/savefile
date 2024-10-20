@@ -2,13 +2,16 @@
 
 Full docs: https://docs.rs/savefile-abi/latest/
 
-Savefile-abi is a crate that is primarily meant to help building binary plugins using Rust.
+Savefile-abi is a crate that is primarily meant to help building binary plugins using Rust. It supports
+many data types from the standard library, as well as custom user types.
+
+It supports async methods, through use of the #[async_trait] attribute macro.
 
 
 ```toml
-savefile-abi = "0.17"
-savefile = "0.17"
-savefile-derive = "0.17"
+savefile-abi = "0.18"
+savefile = "0.18"
+savefile-derive = "0.18"
 ```
 
 # Example

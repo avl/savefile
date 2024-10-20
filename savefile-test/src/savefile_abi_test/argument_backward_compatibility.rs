@@ -1,10 +1,10 @@
+use crate::savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
+use crate::savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
+use crate::savefile_abi_test::basic_abi_tests::CowSmuggler;
 use savefile::prelude::AbiRemoved;
 use savefile::{get_schema, SavefileError, WithSchemaContext};
 use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
-use crate::savefile_abi_test::argument_backward_compatibility::v1::{ArgInterfaceV1, EnumArgument, Implementation1};
-use crate::savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
-use crate::savefile_abi_test::basic_abi_tests::CowSmuggler;
 use savefile_derive::Savefile;
 
 mod v1 {
@@ -41,7 +41,7 @@ mod v1 {
             }
         }
         fn function_existing_in_v1(&self) {}
-        fn closure_test(&self, f: Box<dyn Fn()>){
+        fn closure_test(&self, f: Box<dyn Fn()>) {
             f()
         }
     }
@@ -90,7 +90,7 @@ mod v2 {
         }
 
         fn function_existing_in_v2(&self) {}
-        fn closure_test(&self, f: Box<dyn Fn()>){
+        fn closure_test(&self, f: Box<dyn Fn()>) {
             f()
         }
     }
@@ -180,7 +180,7 @@ pub fn test_caller_has_newer_version() {
 
     assert_eq!(conn1.enum_arg(v2::EnumArgument::Variant1), "Variant1".to_string());
 
-    conn1.closure_test(Box::new(|| { }));
+    conn1.closure_test(Box::new(|| {}));
 }
 
 #[test]

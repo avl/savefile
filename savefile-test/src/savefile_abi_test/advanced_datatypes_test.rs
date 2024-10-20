@@ -1,14 +1,17 @@
 use savefile_abi::AbiConnection;
 use savefile_abi::AbiExportable;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 #[savefile_abi_exportable(version = 0)]
 pub trait SimpleInterface {
     fn do_call(&self, x: u32) -> u32;
 }
 #[savefile_abi_exportable(version = 0)]
-pub trait AdvancedTestInterface : Send{
+pub trait AdvancedTestInterface: Send {
     fn roundtrip_hashmap(&self, x: HashMap<String, String>) -> HashMap<String, String>;
     fn clone_hashmap(&self, x: &HashMap<String, String>) -> HashMap<String, String>;
 
@@ -20,11 +23,13 @@ pub trait AdvancedTestInterface : Send{
     fn many_callbacks(&mut self, x: &mut dyn FnMut(&dyn Fn(&dyn Fn() -> u32) -> u32) -> u32) -> u32;
 
     fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>);
-    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>,()>;
-    fn owned_boxed_closure_param(&self, owned: Box<dyn Fn()->u32>);
+    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>, ()>;
+    fn owned_boxed_closure_param(&self, owned: Box<dyn Fn() -> u32>);
 
-
+    fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32;
+    fn boxed_future(&self) -> Pin<Box<dyn Future<Output = u32>>>;
 }
+
 struct SimpleImpl;
 
 impl Drop for SimpleImpl {
@@ -69,9 +74,9 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     }
 
     fn buf_callback(&mut self, cb: Box<dyn Fn(&[u8], String) + Send + Sync>) {
-        cb(&[1,2,3], "hello".to_string())
+        cb(&[1, 2, 3], "hello".to_string())
     }
-    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>,()> {
+    fn return_boxed_closure_result(&self, fail: bool) -> Result<Box<dyn Fn() -> u32>, ()> {
         if fail {
             Err(())
         } else {
@@ -82,20 +87,23 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
     fn owned_boxed_closure_param(&self, owned: Box<dyn Fn() -> u32>) {
         assert_eq!(owned(), 42);
     }
+    fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32 {
+        arg
+    }
+    fn boxed_future(&self) -> Pin<Box<dyn Future<Output = u32>>> {
+        Box::pin(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            42
+        })
+    }
 }
 
 struct TestUser(Box<dyn AdvancedTestInterface + 'static>);
 
-pub trait DummyTrait2 : Send {
+pub trait DummyTrait2: Send {}
 
-}
-
-impl DummyTrait2 for TestUser {
-
-}
-fn require_send<T:Send>(_t: T) {
-
-}
+impl DummyTrait2 for TestUser {}
+fn require_send<T: Send>(_t: T) {}
 #[test]
 fn abi_test_buf_send() {
     let boxed: Box<dyn AdvancedTestInterface + Send + Sync> = Box::new(AdvancedTestInterfaceImpl {});
@@ -110,7 +118,7 @@ fn test_trait_object_in_return_position() {
     let ret = conn.return_boxed_closure_result(false);
     assert_eq!(ret.unwrap()(), 42);
     let ret = conn.return_boxed_closure_result(true);
-    let Err(()) = ret else {panic!("Expected Err")};
+    let Err(()) = ret else { panic!("Expected Err") };
 }
 
 #[test]
@@ -119,13 +127,12 @@ fn abi_test_buf_callback() {
     let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
     let buf = Arc::new(Mutex::new(None));
     let bufclone = Arc::clone(&buf);
-    conn.buf_callback(Box::new(move|argbuf, _s|{
+    conn.buf_callback(Box::new(move |argbuf, _s| {
         *bufclone.lock().unwrap() = Some(argbuf.to_vec());
     }));
     let mut guard = buf.lock().unwrap();
     let vec = guard.take().unwrap();
-    assert_eq!(vec, [1,2,3]);
-
+    assert_eq!(vec, [1, 2, 3]);
 }
 #[test]
 fn abi_test_slice() {
@@ -145,12 +152,25 @@ fn test_result_trait_object_in_return_position() {
     assert_eq!(ret.do_call(42), 42);
     assert_eq!(ret.do_call(42), 42);
 }
+
+#[tokio::test]
+async fn test_boxed_future() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+    println!("Before timeout");
+
+    let fut = conn.boxed_future();
+
+    fut.await;
+    println!("After timeout");
+}
+
 #[test]
 fn test_boxed_trait_object_in_arg_position() {
     let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
-    conn.owned_boxed_closure_param(Box::new(||42));
+    conn.owned_boxed_closure_param(Box::new(|| 42));
 }
 #[test]
 fn test_return_boxed_closure() {

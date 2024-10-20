@@ -8,6 +8,7 @@ methods:
     info:
       return_value:
         Primitive: schema_u32
+      receiver: Shared
       arguments:
         - schema:
             Struct:
@@ -37,11 +38,13 @@ methods:
                   value:
                     Primitive: schema_u32
                   offset: 0
+      async_trait_heuristic: false
   - name: enum_arg
     info:
       return_value:
         Primitive:
           schema_string: CapacityDataLength
+      receiver: Shared
       arguments:
         - schema:
             Enum:
@@ -57,13 +60,17 @@ methods:
               has_explicit_repr: false
               size: 1
               alignment: 1
+      async_trait_heuristic: false
   - name: function_existing_in_v2
     info:
       return_value: ZeroSize
+      receiver: Shared
       arguments: []
+      async_trait_heuristic: false
   - name: closure_test
     info:
       return_value: ZeroSize
+      receiver: Shared
       arguments:
         - schema:
             Boxed:
@@ -74,8 +81,11 @@ methods:
                     - name: docall
                       info:
                         return_value: ZeroSize
+                        receiver: Shared
                         arguments: []
+                        async_trait_heuristic: false
                   sync: false
                   send: false
+      async_trait_heuristic: false
 sync: false
 send: false

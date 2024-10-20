@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
-use savefile_abi::{AbiConnection, AbiExportable};
 use crate::savefile_abi_test::basic_abi_tests::{CallbackImpl, TestInterface, TestInterfaceImpl};
 use crate::savefile_abi_test::closure_tests::new_version::ExampleImplementationNewer;
+use savefile_abi::{AbiConnection, AbiExportable};
 
 #[derive(Savefile)]
 pub struct CustomArg {

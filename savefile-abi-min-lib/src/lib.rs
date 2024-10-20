@@ -2,7 +2,6 @@ use savefile_derive::savefile_abi_exportable;
 use savefile_derive::Savefile;
 use std::fmt::{Debug, Formatter};
 
-
 #[derive(Savefile)]
 pub struct MyStuff {
     pub x: u64,

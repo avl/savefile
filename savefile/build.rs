@@ -5,7 +5,7 @@ fn main() {
     if version.channel == Channel::Nightly {
         println!("cargo:rustc-cfg=feature=\"nightly\"");
     }
-    if version.semver >= Version::new(1,78,0) {
+    if version.semver >= Version::new(1, 78, 0) {
         println!("cargo:rustc-cfg=feature=\"rust1_78\"");
     }
 }

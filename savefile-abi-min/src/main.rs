@@ -2,6 +2,7 @@ use savefile_abi::AbiConnection;
 use savefile_abi_min_lib::{AdderCallback, AdderInterface, MyStuff};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
+use tokio::runtime::Runtime;
 
 struct MyCallback {
     value: Arc<Mutex<u32>>,

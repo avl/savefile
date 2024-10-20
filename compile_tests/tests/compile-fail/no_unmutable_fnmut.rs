@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn example_func(&self, x: &dyn FnMut());
-//~^ 14:36: 14:41: Method 'example_func', argument x: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.
+//~^ 14:36: 14:41: Method 'example_func', argument x: When using FnMut, it must be referenced using &mut or Box<..>, not &. Otherwise, it is impossible to call.
 }
 
 fn main() {}

@@ -8,3 +8,5 @@ edition = "2021"
 savefile = { path = "../savefile", features = ["derive"], default-features = false }
 savefile-abi = { path = "../savefile-abi" }
 savefile-derive = {path = "../savefile-derive"}
+tokio = { version = "1.40", features=["macros", "rt-multi-thread", "time"] }
+tokio-util="0.7"

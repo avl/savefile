@@ -1,6 +1,6 @@
 use crate::assert_roundtrip_version;
-use savefile::{Packed, Removed};
 use crate::{assert_roundtrip, assert_roundtrip_to_new_version};
+use savefile::{Packed, Removed};
 
 #[repr(u8)]
 #[derive(Savefile, Debug, PartialEq)]
