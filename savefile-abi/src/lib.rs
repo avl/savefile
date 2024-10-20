@@ -1426,7 +1426,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                 let own_native_definition = T::get_definition(own_version);
 
                 let mut callee_abi_version = 0u32;
-                let mut callee_schema_version = 0u16;
+                let mut callee_schema_version = CURRENT_SAVEFILE_LIB_VERSION;
                 unsafe {
                     (remote_entry)(AbiProtocol::InterrogateVersion {
                         schema_version_receiver: &mut callee_schema_version as *mut _,
@@ -1434,9 +1434,9 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                /*if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
+                if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
                     return Err(SavefileError::IncompatibleSavefileLibraryVersion);
-                }*/
+                }
 
                 let effective_version = own_version.min(callee_abi_version);
 
