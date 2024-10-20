@@ -1899,12 +1899,18 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
             data,
             Some(T::schema(version, &mut WithSchemaContext::new())),
             with_compression,
+            None
         )?)
     }
     /// Creata a new serializer.
     /// Don't use this function directly, use the [crate::save_noschema] function instead.
     pub fn save_noschema<T: Serialize>(writer: &mut W, version: u32, data: &T) -> Result<(), SavefileError> {
-        Ok(Self::save_impl(writer, version, data, None, false)?)
+        Ok(Self::save_impl(writer, version, data, None, false, None)?)
+    }
+
+    #[doc(hidden)]
+    pub fn save_noschema_internal<T: Serialize>(writer: &mut W, version: u32, data: &T, lib_version_override: u16) -> Result<(), SavefileError> {
+        Ok(Self::save_impl(writer, version, data, None, false, Some(lib_version_override))?)
     }
 
     /// Serialize without any header. Using this means that bare_deserialize must be used to
@@ -1923,12 +1929,13 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         data: &T,
         with_schema: Option<Schema>,
         with_compression: bool,
+        lib_version_override: Option<u16>,
     ) -> Result<(), SavefileError> {
         let header = "savefile\0".to_string().into_bytes();
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(CURRENT_SAVEFILE_LIB_VERSION /*savefile format version*/)?;
+        writer.write_u16::<LittleEndian>(lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION) /*savefile format version*/)?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
         {
@@ -1941,7 +1948,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
                     if let Some(schema) = with_schema {
                         let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(
                             &mut compressed_writer,
-                            CURRENT_SAVEFILE_LIB_VERSION as u32,
+                            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION)  as u32,
                         );
                         schema.serialize(&mut schema_serializer)?;
                     }
@@ -1961,7 +1968,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
             } else {
                 writer.write_u8(0)?;
                 if let Some(schema) = with_schema {
-                    let mut schema_serializer = Serializer::<W>::new_raw(writer, CURRENT_SAVEFILE_LIB_VERSION as u32);
+                    let mut schema_serializer = Serializer::<W>::new_raw(writer, lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION)  as u32);
                     schema.serialize(&mut schema_serializer)?;
                 }
 

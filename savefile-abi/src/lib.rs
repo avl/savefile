@@ -1426,7 +1426,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                 let own_native_definition = T::get_definition(own_version);
 
                 let mut callee_abi_version = 0u32;
-                let mut callee_schema_version = CURRENT_SAVEFILE_LIB_VERSION;
+                let mut callee_schema_version = 0u16;
                 unsafe {
                     (remote_entry)(AbiProtocol::InterrogateVersion {
                         schema_version_receiver: &mut callee_schema_version as *mut _,
@@ -1434,10 +1434,11 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
+                /*if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
                     return Err(SavefileError::IncompatibleSavefileLibraryVersion);
-                }
+                }*/
 
+                let effective_schema_version = callee_schema_version.min(CURRENT_SAVEFILE_LIB_VERSION);
                 let effective_version = own_version.min(callee_abi_version);
 
                 let mut callee_abi_native_definition = AbiTraitDefinition {
@@ -1464,7 +1465,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
 
                 unsafe {
                     (remote_entry)(AbiProtocol::InterrogateMethods {
-                        schema_version_required: callee_schema_version,
+                        schema_version_required: effective_schema_version,
                         callee_schema_version_interrogated: callee_abi_version,
                         result_receiver: &mut callee_abi_native_definition as *mut _,
                         callback: definition_receiver,
@@ -1473,7 +1474,7 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
 
                 unsafe {
                     (remote_entry)(AbiProtocol::InterrogateMethods {
-                        schema_version_required: callee_schema_version,
+                        schema_version_required: effective_schema_version,
                         callee_schema_version_interrogated: effective_version,
                         result_receiver: &mut callee_abi_effective_definition as *mut _,
                         callback: definition_receiver,
@@ -1613,7 +1614,7 @@ pub unsafe fn abi_entry_light<T: AbiExportable + ?Sized>(flag: AbiProtocol) {
             // within the ability of the receiving implementation. It can interrogate this using 'AbiProtocol::InterrogateVersion'.
             let abi = <T as AbiExportable>::get_definition(callee_schema_version_interrogated);
             let mut temp = vec![];
-            let Ok(_) = Serializer::save_noschema(&mut temp, schema_version_required as u32, &abi) else {
+            let Ok(_) = Serializer::save_noschema_internal(&mut temp, schema_version_required as u32, &abi, schema_version_required.min(CURRENT_SAVEFILE_LIB_VERSION)) else {
                 return;
             };
             callback(result_receiver, schema_version_required, temp.as_ptr(), temp.len());
