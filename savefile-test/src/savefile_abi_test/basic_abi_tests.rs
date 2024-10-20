@@ -18,9 +18,6 @@ pub trait CallbackInterface {
 #[derive(Savefile)]
 pub struct SomeRandomType;
 
-
-
-
 #[savefile_abi_exportable(version = 0)]
 pub trait TestInterface {
     fn add(&self, x: u32, y: String) -> u32;
@@ -45,14 +42,15 @@ pub trait TestInterface {
 
     fn boxes(&self, a: Box<u32>) -> Box<u32>;
 
-    fn test_default_impl(&self) -> String  {
+    fn test_default_impl(&self) -> String {
         "hello".to_string()
     }
 
     fn get_static_str(&self) -> &'static str;
     // Test using lots of symbol-names from the derive-macro, to verify
     // there's no crashes
-    fn test_macro_hygiene(&self,
+    fn test_macro_hygiene(
+        &self,
         context: SomeRandomType,
         schema: SomeRandomType,
         trait_object: SomeRandomType,
@@ -73,8 +71,9 @@ pub trait TestInterface {
         err_str: SomeRandomType,
         ret: SomeRandomType,
         cursor: SomeRandomType,
-        deserializer: SomeRandomType
-    ) {}
+        deserializer: SomeRandomType,
+    ) {
+    }
 }
 
 #[derive(Default)]
