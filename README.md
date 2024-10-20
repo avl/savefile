@@ -79,6 +79,11 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.17.14
+
+This is a compatibility backport for 0.18, for savefile-abi.
+With this version, your 0.17.x based code base can call into interfaces exported by 0.18.x.
+
 ## 0.17.13
 
 Improve handling of Sync- and Send-bounds. This should fix an issue where

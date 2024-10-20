@@ -1436,10 +1436,6 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     });
                 }
 
-                /*if callee_schema_version > CURRENT_SAVEFILE_LIB_VERSION {
-                    return Err(SavefileError::IncompatibleSavefileLibraryVersion);
-                }*/
-
                 let effective_schema_version = callee_schema_version.min(CURRENT_SAVEFILE_LIB_VERSION);
                 let effective_version = own_version.min(callee_abi_version);
 
