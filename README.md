@@ -84,10 +84,10 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 WARNING! 0.18.x is not binary compatible with 0.17.x, for SavefileAbi. Data stored to disk should still
 be compatible.
 
-The major new feature in 0.18.0 is the support for returning boxed futures in SavefileAbi.
+The major new feature in 0.18.0 is the support for returning boxed futures in SavefileAbi, and support
+for the #[async_trait] attribute macro.
 
 This allows exposing async API:s more easily using SavefileAbi.
-
 
 For example, method prototypes such as this are now allowed:
 
@@ -95,6 +95,11 @@ For example, method prototypes such as this are now allowed:
 fn boxed_future(&self) -> Pin<Box<dyn Future<Output=u32>>>;
 ```
 
+Or, equivalently, when using `#[async_trait]`:
+
+```rust
+async fn boxed_future(&self) -> u32;
+```
 
 This release also improves Sync- and Send-bounds. This should fix an issue where
 removing the Send-bound of an interface, still allowed older clients to use the interface

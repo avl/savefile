@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn example_func(&self, x: impl Fn());
-//~^ 14:31: 14:35: Method 'example_func', argument x, type is unsupported by savefile-abi: impl Fn()
+//~^ 14:31: 14:40: Method 'example_func', argument x, impl trait is not supported by savefile-abi. Try using a box: Box<Fn()>.
 }
 
 fn main() {}

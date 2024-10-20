@@ -3174,6 +3174,9 @@ pub struct AbiMethodInfo {
     pub receiver: ReceiverType,
     /// The arguments of the method.
     pub arguments: Vec<AbiMethodArgument>,
+    /// True if this method was found to have been modified by async_trait,
+    /// converting it to return a boxed future.
+    pub async_trait_heuristic: bool,
 }
 
 impl Packed for AbiMethodInfo {}
@@ -3192,6 +3195,7 @@ impl Serialize for AbiMethodInfo {
                 ReceiverType::Mut => 101,
                 ReceiverType::PinMut => 102,
             })?;
+            serializer.write_bool(self.async_trait_heuristic)?;
         }
         self.arguments.serialize(serializer)?;
         Ok(())
@@ -3199,22 +3203,28 @@ impl Serialize for AbiMethodInfo {
 }
 impl Deserialize for AbiMethodInfo {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let receiver = if deserializer.file_version >= 2 {
-            match deserializer.read_u8()? {
+        let return_value = <_ as Deserialize>::deserialize(deserializer)?;
+        let async_trait_heuristic;
+        let receiver;
+        if deserializer.file_version >= 2 {
+            receiver = match deserializer.read_u8()? {
                 100 => ReceiverType::Shared,
                 101 => ReceiverType::Mut,
                 102 => ReceiverType::PinMut,
-                _ => return Err(SavefileError::WrongVersion {
-                    msg: "Version 0.17.x of the savefile-library detected. It is not compatible with the current version. Please upgrade to version >0.18.".to_string(),
+                x => return Err(SavefileError::WrongVersion {
+                    msg: format!("Version 0.17.x (or earlier) of the savefile-library detected. It is not compatible with the current version. Please upgrade to version >0.18. Unexpected value: {}", x),
                 }),
-            }
+            };
+            async_trait_heuristic = deserializer.read_bool()?;
         } else {
-            ReceiverType::Shared
+            receiver = ReceiverType::Shared;
+            async_trait_heuristic = false;
         };
         Ok(AbiMethodInfo {
-            return_value: <_ as Deserialize>::deserialize(deserializer)?,
+            return_value,
             receiver,
             arguments: <_ as Deserialize>::deserialize(deserializer)?,
+            async_trait_heuristic,
         })
     }
 }
@@ -3328,6 +3338,8 @@ impl AbiTraitDefinition {
         old: &AbiTraitDefinition,
         is_return_position: bool,
     ) -> Result<(), String> {
+
+
         if is_return_position {
             if !old.sync && self.sync {
                 return Err(format!("Trait {} was not Sync in version {}, but the Sync-bound has since been added. This is not a backward-compatible change.",
@@ -3358,6 +3370,17 @@ impl AbiTraitDefinition {
                                    self.name, old_method.name, old_version,
                 ));
             };
+            if new_method.info.async_trait_heuristic != old_method.info.async_trait_heuristic {
+                if old_method.info.async_trait_heuristic {
+                    return Err(format!("In trait {}, the method {} was previously async, using #[async_trait], but it does no longer. This is not a backward-compatible change.",
+                                       self.name, old_method.name
+                    ));
+                } else {
+                    return Err(format!("In trait {}, the method {} is now async, using #[async_trait], but it previously did not. This is not a backward-compatible change.",
+                                       self.name, old_method.name
+                    ));
+                }
+            }
             if new_method.info.arguments.len() != old_method.info.arguments.len() {
                 return Err(format!("In trait {}, method {}, the number of arguments has changed from {} in version {} to {}. This is not a backward-compatible change.",
                                    self.name, old_method.name, old_method.info.arguments.len(), old_version, new_method.info.arguments.len()

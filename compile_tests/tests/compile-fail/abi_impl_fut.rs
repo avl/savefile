@@ -11,8 +11,8 @@ use savefile_derive::savefile_abi_exportable;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
-    fn get_str(&self) -> &str;
-//~^ 14:26: 14:30: Method 'get_str': savefile-abi does not support methods returning &str. Use "String" or "&'static str" instead
+    fn set(&mut self, x: u32) -> impl Future<Output = ()>;
+//~^ 14:39: 14:45: In return value of method 'set', impl Future is not supported by savefile-abi. You can try using Pin<Box<Future < Output = () >>> instead.
 }
 
 fn main() {}

@@ -639,9 +639,10 @@ pub struct AbiConnection<T: ?Sized> {
     #[doc(hidden)]
     pub phantom: PhantomData<*const T>,
 }
-unsafe impl<T: ?Sized> Sync for AbiConnection<T> {}
-unsafe impl<T: ?Sized> Send for AbiConnection<T> {}
+unsafe impl<T: ?Sized> Sync for AbiConnection<T> where T: Sync {}
+unsafe impl<T: ?Sized> Send for AbiConnection<T> where T: Send {}
 
+/// Nothing ever points in to the AbiConnection itself.
 impl<T> Unpin for AbiConnection<T> {}
 
 /// A trait object together with its entry point
@@ -816,11 +817,11 @@ pub enum AbiProtocol {
         /// Note, callee does not actually write to this, it just calls `callback`, which allows caller
         /// to write to the result_receiver. The field is still needed here, since the `callback` is a bare function,
         /// and cannot capture any data.
-        result_receiver: *mut AbiTraitDefinition,
+        result_receiver: *mut ()/*Result<AbiTraitDefinition, SavefileError>*/,
         /// Called by callee to convey information back to caller.
         /// `receiver` is place the caller will want to write the result.
         callback: unsafe extern "C" fn(
-            receiver: *mut AbiTraitDefinition,
+            receiver: *mut ()/*Result<AbiTraitDefinition, SavefileError>*/,
             callee_schema_version: u16,
             data: *const u8,
             len: usize,
@@ -1490,37 +1491,27 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
 
                 let effective_version = own_version.min(callee_abi_version);
 
-                let mut callee_abi_native_definition = AbiTraitDefinition {
-                    name: "".to_string(),
-                    methods: vec![],
-                    sync: false,
-                    send: false,
-                };
-                let mut callee_abi_effective_definition = AbiTraitDefinition {
-                    name: "".to_string(),
-                    methods: vec![],
-                    sync: false,
-                    send: false,
-                };
+                let mut callee_abi_native_definition = Err(SavefileError::ShortRead); //Uust dummy-values
+                let mut callee_abi_effective_definition = Err(SavefileError::ShortRead);
+
                 unsafe extern "C" fn definition_receiver(
-                    receiver: *mut AbiTraitDefinition,
+                    receiver: *mut (), //Result<AbiTraitDefinition, SavefileError>,
                     schema_version: u16,
                     data: *const u8,
                     len: usize,
                 ) {
-                    let receiver = unsafe { &mut *receiver };
+                    let receiver = unsafe { &mut *(receiver as *mut Result<AbiTraitDefinition, SavefileError>) };
                     let slice = unsafe { slice::from_raw_parts(data, len) };
                     let mut cursor = Cursor::new(slice);
 
-                    let schema = load_noschema(&mut cursor, schema_version.into());
-                    *receiver = schema.unwrap_or(Default::default());
+                    *receiver = load_noschema(&mut cursor, schema_version.into());
                 }
 
                 unsafe {
                     (remote_entry)(AbiProtocol::InterrogateMethods {
                         schema_version_required: callee_schema_version,
                         callee_schema_version_interrogated: callee_abi_version,
-                        result_receiver: &mut callee_abi_native_definition as *mut _,
+                        result_receiver: &mut callee_abi_native_definition as *mut _ as *mut _,
                         callback: definition_receiver,
                     });
                 }
@@ -1529,10 +1520,13 @@ impl<T: AbiExportable + ?Sized + 'static> AbiConnection<T> {
                     (remote_entry)(AbiProtocol::InterrogateMethods {
                         schema_version_required: callee_schema_version,
                         callee_schema_version_interrogated: effective_version,
-                        result_receiver: &mut callee_abi_effective_definition as *mut _,
+                        result_receiver: &mut callee_abi_effective_definition as *mut _ as *mut _,
                         callback: definition_receiver,
                     });
                 }
+
+                let callee_abi_native_definition = callee_abi_native_definition?;
+                let callee_abi_effective_definition = callee_abi_effective_definition?;
 
                 let own_effective_definition = T::get_definition(effective_version);
                 let trait_name = Self::trait_name();
@@ -1784,14 +1778,11 @@ pub struct AbiWaker {
 }
 impl Wake for AbiWaker {
     fn wake(self: Arc<Self>) {
-        println!("Wake called!");
         match Arc::try_unwrap(self) {
             Ok(mut waker) => {
-                println!("Single user of waker - optimal");
                 (*waker.waker.get_mut().unwrap())();
             }
             Err(arc) => {
-                println!("Mutex locking, calling waker");
                 let mut guard = arc.waker.lock().unwrap();
                 (*guard)();
             }

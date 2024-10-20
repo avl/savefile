@@ -46,6 +46,7 @@ mod test_introspect;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
 mod test_versioning;
+mod test_more_async;
 
 #[cfg(feature = "external_benchmarks")]
 #[cfg(not(miri))]

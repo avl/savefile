@@ -12,7 +12,7 @@ use savefile_derive::savefile_abi_exportable;
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
     fn global_func(x: u32) -> u32;
-//~^ 14:5: 14:7: Method 'global_func' must have 'self'-parameter (savefile-abi does not support methods without self)
+//~^ 14:20: 14:21: Method 'global_func' must have 'self'-parameter (savefile-abi does not support methods without self)
 }
 
 fn main() {}

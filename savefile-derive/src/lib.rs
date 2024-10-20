@@ -36,10 +36,8 @@ use syn::__private::bool;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{
-    DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat,
-    PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple,
-};
+use syn::{DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate};
+use crate::savefile_abi::is_well_known;
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -249,6 +247,14 @@ pub fn savefile_abi_exportable(
             _ => abort!(item.span(), "Unknown savefile_abi_exportable key: '{}'", key),
         }
     }
+
+    for attr in &parsed.attrs {
+        let name_segs:Vec<_> = attr.path.segments.iter().map(|x|&x.ident).collect();
+        if name_segs == ["async_trait"] || name_segs == ["async_trait","async_trait"] {
+            abort!(attr.path.segments.span(), "async_trait-attribute macro detected. The {} macro must go _before_ the #[savefile_abi_exportable(..)] macro!",
+            attr.to_token_stream());
+        }
+    }
     let version: u32 = version.unwrap_or(0);
 
     let trait_name_str = parsed.ident.to_string();
@@ -334,11 +340,78 @@ pub fn savefile_abi_exportable(
                 );
             }
             TraitItem::Method(method) => {
-                if method.sig.generics.where_clause.is_some() {
-                    abort!(
-                        method.sig.generics.where_clause.span(),
-                        "Savefile does not support where-clauses for methods"
-                    );
+                let mut is_ok = true;
+                let mut async_trait_life_time = 0;
+                let mut life0_life_time = 0;
+                if let Some(wher) = &method.sig.generics.where_clause {
+
+                    for w in wher.predicates.iter() {
+                        match w {
+                            WherePredicate::Type(t) => {
+                                match &t.bounded_ty {
+                                    Type::Path(p) => {
+                                       if p.path.segments.len() == 1 {
+                                           if p.path.segments[0].ident != "Self" {
+                                               is_ok = false;
+                                           }
+                                       }  else {
+                                           is_ok = false;
+                                       }
+                                    }
+                                    _ => {
+                                        is_ok = false;
+                                        break;
+                                    }
+                                }
+                                if let Some(l) = &t.lifetimes {
+                                    is_ok = false;
+                                }
+                                for bound in &t.bounds {
+                                    match bound {
+                                        TypeParamBound::Trait(t) => {
+                                            if t.path.segments.len() == 1 {
+                                                if t.path.segments[0].ident != "Sync" {
+                                                    is_ok = false;
+                                                }
+                                            } else {
+                                                is_ok = false;
+                                            }
+
+                                        }
+                                        TypeParamBound::Lifetime(l) => {
+                                            if l.ident != "async_trait" {
+                                                is_ok = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            WherePredicate::Lifetime(l) => {
+
+                                if l.lifetime.ident != "life0" {
+                                    is_ok = false;
+                                } else {
+                                    life0_life_time += 1;
+                                }
+                                for bound in &l.bounds {
+                                    if bound.ident != "async_trait" {
+                                        is_ok = false;
+                                    } else {
+                                        async_trait_life_time += 1;
+                                    }
+                                }
+                            }
+                            WherePredicate::Eq(_) => {
+                                is_ok = false;
+                            }
+                        }
+                    }
+                    if !is_ok {
+                        abort!(
+                                    method.sig.generics.where_clause.span(),
+                                    "Savefile does not support where-clauses for methods"
+                                );
+                    }
                 }
                 let method_name = method.sig.ident.clone();
                 //let method_name_str = method.sig.ident.to_string();
@@ -381,12 +454,18 @@ pub fn savefile_abi_exportable(
                 match self_arg {
                     FnArg::Receiver(recv) => {
                         if let Some(reference) = &recv.reference {
-                            if reference.1.is_some() {
-                                abort!(
-                                reference.1.as_ref().unwrap().span(),
-                                "Method '{}' has a lifetime for 'self' argument. This is not supported by savefile-abi",
-                                method_name
-                            );
+
+                            if let Some(reference) = &reference.1 {
+                                if reference.ident != "life0" {
+                                    abort!(
+                                        reference.span(),
+                                        "Method '{}' has a lifetime \"'{}\" for 'self' argument. This is not supported by savefile-abi",
+                                        method_name,
+                                        reference.ident,
+                                    );
+                                } else {
+                                    life0_life_time += 1;
+                                }
                             }
                             if recv.mutability.is_some() {
                                 receiver_is_mut = true;
@@ -413,13 +492,10 @@ pub fn savefile_abi_exportable(
                                     unsupported();
                                 }
                                 if let Type::Path(path) = &*pat.ty {
-                                    if path.path.segments.len() != 1 {
+                                    if !is_well_known(&path.path.segments, ["std","pin","Pin"]) {
                                         unsupported();
                                     }
-                                    let seg = &path.path.segments[0];
-                                    if seg.ident != "Pin" {
-                                        unsupported();
-                                    }
+                                    let seg = &path.path.segments.last().unwrap();
                                     let PathArguments::AngleBracketed(args) = &seg.arguments else {
                                         unsupported();
                                         unreachable!();
@@ -457,7 +533,11 @@ pub fn savefile_abi_exportable(
                                 }
                             }
                             _ => {
-                                unsupported();
+                                abort!(
+                                        pat.pat.span(),
+                                        "Method '{}' must have 'self'-parameter (savefile-abi does not support methods without self)",
+                                        method_name
+                                    );
                             }
                         }
                     }
@@ -477,9 +557,18 @@ pub fn savefile_abi_exportable(
                     }
                 }
                 if method.sig.asyncness.is_some() {
+                    let out  = match &method.sig.output {
+                        ReturnType::Default => {
+                            quote!{()}
+                        }
+                        ReturnType::Type(_, t) => {
+                            t.to_token_stream()
+                        }
+                    };
                     abort!(
                         method.sig.asyncness.span(),
-                        "savefile-abi does not support async methods."
+                        "savefile-abi does not support async methods. You can try returning a boxed future instead: Pin<Box<Future<Output={}>>>",
+                        out
                     )
                 }
                 if method.sig.variadic.is_some() {
@@ -506,12 +595,31 @@ pub fn savefile_abi_exportable(
                             GenericParam::Const(typ) => {
                                 abort!(typ.span(), "savefile-abi does not support const-generic methods.")
                             }
-                            _ => {}
+                            GenericParam::Lifetime(l) => {
+                                if l.lifetime.ident != "life0" && l.lifetime.ident != "async_trait" {
+                                    abort!(
+                                        method.sig.generics.params.span(),
+                                        "savefile-abi does not support methods with lifetimes."
+                                    );
+                                } else {
+                                    life0_life_time += 1;
+                                    async_trait_life_time += 1;
+                                }
+                            }
                         }
                     }
+                }
+
+                let async_trait_macro_detected;
+                if life0_life_time == 4 && async_trait_life_time == 3 {
+                    async_trait_macro_detected = true;
+                } else if life0_life_time == 0 && async_trait_life_time == 0 {
+                    async_trait_macro_detected = false;
+                } else {
                     abort!(
-                        method.sig.generics.params.span(),
-                        "savefile-abi does not support methods with lifetimes."
+                        item.span(),
+                        "savefile-abi has heuristics that detects the use of the #[async_trait]-macro. This heuristic produced a partial result. It is possible that an incompatible version of async_trait crate has been used. Diagnostics: {} {}",
+                        life0_life_time, async_trait_life_time
                     );
                 }
 
@@ -528,6 +636,7 @@ pub fn savefile_abi_exportable(
                     args,
                     &mut temp_name_generator,
                     &mut extra_definitions,
+                    async_trait_macro_detected
                 );
                 method_metadata.push(method_defs.method_metadata);
                 callee_method_trampoline.push(method_defs.callee_method_trampoline);

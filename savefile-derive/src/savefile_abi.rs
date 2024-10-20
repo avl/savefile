@@ -7,7 +7,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{GenericArgument, Path, PathArguments, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
+use syn::{GenericArgument, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
+use syn::token::Colon2;
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -114,7 +115,7 @@ fn emit_future_helpers(
 
     let send_impl = send.then(|| {
         quote! {
-            impl Send for #futurer_wrapper_struct_name {
+            unsafe impl Send for #futurer_wrapper_struct_name {
             }
         }
     });
@@ -126,7 +127,7 @@ fn emit_future_helpers(
 
     let sync_impl = sync.then(|| {
         quote! {
-            impl Sync for #futurer_wrapper_struct_name {
+            unsafe impl Sync for #futurer_wrapper_struct_name {
             }
         }
     });
@@ -582,24 +583,31 @@ fn parse_type(
                 let mut sync = false;
                 let mut send = false;
                 let mut unpin = false;
+                let mut async_trait_lifetime = false;
                 let type_bounds: Vec<_> = trait_obj
                     .bounds
                     .iter()
                     .map(|x| match x {
-                        TypeParamBound::Trait(t) => t
+                        TypeParamBound::Trait(t) => Some(t
                             .path
                             .segments
                             .iter()
                             .last()
-                            .expect("Missing bounds of Box trait object"),
+                            .expect("Missing bounds of Box trait object")),
                         TypeParamBound::Lifetime(lt) => {
-                            abort!(
-                                lt.span(),
-                                "{}: Specifying lifetimes is not supported by Savefile-Abi.",
-                                location,
-                            );
+                            if lt.ident == "async_trait" {
+                                async_trait_lifetime = true;
+                                None
+                            } else {
+                                abort!(
+                                    lt.span(),
+                                    "{}: Specifying lifetimes is not supported by Savefile-Abi: {}",
+                                    location, x.to_token_stream()
+                                );
+                            }
                         }
                     })
+                    .filter_map(|x|x)
                     .filter(|seg| {
                         if seg.ident == "Sync" {
                             sync = true;
@@ -630,6 +638,14 @@ fn parse_type(
                 let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
 
                 if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
+                    if async_trait_lifetime{
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support lifetimes on Fn* closures.",
+                            location,
+                        );
+
+                    }
                     if unpin {
                         abort!(
                             bound.ident.span(),
@@ -692,14 +708,14 @@ fn parse_type(
                                     location
                                 );
                             }
-                            if t.path.segments.len() != 1 {
+                            if !is_well_known(&t.path.segments, ["std","future","Future"]) {
                                 abort!(
                                     bound.span(),
-                                    "{}: Boxed futures can only implement the Future trait",
-                                    location
+                                    "{}: Boxed futures can only implement the Future trait, not: {}",
+                                    location, t.path.to_token_stream()
                                 );
                             }
-                            let seg = &t.path.segments[0];
+                            let seg = t.path.segments.last().unwrap();
                             match &seg.arguments {
                                 PathArguments::AngleBracketed(arg) => {
                                     if arg.args.len() != 1 {
@@ -716,6 +732,7 @@ fn parse_type(
                                             if t.ident != "Output" {
                                                 abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
                                             }
+                                            //println!("Future type: {}",t.ty.to_token_stream());
                                             return ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin);
                                         }
                                         GenericArgument::Lifetime(_)
@@ -729,8 +746,8 @@ fn parse_type(
                                 PathArguments::None | PathArguments::Parenthesized(_) => {
                                     abort!(
                                         seg.arguments.span(),
-                                        "{}: Future must have arguments within angle brackets: Future<...>.",
-                                        location
+                                        "{}: Future must have arguments within angle brackets: Future<...>. Not: {}",
+                                        location, seg.to_token_stream()
                                     );
                                 }
                             }
@@ -749,6 +766,13 @@ fn parse_type(
                         location
                     );
                 } else {
+                    if async_trait_lifetime {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support lifetimes on arbitrary trait types, only on futures.",
+                            location,
+                        );
+                    }
                     if unpin {
                         abort!(
                             bound.ident.span(),
@@ -789,7 +813,7 @@ fn parse_type(
                 }
                 return ArgType::Str(false); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
             } else if last_seg.ident == "Pin" {
-                if path.path.segments.len() != 1 {
+                if !is_well_known(&path.path.segments, ["std","pin","Pin"]) {
                     abort!(path.path.segments.span(), "Savefile does not support types named 'Pin', unless it is the standard type Pin, and it must be specified as 'Pin', without any namespace");
                 }
                 if is_reference {
@@ -805,7 +829,7 @@ fn parse_type(
                     PathArguments::AngleBracketed(params) => {
                         let argvec: Vec<_> = params.args.iter().collect();
                         if argvec.len() != 1 {
-                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with one type parameter within angle-brackets. Got {} type arguments", argvec.len());
+                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with a single type parameter within angle-brackets. Got {} type arguments", argvec.len());
                         }
                         let arg = argvec[0];
                         match arg {
@@ -932,6 +956,30 @@ fn parse_type(
                 rawtype = typ;
             }
         }
+        Type::ImplTrait(i) => {
+            for bound in &i.bounds {
+                match bound {
+                    TypeParamBound::Trait(t) => {
+                        if let Some(last) = t.path.segments.last().map(|x|&x.ident) {
+                            if last == "Future" {
+                                abort!(
+                                    last.span(),
+                                    "{}, impl Future is not supported by savefile-abi. You can try using Pin<Box<{}>> instead.",
+                                    location, i.bounds.to_token_stream()
+                                );
+
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            abort!(
+                i.span(),
+                "{}, impl trait is not supported by savefile-abi. Try using a box: Box<{}>.",
+                location, i.bounds.to_token_stream()
+            );
+        }
         _ => {
             abort!(
                 typ.span(),
@@ -949,6 +997,23 @@ fn parse_type(
         );
     }
     ArgType::PlainData(rawtype.clone())
+}
+
+pub fn is_well_known<'a, I>(path: I, items: [&str; 3]) -> bool
+    where
+        I: IntoIterator<Item=&'a PathSegment>,
+        <I as IntoIterator>::IntoIter: DoubleEndedIterator
+{
+    for (a,b) in items.iter().rev().zip(path.into_iter().rev()) {
+        if b.ident == a {
+            continue;
+        }
+        if b.ident == "core" && *a == "std" {
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 struct TypeInstruction {
@@ -1502,6 +1567,7 @@ pub(super) fn generate_method_definitions(
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
     extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
+    async_trait_detected: bool
 ) -> MethodDefinitionComponents {
     let method_name_str = method_name.to_string();
 
@@ -1583,6 +1649,9 @@ pub(super) fn generate_method_definitions(
         callee_real_method_invocation_except_args =
             quote! { unsafe { &*trait_object.as_const_ptr::<dyn #trait_name>() }.#method_name };
     }
+    let async_trait_self_lifetime = async_trait_detected.then(||{
+        quote!( 'life0 )
+    });
 
     let receiver_type;
     //let receiver_mut_str = receiver_mut.to_string();
@@ -1592,12 +1661,12 @@ pub(super) fn generate_method_definitions(
             quote!(self: Pin<&mut Self>)
         } else {
             receiver_type = quote!(ReceiverType::Mut);
-            quote!(&mut self)
+            quote!(& #async_trait_self_lifetime mut self)
         }
     } else {
         receiver_type = quote!(ReceiverType::Shared);
         assert!(!receiver_is_pin);
-        quote! {&self}
+        quote! {& #async_trait_self_lifetime self}
     };
     let return_value_schema;
 
@@ -1690,10 +1759,22 @@ pub(super) fn generate_method_definitions(
 
     let _ = caller_return_type;
 
+    let async_trait_lifetime_decls= async_trait_detected.then(||{
+        quote!( <'life0,'async_trait> )
+    });
+
+    let async_trait_where = async_trait_detected.then(||{
+        quote!(
+            where 'life0 : 'async_trait, Self : 'async_trait
+        )
+    });
+
     let caller_method_trampoline = quote! {
         // TODO: Determine if we should use inline here or not? #[inline]
         #[inline]
-        fn #method_name(#receiver, #(#caller_fn_arg_list,)*) #ret_declaration {
+        fn #method_name #async_trait_lifetime_decls(#receiver, #(#caller_fn_arg_list,)*) #ret_declaration
+            #async_trait_where
+        {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
 
             let Some(callee_method_number) = info.callee_method_number else {
@@ -1716,7 +1797,7 @@ pub(super) fn generate_method_definitions(
 
             unsafe {
 
-                unsafe extern "C" fn abi_result_receiver(
+                unsafe extern "C" fn abi_result_receiver<'async_trait>(
                     outcome: *const RawAbiCallResult,
                     result_receiver: *mut (),
                 ) {
@@ -1734,7 +1815,7 @@ pub(super) fn generate_method_definitions(
 
             (self.template.entry)(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
-                compatibility_mask: compatibility_mask,
+                compatibility_mask,
                 method_number: callee_method_number,
                 effective_version: self.template.effective_version,
                 data: #data_as_ptr,
@@ -1756,6 +1837,7 @@ pub(super) fn generate_method_definitions(
                 return_value: { let mut context = WithSchemaContext::new(); let context = &mut context; #return_value_schema},
                 receiver: #receiver_type,
                 arguments: vec![ #(#metadata_arguments,)* ],
+                async_trait_heuristic: #async_trait_detected
             }
         }
     };
