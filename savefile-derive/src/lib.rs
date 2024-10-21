@@ -439,8 +439,16 @@ pub fn savefile_abi_exportable(
                     }
                     ReturnType::Type(_, ty) => {
                         ret_type = (**ty).clone();
-                        ret_declaration = quote! { -> #ret_type };
-                        no_return = false;
+                        match &**ty {
+                            Type::Tuple(tup) if tup.elems.is_empty() => {
+                                ret_declaration = quote! {};
+                                no_return = true;
+                            }
+                            _ => {
+                                ret_declaration = quote! { -> #ret_type };
+                                no_return = false;
+                            }
+                        }
                     }
                 }
 

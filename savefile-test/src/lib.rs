@@ -1643,7 +1643,7 @@ fn test_quickcheck_roundtrip_simple_vec(xs: Vec<isize>) -> bool {
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_roundtrip_hashset(xs: FxHashSet<String>) -> bool {
-    println!("Yeah: {:?}", xs);
+    //println!("Yeah: {:?}", xs);
     xs == roundtrip(xs.clone())
 }
 
@@ -1658,14 +1658,14 @@ fn test_quickcheck_schema_roundtrip(a: Schema) -> bool {
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_schema_diff_different(a: Schema, b: Schema) -> bool {
-    _ = diff_schema(&a, &b, "".into()); //Check this doesn't crash
+    _ = diff_schema(&a, &b, "".into(), false); //Check this doesn't crash
     true
 }
 #[cfg(not(debug_assertions))]
 #[quickcheck]
 #[cfg(not(miri))]
 fn test_quickcheck_schema_diff_same(a: Schema) -> bool {
-    diff_schema(&a, &a, "".into()).is_none() //Should always equal itself
+    diff_schema(&a, &a, "".into(), false).is_none() //Should always equal itself
 }
 #[derive(Savefile)]
 #[repr(u8)]

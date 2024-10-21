@@ -422,7 +422,27 @@ pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
                 false
             }
         }
-        Type::Array(x) => compile_time_check_reprc(&x.elem),
+        Type::Array(x) => {
+            match &x.len {
+                Expr::Lit(l) => {
+                    match &l.lit {
+                        Lit::Int(l) => {
+                            match l.base10_parse::<i64>() {
+                                Ok(count) => {
+                                    if count == 0 {
+                                        return true; //0-length arrays are always reprc
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            compile_time_check_reprc(&x.elem)
+        }
         Type::Tuple(t) => {
             let mut size = None;
             for x in &t.elems {
@@ -430,6 +450,11 @@ pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
                     return false;
                 }
                 let xsize = if let Some(s) = compile_time_size(x) {
+                    if s == (0, 0) || s == (0, 1) {
+                        // Zero sized types can be mixed with other sizes, as long as all
+                        // the other sizes are the same size.
+                        continue;
+                    }
                     s
                 } else {
                     return false;

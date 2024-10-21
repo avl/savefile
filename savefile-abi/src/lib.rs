@@ -1773,7 +1773,12 @@ pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), 
 #[doc(hidden)]
 pub struct AbiWaker {
     #[doc(hidden)]
-    pub waker: Mutex<Box<dyn FnMut() + Send + Sync>>,
+    waker: Mutex<Box<dyn FnMut() + Send + Sync>>,
+}
+impl AbiWaker {
+    pub fn new(waker: Box<dyn FnMut() + Send + Sync>) -> Self {
+        Self { waker: waker.into() }
+    }
 }
 impl Wake for AbiWaker {
     fn wake(self: Arc<Self>) {

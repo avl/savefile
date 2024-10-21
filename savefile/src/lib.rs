@@ -1917,8 +1917,20 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     }
 
     #[doc(hidden)]
-    pub fn save_noschema_internal<T: Serialize>(writer: &mut W, version: u32, data: &T, lib_version_override: u16) -> Result<(), SavefileError> {
-        Ok(Self::save_impl(writer, version, data, None, false, Some(lib_version_override))?)
+    pub fn save_noschema_internal<T: Serialize>(
+        writer: &mut W,
+        version: u32,
+        data: &T,
+        lib_version_override: u16,
+    ) -> Result<(), SavefileError> {
+        Ok(Self::save_impl(
+            writer,
+            version,
+            data,
+            None,
+            false,
+            Some(lib_version_override),
+        )?)
     }
     /// Serialize without any header. Using this means that bare_deserialize must be used to
     /// deserialize. No metadata is sent, not even version.
@@ -1942,7 +1954,9 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION) /*savefile format version*/)?;
+        writer.write_u16::<LittleEndian>(
+            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION), /*savefile format version*/
+        )?;
         writer.write_u32::<LittleEndian>(version)?;
         // 9 + 2 + 4 = 15
         {
@@ -1955,7 +1969,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
                     if let Some(schema) = with_schema {
                         let mut schema_serializer = Serializer::<bzip2::write::BzEncoder<W>>::new_raw(
                             &mut compressed_writer,
-                            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION)  as u32,
+                            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION) as u32,
                         );
                         schema.serialize(&mut schema_serializer)?;
                     }
@@ -1975,7 +1989,10 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
             } else {
                 writer.write_u8(0)?;
                 if let Some(schema) = with_schema {
-                    let mut schema_serializer = Serializer::<W>::new_raw(writer, lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION)  as u32);
+                    let mut schema_serializer = Serializer::<W>::new_raw(
+                        writer,
+                        lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION) as u32,
+                    );
                     schema.serialize(&mut schema_serializer)?;
                 }
 
@@ -3839,6 +3856,9 @@ fn diff_fields(
 /// Returns None if both schemas are equivalent
 /// This does not care about memory layout, only serializability.
 ///
+/// is_return_pos should be true if the schema we're diffing is for a return value in
+/// savefile abi, otherwise false.
+///
 /// for ABI calls:
 /// a is the caller
 /// b is the callee
@@ -3911,8 +3931,7 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
         }
         (Schema::Future(a, a_send, a_sync, a_unpin), Schema::Future(b, b_send, b_sync, b_unpin)) => {
             if !is_return_pos {
-                #[allow(warnings)]
-                return Some(panic!("Futures are only supported in return position"));
+                panic!("Futures are only supported in return position");
             }
             for (a, b, bound) in [
                 (*a_send, *b_send, "Send"),
@@ -4842,7 +4861,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
     fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
         let bucket = index / 2;
         let off = index % 2;
-        if let Some((key, val)) = self.iter().skip(bucket).next() {
+        if let Some((key, val)) = self.iter().nth(bucket) {
             if off == 0 {
                 Some(introspect_item(format!("Key #{}", index), key))
             } else {
@@ -6729,6 +6748,9 @@ impl<T: Packed, const N: usize> Packed for [T; N] {
 }
 impl<T: Serialize + Packed + 'static, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        if N == 0 {
+            return Ok(());
+        }
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
                 for item in self.iter() {
@@ -6747,6 +6769,10 @@ impl<T: Serialize + Packed + 'static, const N: usize> Serialize for [T; N] {
 
 impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        if N == 0 {
+            return Ok([(); N].map(|_| unreachable!()));
+        }
+
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             let mut data: [MaybeUninit<T>; N] = unsafe {
                 MaybeUninit::uninit().assume_init() //This seems strange, but is correct according to rust docs: https://doc.rust-lang.org/std/mem/union.MaybeUninit.html, see chapter 'Initializing an array element-by-element'

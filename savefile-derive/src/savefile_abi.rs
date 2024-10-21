@@ -73,6 +73,41 @@ fn get_type(ret_type: &ReturnType) -> Type {
     }
 }
 
+fn compile_time_abi_check_size(typ: &Type) -> Option<(usize, usize)> {
+    if compile_time_check_reprc(typ) {
+        return compile_time_size(typ);
+    }
+
+    match typ {
+        Type::Path(path) => {
+            if safe_is_well_known(&path.path, ["std", "option", "Option"]) {
+                match &path.path.segments.last().unwrap().arguments {
+                    PathArguments::AngleBracketed(typ) => {
+                        if typ.args.len() == 1 {
+                            match &typ.args[0] {
+                                GenericArgument::Lifetime(_) => {}
+                                GenericArgument::Type(ty) => {
+                                    if let Some(sub) = compile_time_abi_check_size(ty) {
+                                        if sub == (0, 1) {
+                                            return Some((1, 1)); //size align of Option<()> is 1,1
+                                        }
+                                    }
+                                }
+                                GenericArgument::Const(_) => {}
+                                GenericArgument::Binding(_) => {}
+                                GenericArgument::Constraint(_) => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
 static ID_GEN: AtomicU64 = AtomicU64::new(0);
 
 fn emit_future_helpers(
@@ -173,7 +208,7 @@ fn emit_future_helpers(
 
         #[savefile_abi_exportable(version = 0)]
         pub trait #futureWrapper {
-            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type>;
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> ::std::option::Option<#output_type>;
         }
         #send_impl
         #sync_impl
@@ -195,10 +230,8 @@ fn emit_future_helpers(
             }
         }
         impl #futureWrapper for #box_fut_type {
-            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> Option<#output_type> {
-                let waker = Waker::from(Arc::new(AbiWaker {
-                    waker: waker.into()
-                }));
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> ::std::option::Option<#output_type> {
+                let waker = Waker::from(Arc::new(AbiWaker::new(waker)));
                 let mut context = Context::from_waker(&waker);
 
                 match #self_ref.poll(&mut context) {
@@ -496,7 +529,6 @@ fn parse_type(
     match typ {
         Type::Tuple(tup) if tup.elems.is_empty() => {
             rawtype = typ;
-            //argtype = ArgType::PlainData(typ.to_token_stream());
         }
         Type::Reference(typref) => {
             let is_static_lifetime;
@@ -1020,6 +1052,25 @@ where
     }
     true
 }
+pub fn safe_is_well_known(path: &Path, items: [&str; 3]) -> bool {
+    if !path.leading_colon.is_some() {
+        return false;
+    }
+    if path.segments.len() != 3 {
+        return false;
+    }
+
+    for (a, b) in items.iter().zip(path.segments.iter()) {
+        if b.ident == a {
+            continue;
+        }
+        if b.ident == "core" && *a == "std" {
+            continue;
+        }
+        return false;
+    }
+    true
+}
 
 struct TypeInstruction {
     //callee_trampoline_real_method_invocation_argument1: TokenStream,
@@ -1095,12 +1146,8 @@ impl ArgType {
 
                 let known_size_align1 = match &**arg_type {
                     ArgType::PlainData(plain) => {
-                        if compile_time_check_reprc(plain) {
-                            if compile_time_size(plain).is_some() {
-                                known_size_align_of_pointer1
-                            } else {
-                                None
-                            }
+                        if compile_time_abi_check_size(plain).is_some() {
+                            known_size_align_of_pointer1
                         } else {
                             None
                         }
@@ -1241,11 +1288,7 @@ impl ArgType {
                     #prefixed_arg_name.serialize(&mut serializer)
                 },
                 schema: quote!( get_schema::<#arg_type>(version) ),
-                known_size_align1: if compile_time_check_reprc(arg_type) {
-                    compile_time_size(arg_type)
-                } else {
-                    None
-                },
+                known_size_align1: compile_time_abi_check_size(arg_type),
                 arg_type1: arg_type.to_token_stream(),
                 known_size_align_of_pointer1: None,
             },
@@ -1271,6 +1314,18 @@ impl ArgType {
                     prefixed_arg_name,
                 );
 
+                let mut known_size_align1 = None;
+
+                match &**inner_arg_type {
+                    ArgType::Fn(_, _, _, _, _, _) => {
+                        known_size_align1 = Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT));
+                    }
+                    ArgType::Trait(..) => {
+                        known_size_align1 = Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT));
+                    }
+                    _ => {}
+                }
+
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
                     deserialized_type: quote! {Box<#deserialized_type>},
@@ -1284,7 +1339,7 @@ impl ArgType {
                     caller_arg_serializer1,
                     schema: quote!( Schema::Boxed( std::boxed::Box::new(#schema) ) ),
                     arg_type1: quote!( Box<#arg_type1> ),
-                    known_size_align1: None,
+                    known_size_align1,
                     known_size_align_of_pointer1: None,
                 }
             }
@@ -1680,6 +1735,7 @@ pub(super) fn generate_method_definitions(
 
     let result_default;
     let return_ser_temp;
+    let ret_type_size;
     if no_return {
         return_value_schema = quote!(get_schema::<()>(0));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
@@ -1688,6 +1744,7 @@ pub(super) fn generate_method_definitions(
         ret_temp_decl = quote!();
         return_ser_temp = quote!();
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) );
+        ret_type_size = Some((0, 1));
     //Safe, does not need drop and does not allocate
     } else {
         let parsed_ret_type = parse_type(
@@ -1732,7 +1789,7 @@ pub(super) fn generate_method_definitions(
         ret_deserializer = instruction.callee_trampoline_variable_deserializer1;
         let ret_serializer = instruction.caller_arg_serializer1;
         ret_temp_decl = instruction.callee_trampoline_temp_variable_declaration1;
-
+        ret_type_size = instruction.known_size_align1;
         ret_serialize = quote!( #ret_serializer );
 
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() );
@@ -1850,9 +1907,8 @@ pub(super) fn generate_method_definitions(
         let ret_buffer;
         let data_as_ptr;
         let data_length;
-        let known_size = compile_time_check_reprc(&ret_type)
-            .then_some(compile_time_size(&ret_type))
-            .flatten();
+        let known_size = ret_type_size; //compile_time_abi_check_size(&ret_type);
+                                        //println!("Known size of {} = {:?}", ret_type.to_token_stream(), known_size);
         if let Some((compile_time_known_size, _align)) = known_size {
             // If we have simple type such as u8, u16 etc, we can sometimes
             // know at compile-time what the size of the args will be.
