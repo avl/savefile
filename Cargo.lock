@@ -84,15 +84,6 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
-dependencies = [
- "bit-vec 0.6.3",
-]
-
-[[package]]
-name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
@@ -704,8 +695,7 @@ name = "savefile"
 version = "0.18.1"
 dependencies = [
  "arrayvec",
- "bit-set 0.5.3",
- "bit-set 0.8.0",
+ "bit-set",
  "bit-vec 0.6.3",
  "bit-vec 0.8.0",
  "byteorder",
@@ -797,7 +787,7 @@ dependencies = [
  "arrayvec",
  "async-trait",
  "bincode",
- "bit-set 0.8.0",
+ "bit-set",
  "bit-vec 0.8.0",
  "byteorder",
  "indexmap",
