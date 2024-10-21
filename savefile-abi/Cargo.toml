@@ -27,6 +27,8 @@ libloading = "0.8"
 # Automatically set by build.rs
 rust1_78=[]
 
+[dev-dependencies]
+async-trait = "0.1"
 
 [build-dependencies]
 rustc_version="0.2"
