@@ -17,7 +17,24 @@ pub trait SimpleAsyncInterface {
     async fn add_async2(&self, x: u32, y: u32) -> u32;
 }
 
+#[savefile_abi_exportable(version = 0)]
+pub trait BoxedAsyncInterface {
+    fn add_async(&mut self, x: u32, y: u32) -> Pin<Box<dyn Future<Output=String>>>;
+
+}
+
 struct SimpleImpl;
+
+impl BoxedAsyncInterface for SimpleImpl {
+    fn add_async(&mut self, x: u32, y: u32) -> Pin<Box<dyn Future<Output=String>>> {
+        Box::pin(
+            async move {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+                format!("{}",x+y)
+            }
+        )
+    }
+}
 
 #[async_trait]
 impl SimpleAsyncInterface for SimpleImpl {
@@ -43,6 +60,15 @@ async fn abi_test_async() {
 
     assert_eq!(acc, 45);
 }
+
+#[tokio::test]
+async fn abi_test_boxed_async() {
+    let boxed: Box<dyn BoxedAsyncInterface> = Box::new(SimpleImpl);
+    let mut conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    assert_eq!(conn.add_async(1,2).await, "3");
+}
+
 
 #[cfg(feature = "nightly")]
 #[cfg(not(miri))]
