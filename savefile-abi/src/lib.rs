@@ -1773,23 +1773,18 @@ pub fn verify_compatiblity<T: AbiExportable + ?Sized>(path: &str) -> Result<(), 
 #[doc(hidden)]
 pub struct AbiWaker {
     #[doc(hidden)]
-    waker: Mutex<Box<dyn FnMut() + Send + Sync>>,
+    waker: Box<dyn Fn() + Send + Sync>,
 }
 impl AbiWaker {
-    pub fn new(waker: Box<dyn FnMut() + Send + Sync>) -> Self {
-        Self { waker: waker.into() }
+    pub fn new(waker: Box<dyn Fn() + Send + Sync>) -> Self {
+        Self { waker }
     }
 }
 impl Wake for AbiWaker {
     fn wake(self: Arc<Self>) {
-        match Arc::try_unwrap(self) {
-            Ok(mut waker) => {
-                (*waker.waker.get_mut().unwrap())();
-            }
-            Err(arc) => {
-                let mut guard = arc.waker.lock().unwrap();
-                (*guard)();
-            }
-        }
+        (self.waker)();
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        (self.waker)();
     }
 }

@@ -208,7 +208,7 @@ fn emit_future_helpers(
 
         #[savefile_abi_exportable(version = 0)]
         pub trait #futureWrapper {
-            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> ::std::option::Option<#output_type>;
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn Fn()+Send+Sync>) -> ::std::option::Option<#output_type>;
         }
         #send_impl
         #sync_impl
@@ -217,9 +217,9 @@ fn emit_future_helpers(
             type Output = #output_type;
 
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-                let mut waker = Some(cx.waker().clone());
+                let mut waker = cx.waker().clone();
                 //let mut pinned = std::pin::pin!(&mut self.future);
-                match unsafe { self.map_unchecked_mut(|s|&mut s.future)}.abi_poll(Box::new(move ||{waker.take().map(|x|x.wake());})) {
+                match unsafe { self.map_unchecked_mut(|s|&mut s.future)}.abi_poll(Box::new(move ||{waker.wake_by_ref();})) {
                     Some(temp) => {
                         Poll::Ready(temp)
                     }
@@ -230,7 +230,7 @@ fn emit_future_helpers(
             }
         }
         impl #futureWrapper for #box_fut_type {
-            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn FnMut()+Send+Sync>) -> ::std::option::Option<#output_type> {
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn Fn()+Send+Sync>) -> ::std::option::Option<#output_type> {
                 let waker = Waker::from(Arc::new(AbiWaker::new(waker)));
                 let mut context = Context::from_waker(&waker);
 
