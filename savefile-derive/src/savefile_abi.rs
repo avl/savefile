@@ -768,7 +768,6 @@ fn parse_type(
                                             if t.ident != "Output" {
                                                 abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
                                             }
-                                            //println!("Future type: {}",t.ty.to_token_stream());
                                             return ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin);
                                         }
                                         GenericArgument::Lifetime(_)
@@ -1908,7 +1907,6 @@ pub(super) fn generate_method_definitions(
         let data_as_ptr;
         let data_length;
         let known_size = ret_type_size; //compile_time_abi_check_size(&ret_type);
-                                        //println!("Known size of {} = {:?}", ret_type.to_token_stream(), known_size);
         if let Some((compile_time_known_size, _align)) = known_size {
             // If we have simple type such as u8, u16 etc, we can sometimes
             // know at compile-time what the size of the args will be.
