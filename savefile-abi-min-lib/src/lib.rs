@@ -1,7 +1,7 @@
 use savefile_derive::savefile_abi_exportable;
 use savefile_derive::Savefile;
 use std::fmt::{Debug, Formatter};
-
+//use async_trait::async_trait;
 
 #[derive(Savefile)]
 pub struct MyStuff {
@@ -27,3 +27,12 @@ impl Debug for dyn AdderInterface {
         write!(f, "AdderInterface")
     }
 }
+/*
+
+#[async_trait]
+#[savefile_abi_exportable(version = 0)]
+pub trait AdderCallback {
+    async fn set(&self, value: u32, big: u128, big2:u128);
+
+}
+*/

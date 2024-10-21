@@ -26,13 +26,8 @@ fn test_misaligned1() {
 
 #[test]
 fn roundtrip_correctly_aligned() {
-    roundtrip(CorrectlyAligned{
-        x: 1, y: 2
-    });
-    roundtrip(Inner{
-        misaligner: 43,
-        x: 42
-    });
+    roundtrip(CorrectlyAligned { x: 1, y: 2 });
+    roundtrip(Inner { misaligner: 43, x: 42 });
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Savefile)]
@@ -51,8 +46,5 @@ fn test_misaligned2() {
 
 #[test]
 fn test_roundtrip_inner2() {
-    roundtrip(Inner2 {
-        x: 47,
-        misaligner: 48
-    });
+    roundtrip(Inner2 { x: 47, misaligner: 48 });
 }

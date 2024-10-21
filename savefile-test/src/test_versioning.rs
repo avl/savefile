@@ -266,8 +266,8 @@ struct AnewType {
     an_u32: u32,
 }
 
-use std::convert::From;
 use crate::{roundtrip, roundtrip_version};
+use std::convert::From;
 
 impl From<String> for AnewType {
     fn from(_dummy: String) -> AnewType {

@@ -1,11 +1,16 @@
 use crate::common::{compile_time_check_reprc, compile_time_size};
+use crate::savefile_abi::WrapperKey::FutureWrapper;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::ToTokens;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{GenericArgument, Path, PathArguments, ReturnType, Type, TypeParamBound, TypeTuple};
+use syn::token::Colon2;
+use syn::{
+    GenericArgument, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple,
+};
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -17,16 +22,44 @@ const MEGA_FAT_POINTER: (usize, usize) = (FAT_POINTER_SIZE + POINTER_SIZE, POINT
 const FAT_POINTER: (usize, usize) = (2 * POINTER_SIZE, POINTER_SIZE);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
+pub enum WrapperKey {
+    FnWrapper(FnWrapperKey),
+    FutureWrapper(FutureWrapperKey),
+}
+
+#[derive(Debug, Clone)]
+struct FutureWrapperKey {
+    output_type: TokenStream,
+    send: bool,
+    sync: bool,
+    unpin: bool,
+}
+
+impl PartialEq for FutureWrapperKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.output_type.to_string() == other.output_type.to_string()
+    }
+}
+impl Eq for FutureWrapperKey {}
+impl Hash for FutureWrapperKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.output_type.to_string().hash(state);
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub(crate) struct FnWrapperKey {
     fnkind: Ident,
     ret: Type,
     args: Vec<Type>,
     ismut: bool,
     owning: bool,
+    sync: bool,
+    send: bool,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ClosureWrapperNames {
+pub(crate) struct ClosureFutureWrapperNames {
     trait_name: Ident,
     wrapper_struct_name: Ident,
 }
@@ -40,34 +73,210 @@ fn get_type(ret_type: &ReturnType) -> Type {
     }
 }
 
+fn compile_time_abi_check_size(typ: &Type) -> Option<(usize, usize)> {
+    if compile_time_check_reprc(typ) {
+        return compile_time_size(typ);
+    }
+
+    match typ {
+        Type::Path(path) => {
+            if safe_is_well_known(&path.path, ["std", "option", "Option"]) {
+                match &path.path.segments.last().unwrap().arguments {
+                    PathArguments::AngleBracketed(typ) => {
+                        if typ.args.len() == 1 {
+                            match &typ.args[0] {
+                                GenericArgument::Lifetime(_) => {}
+                                GenericArgument::Type(ty) => {
+                                    if let Some(sub) = compile_time_abi_check_size(ty) {
+                                        if sub == (0, 1) {
+                                            return Some((1, 1)); //size align of Option<()> is 1,1
+                                        }
+                                    }
+                                }
+                                GenericArgument::Const(_) => {}
+                                GenericArgument::Binding(_) => {}
+                                GenericArgument::Constraint(_) => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
 static ID_GEN: AtomicU64 = AtomicU64::new(0);
+
+fn emit_future_helpers(
+    wrapped_in_pin: bool,
+    output_type: TokenStream,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
+    send: bool,
+    sync: bool,
+    unpin: bool,
+) -> ClosureFutureWrapperNames {
+    let key = WrapperKey::FutureWrapper(FutureWrapperKey {
+        output_type: output_type.clone(),
+        send,
+        sync,
+        unpin,
+    });
+    if let Some((names, _)) = extra_definitions.get(&key) {
+        return names.clone();
+    }
+
+    let cnt = ID_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let futurer_wrapper_trait_name = Ident::new(&format!("__{}_future_wrapper", cnt), Span::call_site());
+    let futurer_wrapper_struct_name = Ident::new(&format!("__{}_future_wrapper_struct", cnt), Span::call_site());
+    let names = ClosureFutureWrapperNames {
+        wrapper_struct_name: futurer_wrapper_struct_name.clone(),
+        trait_name: futurer_wrapper_trait_name.clone(),
+    };
+
+    let futureWrapper = futurer_wrapper_trait_name;
+
+    let unpin_impl = unpin.then(|| {
+        quote! {
+            impl Unpin for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let unpin_bound = unpin.then(|| {
+        quote! {
+            + Unpin
+        }
+    });
+
+    let send_impl = send.then(|| {
+        quote! {
+            unsafe impl Send for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let send_bound = send.then(|| {
+        quote! {
+            + Send
+        }
+    });
+
+    let sync_impl = sync.then(|| {
+        quote! {
+            unsafe impl Sync for #futurer_wrapper_struct_name {
+            }
+        }
+    });
+    let sync_bound = sync.then(|| {
+        quote! {
+            + Sync
+        }
+    });
+
+    let box_fut_type = if wrapped_in_pin {
+        quote! {
+            Pin<Box<dyn Future<Output = #output_type> #send_bound #sync_bound #unpin_bound>>
+        }
+    } else {
+        quote! {
+            Box<dyn Future<Output = #output_type> #send_bound #sync_bound #unpin_bound>
+        }
+    };
+
+    let sized = wrapped_in_pin.then(|| {
+        quote! {
+            : Sized
+        }
+    });
+
+    let self_ref = if wrapped_in_pin {
+        quote!(self)
+    } else {
+        quote!(unsafe { self.map_unchecked_mut(|s| &mut **s) })
+    };
+
+    let output = quote! {
+
+        pub struct #futurer_wrapper_struct_name {
+            future: AbiConnection<dyn #futureWrapper>
+        }
+
+        impl Unpin for #futurer_wrapper_struct_name {
+
+        }
+
+        #[savefile_abi_exportable(version = 0)]
+        pub trait #futureWrapper {
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn Fn()+Send+Sync>) -> ::std::option::Option<#output_type>;
+        }
+        #send_impl
+        #sync_impl
+
+        impl Future for #futurer_wrapper_struct_name {
+            type Output = #output_type;
+
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                let mut waker = cx.waker().clone();
+                //let mut pinned = std::pin::pin!(&mut self.future);
+                match unsafe { self.map_unchecked_mut(|s|&mut s.future)}.abi_poll(Box::new(move ||{waker.wake_by_ref();})) {
+                    Some(temp) => {
+                        Poll::Ready(temp)
+                    }
+                    None => {
+                        Poll::Pending
+                    }
+                }
+            }
+        }
+        impl #futureWrapper for #box_fut_type {
+            fn abi_poll(self: Pin<&mut Self>, waker: Box<dyn Fn()+Send+Sync>) -> ::std::option::Option<#output_type> {
+                let waker = Waker::from(Arc::new(AbiWaker::new(waker)));
+                let mut context = Context::from_waker(&waker);
+
+                match #self_ref.poll(&mut context) {
+                    Poll::Ready(t) => {
+                        Some(t)
+                    }
+                    Poll::Pending => {
+                        None
+                    }
+                }
+            }
+        }
+    };
+    extra_definitions.insert(key, (names.clone(), output));
+    names
+}
 
 fn emit_closure_helpers(
     version: u32,
     args: &[Type],
     return_type: ReturnType,
     ismut: bool,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     fnkind: &Ident, //Fn or FnMut
     owning: bool,
     sync: bool,
     send: bool,
-) -> ClosureWrapperNames /*wrapper name*/ {
-    let key = FnWrapperKey {
+) -> ClosureFutureWrapperNames /*wrapper name*/ {
+    let key = WrapperKey::FnWrapper(FnWrapperKey {
         fnkind: fnkind.clone(),
         ismut,
         owning,
         args: args.iter().cloned().collect(),
         ret: get_type(&return_type),
-    };
+        sync,
+        send,
+    });
 
-    let syncsend_bound = match (sync,send) {
+    let syncsend_bound = match (sync, send) {
         (false, false) => quote!(),
         (true, false) => quote!( + Sync),
         (true, true) => quote!( + Sync + Send),
         (false, true) => quote!( + Send),
     };
-    let syncsend_traitbound = match (sync,send) {
+    let syncsend_traitbound = match (sync, send) {
         (false, false) => quote!(),
         (true, false) => quote!( : Sync),
         (true, true) => quote!(  : Sync + Send),
@@ -83,7 +292,7 @@ fn emit_closure_helpers(
         Span::call_site(),
     );
     let temp_trait_name_wrapper = Ident::new(&format!("{}wrapper", temp_trait_name), Span::call_site());
-    let names = ClosureWrapperNames {
+    let names = ClosureFutureWrapperNames {
         wrapper_struct_name: temp_trait_name_wrapper.clone(),
         trait_name: temp_trait_name.clone(),
     };
@@ -158,14 +367,21 @@ pub(crate) enum ArgType {
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
     Result(Box<ArgType>, Box<ArgType>),
-    Trait(Ident, bool /*ismut self*/),
+    Trait(TokenStream, bool /*ismut self*/),
+    Future(
+        /*pin*/ bool,
+        TokenStream,
+        /*send*/ bool,
+        /*sync*/ bool,
+        /*unpin*/ bool,
+    ),
     Fn(
         TokenStream, /*full closure definition (e.g "Fn(u32)->u16")*/
         Vec<Type>,   /*arg types*/
         ReturnType,  //Ret-type
         bool,        /*ismut (FnMut)*/
-        bool, /*sync*/
-        bool /*send*/ //TODO: Create struct here
+        bool,        /*sync*/
+        bool,        /*send*/ //TODO: Create struct here
     ),
 }
 
@@ -183,9 +399,10 @@ pub(crate) fn parse_box_type(
     arg_name: &str,
     typ: &Type,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
+    is_box: bool,
 ) -> ArgType {
     let location;
     if is_return_value {
@@ -224,10 +441,14 @@ pub(crate) fn parse_box_type(
                         is_return_value,
                         &mut *name_generator,
                         extra_definitions,
-                        true,
+                        false,
                         is_mut_ref,
+                        true,
                     ) {
-                        ArgType::Result(_,_) => {
+                        ArgType::Future(pin, output, send, sync, unpin) => {
+                            ArgType::Future(pin, output, send, sync, unpin)
+                        }
+                        ArgType::Result(_, _) => {
                             abort!(
                                 first_gen_arg.span(),
                                 "{}. Savefile does not support boxed results. Try boxing the contents of the result instead. I.e, instead of Box<Result<A,B>>, try Result<Box<A>,Box<B>>. Type encountered: {}",
@@ -292,9 +513,10 @@ fn parse_type(
     method_name: &Ident,
     is_return_value: bool,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     is_reference: bool,
     is_mut_ref: bool,
+    is_boxed: bool,
 ) -> ArgType {
     let location;
     if is_return_value {
@@ -307,7 +529,6 @@ fn parse_type(
     match typ {
         Type::Tuple(tup) if tup.elems.is_empty() => {
             rawtype = typ;
-            //argtype = ArgType::PlainData(typ.to_token_stream());
         }
         Type::Reference(typref) => {
             let is_static_lifetime;
@@ -325,7 +546,7 @@ fn parse_type(
             } else {
                 is_static_lifetime = false;
             }
-            if is_reference {
+            if is_reference || is_boxed {
                 abort!(typ.span(), "{}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", location, typ.to_token_stream());
             }
 
@@ -339,6 +560,7 @@ fn parse_type(
                 extra_definitions,
                 true,
                 typref.mutability.is_some(),
+                is_boxed,
             );
             if let ArgType::Str(_) = inner {
                 return ArgType::Str(is_static_lifetime); //Str is a special case, it is always a reference
@@ -352,7 +574,7 @@ fn parse_type(
             rawtype = typ;
         }
         Type::Slice(slice) => {
-            if !is_reference {
+            if !is_reference || is_boxed {
                 abort!(
                     slice.span(),
                     "{}: Slices must always be behind references. Try adding a '&' to the type: {}",
@@ -378,14 +600,15 @@ fn parse_type(
                 extra_definitions,
                 is_reference,
                 is_mut_ref,
+                is_boxed,
             );
             return ArgType::Slice(Box::new(argtype));
         }
         Type::TraitObject(trait_obj) => {
-            if !is_reference {
+            if !is_reference && !is_boxed {
                 abort!(
                     trait_obj.span(),
-                    "{}: Trait objects must always be behind references. Try adding a '&' to the type: {}",
+                    "{}: Trait objects must always be behind references or boxes. Try adding a '&' to the type: {}",
                     location,
                     typ.to_token_stream()
                 );
@@ -393,24 +616,34 @@ fn parse_type(
             if trait_obj.dyn_token.is_some() {
                 let mut sync = false;
                 let mut send = false;
+                let mut unpin = false;
+                let mut async_trait_lifetime = false;
                 let type_bounds: Vec<_> = trait_obj
                     .bounds
                     .iter()
                     .map(|x| match x {
-                        TypeParamBound::Trait(t) => t
-                            .path
-                            .segments
-                            .iter()
-                            .last()
-                            .expect("Missing bounds of Box trait object"),
+                        TypeParamBound::Trait(t) => Some(
+                            t.path
+                                .segments
+                                .iter()
+                                .last()
+                                .expect("Missing bounds of Box trait object"),
+                        ),
                         TypeParamBound::Lifetime(lt) => {
-                            abort!(
-                                lt.span(),
-                                "{}: Specifying lifetimes is not supported by Savefile-Abi.",
-                                location,
-                            );
+                            if lt.ident == "async_trait" {
+                                async_trait_lifetime = true;
+                                None
+                            } else {
+                                abort!(
+                                    lt.span(),
+                                    "{}: Specifying lifetimes is not supported by Savefile-Abi: {}",
+                                    location,
+                                    x.to_token_stream()
+                                );
+                            }
                         }
                     })
+                    .filter_map(|x| x)
                     .filter(|seg| {
                         if seg.ident == "Sync" {
                             sync = true;
@@ -419,6 +652,10 @@ fn parse_type(
                         if seg.ident == "Send" {
                             send = true;
                             return false;
+                        }
+                        if seg.ident == "Unpin" {
+                            unpin = true;
+                            return false; //TODO: IS this safe?
                         }
                         true
                     })
@@ -437,6 +674,20 @@ fn parse_type(
                 let bound = type_bounds.into_iter().next().expect("Internal error, missing bounds");
 
                 if bound.ident == "Fn" || bound.ident == "FnMut" || bound.ident == "FnOnce" {
+                    if async_trait_lifetime {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support lifetimes on Fn* closures.",
+                            location,
+                        );
+                    }
+                    if unpin {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support Unpin bounds on closure types, only on futures.",
+                            location,
+                        );
+                    }
                     if bound.ident == "FnOnce" {
                         abort!(
                             bound.ident.span(),
@@ -448,8 +699,8 @@ fn parse_type(
                         abort!(bound.ident.span(), "{}: Mutable references to Fn are not supported by savefile-abi. Try using a non-mutable reference instead..", location);
                     }
 
-                    if bound.ident == "FnMut" && !is_mut_ref {
-                        abort!(bound.ident.span(), "{}: When using FnMut, it must be referenced using &mut, not &. Otherwise, it is impossible to call.", location);
+                    if bound.ident == "FnMut" && !is_boxed && !is_mut_ref {
+                        abort!(bound.ident.span(), "{}: When using FnMut, it must be referenced using &mut or Box<..>, not &. Otherwise, it is impossible to call.", location);
                     }
                     let fn_decl = bound.to_token_stream();
                     match &bound.arguments {
@@ -460,9 +711,9 @@ fn parse_type(
                                 fn_decl,
                                 pararg.inputs.iter().cloned().collect(),
                                 pararg.output.clone(),
-                                is_mut_ref,
+                                bound.ident == "FnMut",
                                 sync,
-                                send
+                                send,
                             );
                         }
                         _ => {
@@ -472,7 +723,100 @@ fn parse_type(
                             )
                         }
                     }
+                } else if bound.ident == "Future" {
+                    let bound = trait_obj.bounds.iter().next().unwrap();
+                    match bound {
+                        TypeParamBound::Trait(t) => {
+                            if t.lifetimes.is_some() {
+                                abort!(t.span(), "{}: Savefile does not support lifetimes in Futures", location);
+                            }
+                            match t.modifier {
+                                TraitBoundModifier::None => {}
+                                TraitBoundModifier::Maybe(q) => {
+                                    abort!(q.span(), "{}: Unexpected ?-token", location)
+                                }
+                            }
+                            if !is_boxed {
+                                abort!(
+                                    bound.span(),
+                                    "{}: Savefile only supports boxed futures, not unboxed futures.",
+                                    location
+                                );
+                            }
+                            if !is_well_known(&t.path.segments, ["std", "future", "Future"]) {
+                                abort!(
+                                    bound.span(),
+                                    "{}: Boxed futures can only implement the Future trait, not: {}",
+                                    location,
+                                    t.path.to_token_stream()
+                                );
+                            }
+                            let seg = t.path.segments.last().unwrap();
+                            match &seg.arguments {
+                                PathArguments::AngleBracketed(arg) => {
+                                    if arg.args.len() != 1 {
+                                        abort!(
+                                            arg.args.span(),
+                                            "{}: Futures must have a a single Output bound.",
+                                            location
+                                        );
+                                    }
+                                    let output = &arg.args[0];
+
+                                    match output {
+                                        GenericArgument::Binding(t) => {
+                                            if t.ident != "Output" {
+                                                abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
+                                            }
+                                            return ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin);
+                                        }
+                                        GenericArgument::Lifetime(_)
+                                        | GenericArgument::Const(_)
+                                        | GenericArgument::Type(_)
+                                        | GenericArgument::Constraint(_) => {
+                                            abort!(output.span(), "{}: Futures must have a a single associated type binding, named 'Output' (Future<Output=?>).", location);
+                                        }
+                                    }
+                                }
+                                PathArguments::None | PathArguments::Parenthesized(_) => {
+                                    abort!(
+                                        seg.arguments.span(),
+                                        "{}: Future must have arguments within angle brackets: Future<...>. Not: {}",
+                                        location,
+                                        seg.to_token_stream()
+                                    );
+                                }
+                            }
+                        }
+                        TypeParamBound::Lifetime(_) => {
+                            abort!(
+                                bound.span(),
+                                "{}: Savefile does not support lifetimes in Futures",
+                                location
+                            );
+                        }
+                    }
+                    abort!(
+                        trait_obj.span(),
+                        "{}: Future did not have output type specified. Try adding Future<Output=mytype>.",
+                        location
+                    );
                 } else {
+                    if async_trait_lifetime {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support lifetimes on arbitrary trait types, only on futures.",
+                            location,
+                        );
+                    }
+                    if unpin {
+                        abort!(
+                            bound.ident.span(),
+                            "{}, Savefile does presently not support Unpin bounds on arbitrary trait types, only on futures.",
+                            location,
+                        );
+                    }
+
                     if sync {
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Sync instead of adding the bound here, like so: trait {} : Sync.",
                             location, bound.ident, bound.ident);
@@ -481,7 +825,7 @@ fn parse_type(
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Send instead of adding the bound here, like so: trait {} : Send.",
                             location, bound.ident, bound.ident);
                     }
-                    return ArgType::Trait(bound.ident.clone(), is_mut_ref);
+                    return ArgType::Trait(bound.to_token_stream(), is_mut_ref);
                 }
             } else {
                 abort!(
@@ -504,6 +848,71 @@ fn parse_type(
                     );
                 }
                 return ArgType::Str(false); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
+            } else if last_seg.ident == "Pin" {
+                if !is_well_known(&path.path.segments, ["std", "pin", "Pin"]) {
+                    abort!(path.path.segments.span(), "Savefile does not support types named 'Pin', unless it is the standard type Pin, and it must be specified as 'Pin', without any namespace");
+                }
+                if is_reference {
+                    abort!(
+                        last_seg.ident.span(),
+                        "Savefile does not presently support reference to Pin"
+                    );
+                }
+                match &last_seg.arguments {
+                    PathArguments::Parenthesized(_) | PathArguments::None => {
+                        abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with one type parameters within angle-brackets.");
+                    }
+                    PathArguments::AngleBracketed(params) => {
+                        let argvec: Vec<_> = params.args.iter().collect();
+                        if argvec.len() != 1 {
+                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Pin', unless they are the standard type Pin, and it must be specified as 'Pin<T>', with a single type parameter within angle-brackets. Got {} type arguments", argvec.len());
+                        }
+                        let arg = argvec[0];
+                        match arg {
+                            GenericArgument::Type(argtyp) => {
+                                let ty = parse_type(
+                                    version,
+                                    arg_name,
+                                    argtyp,
+                                    method_name,
+                                    is_return_value,
+                                    &mut *name_generator,
+                                    extra_definitions,
+                                    is_reference,
+                                    is_mut_ref,
+                                    is_boxed,
+                                );
+                                if let ArgType::Future(pin, typ, send, sync, unpin) = ty {
+                                    if pin {
+                                        abort!(arg.span(), "Savefile only supports Pin<Box<Future>>, not Pin<Pin<..>> or any other usage of Pin");
+                                    }
+                                    return ArgType::Future(true, typ, send, sync, unpin);
+                                } else {
+                                    abort!(
+                                        arg.span(),
+                                        "Savefile only supports Pin<Box<Future>>, not any other usage of Pin"
+                                    );
+                                }
+                            }
+                            GenericArgument::Lifetime(_) => {
+                                abort!(arg.span(), "Savefile does not support lifetime specifications.");
+                            }
+                            GenericArgument::Const(_) => {
+                                abort!(arg.span(), "Savefile does not support const in this location.");
+                            }
+                            GenericArgument::Binding(_) => {
+                                abort!(arg.span(), "Savefile does not support the syntax expressed here.");
+                            }
+                            GenericArgument::Constraint(_) => {
+                                abort!(arg.span(), "Savefile does not support constraints at this position.");
+                            }
+                        }
+                        abort!(
+                            last_seg.arguments.span(),
+                            "Savefile: Unexpected error processing type Pin"
+                        );
+                    }
+                }
             } else if last_seg.ident == "Box" {
                 if is_reference {
                     abort!(last_seg.ident.span(), "Savefile does not support reference to Box. This is also generally not very useful, just use a regular reference for arguments.");
@@ -517,23 +926,26 @@ fn parse_type(
                     typ,
                     name_generator,
                     extra_definitions,
-                    is_reference,
+                    false,
                     is_mut_ref,
+                    is_boxed,
                 );
-            } else if last_seg.ident == "Result"  && is_return_value {
+            } else if last_seg.ident == "Result" && is_return_value {
                 if path.path.segments.len() != 1 {
                     abort!(path.path.segments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result', without any namespace");
                 }
                 if is_reference {
-                    abort!(last_seg.ident.span(), "Savefile does not presently support reference to Result in return position. Consider removing the '&'.");
+                    abort!(
+                        last_seg.ident.span(),
+                        "Savefile does not presently support reference to Result. Consider removing the '&'."
+                    );
                 }
 
                 match &last_seg.arguments {
-                    PathArguments::Parenthesized(_) |
-                    PathArguments::None => {
-                            abort!(last_seg.arguments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result<A,B>', with two type parameters within angle-brackets. Found not type arguments.");
+                    PathArguments::Parenthesized(_) | PathArguments::None => {
+                        abort!(last_seg.arguments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result<A,B>', with two type parameters within angle-brackets. Found not type arguments.");
                     }
-                    PathArguments::AngleBracketed(params)  => {
+                    PathArguments::AngleBracketed(params) => {
                         let argvec: Vec<_> = params.args.iter().collect();
                         if argvec.len() != 2 {
                             abort!(last_seg.arguments.span(), "Savefile does not support types named 'Result', unless they are the standard type Result, and it must be specified as 'Result<A,B>', with two type parameters within angle-brackets. Got {} type arguments", argvec.len());
@@ -542,18 +954,18 @@ fn parse_type(
                         for arg in argvec {
                             match arg {
                                 GenericArgument::Type(argtyp) => {
-                                    argtypes.push(Box::new(
-                                        parse_type(
-                                            version,
-                                            arg_name,
-                                            argtyp,
-                                            method_name,
-                                            is_return_value,
-                                            &mut *name_generator,
-                                            extra_definitions,
-                                            is_reference,
-                                            is_mut_ref,
-                                        )));
+                                    argtypes.push(Box::new(parse_type(
+                                        version,
+                                        arg_name,
+                                        argtyp,
+                                        method_name,
+                                        is_return_value,
+                                        &mut *name_generator,
+                                        extra_definitions,
+                                        is_reference,
+                                        is_mut_ref,
+                                        is_boxed,
+                                    )));
                                 }
                                 GenericArgument::Lifetime(_) => {
                                     abort!(arg.span(), "Savefile does not support lifetime specifications.");
@@ -580,6 +992,30 @@ fn parse_type(
                 rawtype = typ;
             }
         }
+        Type::ImplTrait(i) => {
+            for bound in &i.bounds {
+                match bound {
+                    TypeParamBound::Trait(t) => {
+                        if let Some(last) = t.path.segments.last().map(|x| &x.ident) {
+                            if last == "Future" {
+                                abort!(
+                                    last.span(),
+                                    "{}, impl Future is not supported by savefile-abi. You can try using Pin<Box<{}>> instead.",
+                                    location, i.bounds.to_token_stream()
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            abort!(
+                i.span(),
+                "{}, impl trait is not supported by savefile-abi. Try using a box: Box<{}>.",
+                location,
+                i.bounds.to_token_stream()
+            );
+        }
         _ => {
             abort!(
                 typ.span(),
@@ -597,6 +1033,42 @@ fn parse_type(
         );
     }
     ArgType::PlainData(rawtype.clone())
+}
+
+pub fn is_well_known<'a, I>(path: I, items: [&str; 3]) -> bool
+where
+    I: IntoIterator<Item = &'a PathSegment>,
+    <I as IntoIterator>::IntoIter: DoubleEndedIterator,
+{
+    for (a, b) in items.iter().rev().zip(path.into_iter().rev()) {
+        if b.ident == a {
+            continue;
+        }
+        if b.ident == "core" && *a == "std" {
+            continue;
+        }
+        return false;
+    }
+    true
+}
+pub fn safe_is_well_known(path: &Path, items: [&str; 3]) -> bool {
+    if !path.leading_colon.is_some() {
+        return false;
+    }
+    if path.segments.len() != 3 {
+        return false;
+    }
+
+    for (a, b) in items.iter().zip(path.segments.iter()) {
+        if b.ident == a {
+            continue;
+        }
+        if b.ident == "core" && *a == "std" {
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 struct TypeInstruction {
@@ -637,7 +1109,7 @@ impl ArgType {
         arg_name: &TokenStream, //always just 'arg_orig_name'
         nesting_level: u32,
         take_ownership: bool,
-        extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+        extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
         prefixed_arg_name: &Ident,
     ) -> TypeInstruction {
         let temp_arg_name = Ident::new(&format!("temp_{}_{}", arg_orig_name, nesting_level), Span::call_site());
@@ -668,30 +1140,26 @@ impl ArgType {
                     nesting_level + 1,
                     false,
                     extra_definitions,
-                    prefixed_arg_name
+                    prefixed_arg_name,
                 );
 
                 let known_size_align1 = match &**arg_type {
                     ArgType::PlainData(plain) => {
-                        if compile_time_check_reprc(plain) {
-                            if compile_time_size(plain).is_some() {
-                                known_size_align_of_pointer1
-                            } else {
-                                None
-                            }
+                        if compile_time_abi_check_size(plain).is_some() {
+                            known_size_align_of_pointer1
                         } else {
                             None
                         }
                     }
                     ArgType::Boxed(inner) => match &**inner {
-                        ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
+                        ArgType::Fn(..) | ArgType::Trait(..) | ArgType::Future(..) => Some(MEGA_FAT_POINTER),
                         _ => None,
                     },
-                    ArgType::Fn(..) | ArgType::Trait(..) => Some(MEGA_FAT_POINTER),
+                    ArgType::Fn(..) | ArgType::Trait(..) | ArgType::Future(..) => Some(MEGA_FAT_POINTER),
                     ArgType::Str(_) => None,
                     ArgType::Reference(..) => None,
                     ArgType::Slice(_) => None,
-                    ArgType::Result(_,_) => None,
+                    ArgType::Result(_, _) => None,
                 };
 
                 let (mutsymbol, read_raw_ptr) = if *is_mut {
@@ -777,7 +1245,7 @@ impl ArgType {
                     nesting_level + 1,
                     false,
                     extra_definitions,
-                    prefixed_arg_name
+                    prefixed_arg_name,
                 );
 
                 TypeInstruction {
@@ -819,11 +1287,7 @@ impl ArgType {
                     #prefixed_arg_name.serialize(&mut serializer)
                 },
                 schema: quote!( get_schema::<#arg_type>(version) ),
-                known_size_align1: if compile_time_check_reprc(arg_type) {
-                    compile_time_size(arg_type)
-                } else {
-                    None
-                },
+                known_size_align1: compile_time_abi_check_size(arg_type),
                 arg_type1: arg_type.to_token_stream(),
                 known_size_align_of_pointer1: None,
             },
@@ -846,8 +1310,20 @@ impl ArgType {
                     nesting_level + 1,
                     true,
                     extra_definitions,
-                    prefixed_arg_name
+                    prefixed_arg_name,
                 );
+
+                let mut known_size_align1 = None;
+
+                match &**inner_arg_type {
+                    ArgType::Fn(_, _, _, _, _, _) => {
+                        known_size_align1 = Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT));
+                    }
+                    ArgType::Trait(..) => {
+                        known_size_align1 = Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT));
+                    }
+                    _ => {}
+                }
 
                 TypeInstruction {
                     //deserialized_type: quote!{Box<AbiConnection<dyn #trait_name>>},
@@ -862,7 +1338,7 @@ impl ArgType {
                     caller_arg_serializer1,
                     schema: quote!( Schema::Boxed( std::boxed::Box::new(#schema) ) ),
                     arg_type1: quote!( Box<#arg_type1> ),
-                    known_size_align1: None,
+                    known_size_align1,
                     known_size_align_of_pointer1: None,
                 }
             }
@@ -910,7 +1386,7 @@ impl ArgType {
                     &Ident::new(if *ismut { "FnMut" } else { "Fn" }, Span::call_site()),
                     take_ownership,
                     *sync,
-                    *send
+                    *send,
                 );
 
                 let temp_trait_name_wrapper = wrapper_names.wrapper_struct_name;
@@ -1001,26 +1477,76 @@ impl ArgType {
                     known_size_align_of_pointer1: None,
                 }
             }
+            ArgType::Future(pin, output, send, sync, unpin) => {
+                let wrapper_names =
+                    emit_future_helpers(*pin, output.clone(), &mut *extra_definitions, *send, *sync, *unpin);
+
+                let futurer_wrapper_struct_name = wrapper_names.wrapper_struct_name;
+                let temp_trait_type = wrapper_names.trait_name;
+                let wrap_in_pin = if *pin {
+                    quote!(
+                        let t = Pin::new(t);
+                    )
+                } else {
+                    quote! {}
+                };
+                TypeInstruction {
+                    deserialized_type: quote! { AbiConnection::<dyn #temp_trait_type> },
+                    callee_trampoline_temp_variable_declaration1: quote! {
+                        let mut #temp_arg_name;
+                    },
+                    callee_trampoline_variable_deserializer1: quote! {
+                        {
+                            let t = Box::new(unsafe {
+                                #futurer_wrapper_struct_name {
+                                    future: AbiConnection::<dyn #temp_trait_type>::from_raw_packaged(PackagedTraitObject::deserialize(&mut deserializer)?, Owning::Owned)?
+                                }
+                            });
+                            #wrap_in_pin
+
+                            #temp_arg_name = t;
+
+                            #temp_arg_name
+                        }
+                    },
+                    caller_arg_serializer_temp1: quote! {},
+                    caller_arg_serializer1: quote! {
+                        {
+                            let temp : Box<dyn #temp_trait_type + '_> = Box::new(#prefixed_arg_name );
+                            let temp = std::boxed::Box::into_raw(temp);
+                            PackagedTraitObject::new_from_ptr::<(dyn #temp_trait_type+'_)>( unsafe { std::mem::transmute(temp)} ).serialize(&mut serializer)
+                        }
+                    },
+                    schema: quote!(
+                         Schema::Future( <dyn #temp_trait_type as AbiExportable >::get_definition(version), #send,#sync,#unpin)
+                    ),
+                    arg_type1: quote!(
+                        Box<dyn Future<Output=#output> + Unpin>
+                    ),
+                    known_size_align1: Some((FAT_POINTER_SIZE + POINTER_SIZE, FAT_POINTER_ALIGNMENT)),
+                    known_size_align_of_pointer1: None,
+                }
+            }
             ArgType::Result(ok_type, err_type) => {
                 let ok_instruction = ok_type.get_instruction(
                     version,
                     arg_index,
                     "okval",
-                    &quote!( okval ),
+                    &quote!(okval),
                     nesting_level + 1,
                     true,
                     extra_definitions,
-                    &Ident::new("okval", Span::call_site())
+                    &Ident::new("okval", Span::call_site()),
                 );
                 let err_instruction = err_type.get_instruction(
                     version,
                     arg_index,
                     "errval",
-                    &quote!( errval ),
+                    &quote!(errval),
                     nesting_level + 1,
                     true,
                     extra_definitions,
-                    &Ident::new("errval", Span::call_site())
+                    &Ident::new("errval", Span::call_site()),
                 );
 
                 let TypeInstruction {
@@ -1096,9 +1622,11 @@ pub(super) fn generate_method_definitions(
     ret_type: Type,
     no_return: bool, //Returns ()
     receiver_is_mut: bool,
+    receiver_is_pin: bool, //TODO: Way too many bool parameters! (And too many parameters)
     args: Vec<(Ident, &Type)>,
     name_generator: &mut impl FnMut() -> String,
-    extra_definitions: &mut HashMap<FnWrapperKey, (ClosureWrapperNames, TokenStream)>,
+    extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
+    async_trait_detected: bool,
 ) -> MethodDefinitionComponents {
     let method_name_str = method_name.to_string();
 
@@ -1113,10 +1641,7 @@ pub(super) fn generate_method_definitions(
 
     let mut compile_time_known_size = Some(0);
     for (arg_index, (arg_name, typ)) in args.iter().enumerate() {
-        let prefixed_arg_name = Ident::new(
-            &format!("arg_{}", arg_name),
-            Span::call_site(),
-        );
+        let prefixed_arg_name = Ident::new(&format!("arg_{}", arg_name), Span::call_site());
         let argtype = parse_type(
             version,
             &arg_name.to_string(),
@@ -1125,6 +1650,7 @@ pub(super) fn generate_method_definitions(
             false,
             &mut *name_generator,
             extra_definitions,
+            false,
             false,
             false,
         );
@@ -1138,7 +1664,7 @@ pub(super) fn generate_method_definitions(
             0,
             true,
             extra_definitions,
-            &prefixed_arg_name
+            &prefixed_arg_name,
         );
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
@@ -1173,18 +1699,31 @@ pub(super) fn generate_method_definitions(
 
     let callee_real_method_invocation_except_args;
     if receiver_is_mut {
-        callee_real_method_invocation_except_args =
-            quote! { unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name };
+        callee_real_method_invocation_except_args = if receiver_is_pin {
+            quote! { unsafe { Pin::new_unchecked( &mut *trait_object.as_mut_ptr::<dyn #trait_name>() ) }.#method_name }
+        } else {
+            quote! { unsafe { &mut *trait_object.as_mut_ptr::<dyn #trait_name>() }.#method_name }
+        };
     } else {
         callee_real_method_invocation_except_args =
             quote! { unsafe { &*trait_object.as_const_ptr::<dyn #trait_name>() }.#method_name };
     }
+    let async_trait_self_lifetime = async_trait_detected.then(|| quote!( 'life0 ));
 
+    let receiver_type;
     //let receiver_mut_str = receiver_mut.to_string();
-    let receiver_mut = if receiver_is_mut {
-        quote!(mut)
+    let receiver = if receiver_is_mut {
+        if receiver_is_pin {
+            receiver_type = quote!(ReceiverType::PinMut);
+            quote!(self: Pin<&mut Self>)
+        } else {
+            receiver_type = quote!(ReceiverType::Mut);
+            quote!(& #async_trait_self_lifetime mut self)
+        }
     } else {
-        quote! {}
+        receiver_type = quote!(ReceiverType::Shared);
+        assert!(!receiver_is_pin);
+        quote! {& #async_trait_self_lifetime self}
     };
     let return_value_schema;
 
@@ -1195,6 +1734,7 @@ pub(super) fn generate_method_definitions(
 
     let result_default;
     let return_ser_temp;
+    let ret_type_size;
     if no_return {
         return_value_schema = quote!(get_schema::<()>(0));
         ret_deserializer = quote!(()); //Zero-sized, no deserialize actually needed
@@ -1203,6 +1743,7 @@ pub(super) fn generate_method_definitions(
         ret_temp_decl = quote!();
         return_ser_temp = quote!();
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::new(Ok(())) );
+        ret_type_size = Some((0, 1));
     //Safe, does not need drop and does not allocate
     } else {
         let parsed_ret_type = parse_type(
@@ -1213,6 +1754,7 @@ pub(super) fn generate_method_definitions(
             true,
             name_generator,
             extra_definitions,
+            false,
             false,
             false,
         );
@@ -1238,7 +1780,7 @@ pub(super) fn generate_method_definitions(
             0,
             true,
             extra_definitions,
-            &Ident::new("ret", Span::call_site())
+            &Ident::new("ret", Span::call_site()),
         );
         caller_return_type = instruction.deserialized_type;
         return_value_schema = instruction.schema;
@@ -1246,7 +1788,7 @@ pub(super) fn generate_method_definitions(
         ret_deserializer = instruction.callee_trampoline_variable_deserializer1;
         let ret_serializer = instruction.caller_arg_serializer1;
         ret_temp_decl = instruction.callee_trampoline_temp_variable_declaration1;
-
+        ret_type_size = instruction.known_size_align1;
         ret_serialize = quote!( #ret_serializer );
 
         result_default = quote!( MaybeUninit::<Result<#ret_type,SavefileError>>::uninit() );
@@ -1276,10 +1818,20 @@ pub(super) fn generate_method_definitions(
 
     let _ = caller_return_type;
 
+    let async_trait_lifetime_decls = async_trait_detected.then(|| quote!( <'life0,'async_trait> ));
+
+    let async_trait_where = async_trait_detected.then(|| {
+        quote!(
+            where 'life0 : 'async_trait, Self : 'async_trait
+        )
+    });
+
     let caller_method_trampoline = quote! {
         // TODO: Determine if we should use inline here or not? #[inline]
         #[inline]
-        fn #method_name(& #receiver_mut self, #(#caller_fn_arg_list,)*) #ret_declaration {
+        fn #method_name #async_trait_lifetime_decls(#receiver, #(#caller_fn_arg_list,)*) #ret_declaration
+            #async_trait_where
+        {
             let info: &AbiConnectionMethod = &self.template.methods[#method_number as usize];
 
             let Some(callee_method_number) = info.callee_method_number else {
@@ -1302,7 +1854,7 @@ pub(super) fn generate_method_definitions(
 
             unsafe {
 
-                unsafe extern "C" fn abi_result_receiver(
+                unsafe extern "C" fn abi_result_receiver<'async_trait>(
                     outcome: *const RawAbiCallResult,
                     result_receiver: *mut (),
                 ) {
@@ -1320,7 +1872,7 @@ pub(super) fn generate_method_definitions(
 
             (self.template.entry)(AbiProtocol::RegularCall {
                 trait_object: self.trait_object,
-                compatibility_mask: compatibility_mask,
+                compatibility_mask,
                 method_number: callee_method_number,
                 effective_version: self.template.effective_version,
                 data: #data_as_ptr,
@@ -1340,7 +1892,9 @@ pub(super) fn generate_method_definitions(
             name: #method_name_str.to_string(),
             info: AbiMethodInfo {
                 return_value: { let mut context = WithSchemaContext::new(); let context = &mut context; #return_value_schema},
+                receiver: #receiver_type,
                 arguments: vec![ #(#metadata_arguments,)* ],
+                async_trait_heuristic: #async_trait_detected
             }
         }
     };
@@ -1352,9 +1906,7 @@ pub(super) fn generate_method_definitions(
         let ret_buffer;
         let data_as_ptr;
         let data_length;
-        let known_size = compile_time_check_reprc(&ret_type)
-            .then_some(compile_time_size(&ret_type))
-            .flatten();
+        let known_size = ret_type_size; //compile_time_abi_check_size(&ret_type);
         if let Some((compile_time_known_size, _align)) = known_size {
             // If we have simple type such as u8, u16 etc, we can sometimes
             // know at compile-time what the size of the args will be.

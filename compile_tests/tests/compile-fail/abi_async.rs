@@ -11,8 +11,8 @@ use savefile_derive::savefile_abi_exportable;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait ExampleTrait {
-    fn example_func(&self, x: impl Fn());
-//~^ 14:31: 14:35: Method 'example_func', argument x, impl trait is not supported by savefile-abi. Try using a box: Box<Fn()>.
+    async fn set(&mut self, x: u32) -> u32;
+//~^ 14:5: 14:10: savefile-abi does not support async methods. You can try returning a boxed future instead: Pin<Box<Future<Output=u32>>>
 }
 
 fn main() {}

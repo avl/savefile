@@ -1,5 +1,5 @@
-use arrayvec::ArrayVec;
 use crate::assert_roundtrip;
+use arrayvec::ArrayVec;
 
 #[test]
 pub fn test_arrayvec0() {
