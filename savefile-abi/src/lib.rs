@@ -10,7 +10,7 @@ This is the documentation for `savefile-abi`
 
 Savefile-abi is a crate that is primarily meant to help building binary plugins using Rust.
 
-Note! This is a work-in-progress.
+Note! Savefile-abi now supports methods returning boxed futures! See the chapter 'async' below.
 
 # Example
 
@@ -234,21 +234,20 @@ There are other crates also providing ABI-stability. Savefile-abi has the follow
  * It supports trait objects as arguments, including FnMut() and Fn().
 
  * Boxed trait objects, including Fn-traits, can be transferred across FFI-boundaries, passing
-   ownership, while still not invoking UB if the object is dropped on the other side of the
-   FFI-boundary.
+   ownership, safely. No unsafe code is needed by the user.
 
  * It requires enums to be `#[repr(uX)]` in order to pass them by reference. Other enums
    will still work correctly, but will be serialized under the hood at a performance penalty.
 
  * It places severe restrictions on types of arguments, since they must be serializable
    using the Savefile-crate for serialization. Basically, arguments must be 'simple', in that
-   they must own all their contents, and free of cycles. I.e, the type of the arguments must
+   they must own all their contents, and be free of cycles. I.e, the type of the arguments must
    have lifetime `&'static`. Note, arguments may still be references, and the contents of the
    argument types may include Box, Vec etc, so this does not mean that only primitive types are
-   supporte or anything like that.
+   supported.
 
 Arguments cannot be mutable, since if serialization is needed, it would be impractical to detect and
-handle updates to arguments made by callee. This said, arguments can still have types such as
+handle updates to arguments made by the callee. This said, arguments can still have types such as
 HashMap, IndexMap, Vec, String and custom defined structs or enums.
 
 # How it all works
@@ -287,12 +286,71 @@ and either AbiConnection::load_shared_library will panic, or any calls made afte
 # About Vec and String references
 
 Savefile-Abi allows passing references containing Vec and/or String across the FFI-boundary.
-This is not guaranteed to be sound. However, Savefile-Abi uses heuristics to determine
+This is not normally guaranteed to be sound. However, Savefile-Abi uses heuristics to determine
 the actual memory layout of both Vec and String, and verifies that the two libraries agree
-on the layout of Vec. If they do not, the data is serialized instead. Also, since
+on the layout. If they do not, the data is serialized instead. Also, since
 parameters can never be mutable in Savefile-abi (except for closures), we know
 the callee is not going to be freeing something allocated by the caller. Parameters
 called by value are always serialized.
+
+# Async
+
+Savefile-abi now supports methods returning futures:
+
+```rust
+
+use savefile_derive::savefile_abi_exportable;
+use std::pin::Pin;
+use std::future::Future;
+use std::time::Duration;
+
+#[savefile_abi_exportable(version = 0)]
+pub trait BoxedAsyncInterface {
+    fn add_async(&mut self, x: u32, y: u32) -> Pin<Box<dyn Future<Output=String>>>;
+
+}
+
+struct SimpleImpl;
+
+impl BoxedAsyncInterface for SimpleImpl {
+    fn add_async(&mut self, x: u32, y: u32) -> Pin<Box<dyn Future<Output=String>>> {
+        Box::pin(
+            async move {
+                /* any async code, using .await */
+                format!("{}",x+y)
+            }
+        )
+    }
+}
+
+
+```
+
+It also supports the #[async_trait] proc macro crate. Use it like this:
+
+```rust
+use async_trait::async_trait;
+use savefile_derive::savefile_abi_exportable;
+use std::time::Duration;
+
+#[async_trait]
+#[savefile_abi_exportable(version = 0)]
+pub trait SimpleAsyncInterface {
+    async fn add_async(&mut self, x: u32, y: u32) -> u32;
+}
+
+struct SimpleImpl;
+
+#[async_trait]
+impl SimpleAsyncInterface for SimpleImpl {
+    async fn add_async(&mut self, x: u32, y: u32) -> u32 {
+        /* any async code, using .await */
+        x + y
+    }
+}
+
+```
+
 
 
 */
