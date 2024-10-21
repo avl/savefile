@@ -48,7 +48,7 @@ encryption = ["ring", "rand"]
 derive = ["dep:savefile-derive"]
 
 [dependencies]
-bit-vec = { version = "0.6", optional = true}
+bit-vec = { version = "0.8", optional = true}
 nalgebra = { version = "0.33", optional = true}
 bit-vec08 = { package="bit-vec", version = "0.8", optional = true}
 arrayvec = { version = "0.7", optional = true}
