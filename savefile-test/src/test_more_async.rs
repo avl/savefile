@@ -52,17 +52,11 @@ fn bench_simple_async_call(b: &mut Bencher) {
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
     b.iter(|| {
-
-
-        let fut = async {
-            conn.add_async2(1,2).await
-        };
-        pin!(fut);
-
-        let waker = Waker::from(Arc::new(AbiWaker::new(
-            Box::new(|| {}))));
+        let waker = Waker::from(Arc::new(AbiWaker::new(Box::new(|| {}))));
         let mut context = Context::from_waker(&waker);
-        match fut.poll(&mut context) {
+        let x = conn.add_async2(1, 2);
+        pin!(x);
+        match x.poll(&mut context) {
             Poll::Ready(sum) => black_box(sum),
             Poll::Pending => {
                 unreachable!()
