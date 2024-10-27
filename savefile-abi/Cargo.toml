@@ -31,4 +31,4 @@ rust1_78=[]
 async-trait = "0.1"
 
 [build-dependencies]
-rustc_version="0.2"
+rustc_version="0.4"
