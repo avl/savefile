@@ -389,7 +389,9 @@ pub fn savefile_abi_exportable(
                             }
                             WherePredicate::Lifetime(l) => {
                                 if l.lifetime.ident != "life0" {
-                                    is_ok = false;
+                                    if !is_life(&l.lifetime) {
+                                        is_ok = false;
+                                    }
                                 } else {
                                     life0_life_time += 1;
                                 }
@@ -413,9 +415,9 @@ pub fn savefile_abi_exportable(
                         );
                     }
                 }
+
                 let method_name = method.sig.ident.clone();
-                //let method_name_str = method.sig.ident.to_string();
-                //let mut metadata_arguments = vec![];
+
                 let mut current_name_index = 0u32;
                 let name_baseplate = format!("Temp{}_{}", trait_name_str, method_name);
                 let mut temp_name_generator = move || {
@@ -591,6 +593,19 @@ pub fn savefile_abi_exportable(
                 if method.sig.abi.is_some() {
                     abort!(method.sig.abi.span(), "savefile-abi does not need (or support) 'extern \"C\"' or similar ABI-constructs. Just remove this keyword.")
                 }
+
+                // NOTE!
+                // This is part of the heuristics that detects async_trait macro output.
+                // However, we don't actually support reference arguments to functions
+                // returning futures.
+                fn is_life(id: &syn::Lifetime) -> bool {
+                    let s = id.ident.to_string();
+                    if !s.starts_with("life") {
+                        return false;
+                    }
+                    s.strip_prefix("life").unwrap().parse::<usize>().is_ok()
+                }
+
                 if method.sig.generics.params.is_empty() == false {
                     for item in method.sig.generics.params.iter() {
                         match item {
@@ -601,13 +616,18 @@ pub fn savefile_abi_exportable(
                                 abort!(typ.span(), "savefile-abi does not support const-generic methods.")
                             }
                             GenericParam::Lifetime(l) => {
-                                if l.lifetime.ident != "life0" && l.lifetime.ident != "async_trait" {
+                                if l.lifetime.ident != "life0"
+                                    && l.lifetime.ident != "async_trait"
+                                    && !is_life(&l.lifetime)
+                                {
                                     abort!(
                                         method.sig.generics.params.span(),
                                         "savefile-abi does not support methods with lifetimes."
                                     );
                                 } else {
-                                    life0_life_time += 1;
+                                    if l.lifetime.ident == "life0" {
+                                        life0_life_time += 1;
+                                    }
                                     async_trait_life_time += 1;
                                 }
                             }
@@ -616,7 +636,7 @@ pub fn savefile_abi_exportable(
                 }
 
                 let async_trait_macro_detected;
-                if life0_life_time == 4 && async_trait_life_time == 3 {
+                if life0_life_time >= 3 && async_trait_life_time >= 3 {
                     async_trait_macro_detected = true;
                 } else if life0_life_time == 0 && async_trait_life_time == 0 {
                     async_trait_macro_detected = false;
@@ -751,7 +771,7 @@ pub fn savefile_abi_exportable(
     };
 
     // For debugging, uncomment to write expanded procmacro to file
-    //std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
+    // std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
 
     expanded.into()
 }

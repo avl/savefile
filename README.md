@@ -79,6 +79,11 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.18.2
+
+Better diagnostics for async functions with reference parameters. 
+Also, upgrading some dependencies.
+
 ## 0.18.1
 
 Minor improvements to documentation.
@@ -88,7 +93,7 @@ Minor improvements to documentation.
 WARNING! When it comes to savefile-abi calls, 0.18.x is not fully binary compatible with 0.17.x. For
 regular data serialization, there should be no incompatibility.
 
-The major new feature in 0.18.1 is the support for returning boxed futures in SavefileAbi, and support
+The major new feature in 0.18 is the support for returning boxed futures in SavefileAbi, and support
 for the #[async_trait] attribute macro.
 
 This allows exposing async API:s more easily using SavefileAbi.
