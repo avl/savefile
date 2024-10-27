@@ -599,7 +599,7 @@ pub fn savefile_abi_exportable(
                 // However, we don't actually support reference arguments to functions
                 // returning futures.
                 fn is_life(id: &syn::Lifetime) -> bool {
-                    let s  = id.ident.to_string();
+                    let s = id.ident.to_string();
                     if !s.starts_with("life") {
                         return false;
                     }
@@ -616,7 +616,10 @@ pub fn savefile_abi_exportable(
                                 abort!(typ.span(), "savefile-abi does not support const-generic methods.")
                             }
                             GenericParam::Lifetime(l) => {
-                                if l.lifetime.ident != "life0" && l.lifetime.ident != "async_trait" && !is_life(&l.lifetime){
+                                if l.lifetime.ident != "life0"
+                                    && l.lifetime.ident != "async_trait"
+                                    && !is_life(&l.lifetime)
+                                {
                                     abort!(
                                         method.sig.generics.params.span(),
                                         "savefile-abi does not support methods with lifetimes."

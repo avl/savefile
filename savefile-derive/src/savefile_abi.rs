@@ -8,7 +8,10 @@ use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Colon2;
-use syn::{GenericArgument, Lifetime, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
+use syn::{
+    GenericArgument, Lifetime, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound,
+    TypeTuple,
+};
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -360,7 +363,11 @@ fn emit_closure_helpers(
 #[derive(Debug)]
 pub(crate) enum ArgType {
     PlainData(Type),
-    Reference(Box<ArgType>, bool /*ismut (only trait objects can be mut here)*/, Option<Lifetime> /*lifetime*/),
+    Reference(
+        Box<ArgType>,
+        bool,             /*ismut (only trait objects can be mut here)*/
+        Option<Lifetime>, /*lifetime*/
+    ),
     Str(bool /*static*/),
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
@@ -1102,9 +1109,7 @@ fn mutsymbol(ismut: bool) -> TokenStream {
 impl ArgType {
     fn get_lifetime(&self) -> Option<Lifetime> {
         match self {
-            ArgType::Reference(_, _, lt) => {
-                lt.clone()
-            }
+            ArgType::Reference(_, _, lt) => lt.clone(),
             _ => None,
         }
     }
@@ -1843,7 +1848,7 @@ pub(super) fn generate_method_definitions(
 
     let _ = caller_return_type;
 
-    let mut all_lifetimes:Vec<Lifetime> = vec![Lifetime::new("'life0", Span::call_site())];
+    let mut all_lifetimes: Vec<Lifetime> = vec![Lifetime::new("'life0", Span::call_site())];
     for lt in arg_lifetimes.iter().cloned() {
         all_lifetimes.push(lt);
     }
@@ -1851,8 +1856,10 @@ pub(super) fn generate_method_definitions(
 
     let async_trait_lifetime_decls = async_trait_detected.then(|| quote!( < #( #all_lifetimes ),* > ));
 
-    let arg_lifetime_bounds = (async_trait_detected && arg_lifetimes.is_empty()==false).then(|| quote!{
-        #( #arg_lifetimes: 'async_trait ),* ,
+    let arg_lifetime_bounds = (async_trait_detected && arg_lifetimes.is_empty() == false).then(|| {
+        quote! {
+            #( #arg_lifetimes: 'async_trait ),* ,
+        }
     });
 
     let async_trait_where = async_trait_detected.then(|| {
