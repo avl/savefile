@@ -92,7 +92,7 @@ Minor improvements to documentation.
 WARNING! When it comes to savefile-abi calls, 0.18.x is not fully binary compatible with 0.17.x. For
 regular data serialization, there should be no incompatibility.
 
-The major new feature in 0.18.2 is the support for returning boxed futures in SavefileAbi, and support
+The major new feature in 0.18 is the support for returning boxed futures in SavefileAbi, and support
 for the #[async_trait] attribute macro.
 
 This allows exposing async API:s more easily using SavefileAbi.
