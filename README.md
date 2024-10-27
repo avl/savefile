@@ -81,7 +81,8 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 ## 0.18.2
 
-Better diagnostics for async functions with reference parameters.
+Better diagnostics for async functions with reference parameters. 
+Also, upgrading some dependencies.
 
 ## 0.18.1
 
