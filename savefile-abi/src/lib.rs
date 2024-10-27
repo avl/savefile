@@ -604,13 +604,14 @@ impl TraitObject {
         }
     }
     /// Convert the given fat pointer to a TraitObject instance.
+    #[inline]
     pub fn new_from_ptr<T: ?Sized>(raw: *const T) -> TraitObject {
-        assert_eq!(
+        debug_assert_eq!(
             std::mem::size_of::<*const T>(),
             16,
             "TraitObject::new_from_ptr() must only be used with dyn trait, not any other kind of trait"
         );
-        assert_eq!(std::mem::size_of::<TraitObject>(), 16);
+        debug_assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
         let mut trait_object = TraitObject::zero();
 
@@ -625,14 +626,15 @@ impl TraitObject {
     }
     /// Note: This only works for boxed dyn Trait.
     /// T must be `dyn SomeTrait`.
+    #[inline]
     pub fn new<T: ?Sized>(input: Box<T>) -> TraitObject {
         let raw = Box::into_raw(input);
-        assert_eq!(
+        debug_assert_eq!(
             std::mem::size_of::<*mut T>(),
             16,
             "TraitObject::new() must only be used with Boxed dyn trait, not any other kind of Box"
         );
-        assert_eq!(std::mem::size_of::<TraitObject>(), 16);
+        debug_assert_eq!(std::mem::size_of::<TraitObject>(), 16);
 
         let mut trait_object = TraitObject::zero();
 
@@ -724,8 +726,9 @@ impl PackagedTraitObject {
     /// T must implement AbiExportable, which means it has an ::ABI_ENTRY associated
     /// type that gives the entry point.
     /// Note, we use `*const T` here even for mutable cases, but it doesn't matter
-    /// since it's never used, it's just cast to other stuff and then finally
+    /// since it's never dereferenced, it's just cast to other stuff and then finally
     /// back to the right type.
+    #[inline]
     pub fn new_from_ptr<T>(r: *const T) -> PackagedTraitObject
     where
         T: AbiExportable + ?Sized,

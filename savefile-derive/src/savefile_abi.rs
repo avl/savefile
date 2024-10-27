@@ -8,9 +8,7 @@ use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Colon2;
-use syn::{
-    GenericArgument, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple,
-};
+use syn::{GenericArgument, Lifetime, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound, TypeTuple};
 
 const POINTER_SIZE: usize = std::mem::size_of::<*const ()>();
 #[allow(unused)]
@@ -362,7 +360,7 @@ fn emit_closure_helpers(
 #[derive(Debug)]
 pub(crate) enum ArgType {
     PlainData(Type),
-    Reference(Box<ArgType>, bool /*ismut (only trait objects can be mut here)*/),
+    Reference(Box<ArgType>, bool /*ismut (only trait objects can be mut here)*/, Option<Lifetime> /*lifetime*/),
     Str(bool /*static*/),
     Boxed(Box<ArgType>),
     Slice(Box<ArgType>),
@@ -478,7 +476,7 @@ pub(crate) fn parse_box_type(
                                 typ.to_token_stream()
                             ),
                         },
-                        ArgType::Reference(_, _) => {
+                        ArgType::Reference(_, _, _) => {
                             abort!(first_gen_arg.span(), "{}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", location, typ.to_token_stream());
                         }
                         x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _, _, _) => ArgType::Boxed(Box::new(x)),
@@ -532,22 +530,23 @@ fn parse_type(
         }
         Type::Reference(typref) => {
             let is_static_lifetime;
-            if typref.lifetime.is_some() {
-                match &typref.lifetime {
-                    Some(lifetime) if lifetime.ident == "static" => {
-                        is_static_lifetime = true;
-                    }
-                    _ => abort!(
-                        typref.lifetime.span(),
-                        "{}: Specifying lifetimes is not supported by Savefile-Abi.",
-                        location,
-                    ),
+            let mut lifetime = None;
+
+            match &typref.lifetime {
+                Some(rlifetime) if rlifetime.ident == "static" => {
+                    lifetime = Some(rlifetime.clone());
+                    is_static_lifetime = true;
                 }
-            } else {
-                is_static_lifetime = false;
+                Some(rlifetime) => {
+                    lifetime = Some(rlifetime.clone());
+                    is_static_lifetime = false;
+                }
+                None => {
+                    is_static_lifetime = false;
+                }
             }
             if is_reference || is_boxed {
-                abort!(typ.span(), "{}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", location, typ.to_token_stream());
+                abort!(typref.and_token.span(), "{}: Method arguments cannot be reference to reference in savefile-abi. Try removing a '&' from the type: {}", location, typ.to_token_stream());
             }
 
             let inner = parse_type(
@@ -565,7 +564,7 @@ fn parse_type(
             if let ArgType::Str(_) = inner {
                 return ArgType::Str(is_static_lifetime); //Str is a special case, it is always a reference
             }
-            return ArgType::Reference(Box::new(inner), typref.mutability.is_some());
+            return ArgType::Reference(Box::new(inner), typref.mutability.is_some(), lifetime);
         }
         Type::Tuple(tuple) => {
             if tuple.elems.len() > 3 {
@@ -1101,6 +1100,14 @@ fn mutsymbol(ismut: bool) -> TokenStream {
 }
 
 impl ArgType {
+    fn get_lifetime(&self) -> Option<Lifetime> {
+        match self {
+            ArgType::Reference(_, _, lt) => {
+                lt.clone()
+            }
+            _ => None,
+        }
+    }
     fn get_instruction(
         &self,
         version: u32,
@@ -1120,7 +1127,7 @@ impl ArgType {
             quote!(false)
         };
         match self {
-            ArgType::Reference(arg_type, is_mut) => {
+            ArgType::Reference(arg_type, is_mut, _lifetime) => {
                 //let mutsym = mutsymbol(*is_mut);
                 let TypeInstruction {
                     callee_trampoline_temp_variable_declaration1,
@@ -1640,6 +1647,8 @@ pub(super) fn generate_method_definitions(
     let mut caller_arg_serializers_temp = vec![];
 
     let mut compile_time_known_size = Some(0);
+    let mut arg_lifetimes = vec![];
+    let mut first_ref_arg = None;
     for (arg_index, (arg_name, typ)) in args.iter().enumerate() {
         let prefixed_arg_name = Ident::new(&format!("arg_{}", arg_name), Span::call_site());
         let argtype = parse_type(
@@ -1654,6 +1663,9 @@ pub(super) fn generate_method_definitions(
             false,
             false,
         );
+        if let ArgType::Reference(..) = &argtype {
+            first_ref_arg = Some(typ.span());
+        }
         callee_trampoline_variable_declaration.push(quote! {let #prefixed_arg_name;});
 
         let instruction = argtype.get_instruction(
@@ -1666,6 +1678,10 @@ pub(super) fn generate_method_definitions(
             extra_definitions,
             &prefixed_arg_name,
         );
+
+        if let Some(lifetime) = argtype.get_lifetime() {
+            arg_lifetimes.push(lifetime);
+        }
 
         caller_arg_serializers_temp.push(instruction.caller_arg_serializer_temp1);
         callee_trampoline_real_method_invocation_arguments.push(
@@ -1765,6 +1781,15 @@ pub(super) fn generate_method_definitions(
                 method_name
             );
         }
+        if let ArgType::Future(..) = &parsed_ret_type {
+            if let Some(r) = first_ref_arg {
+                abort!(
+                    r,
+                    "Method '{}': savefile-abi does not support reference arguments to async functions or functions returning futures.",
+                    method_name
+                );
+            }
+        }
         if let ArgType::Str(false) = &parsed_ret_type {
             abort!(
                 ret_type.span(),
@@ -1818,11 +1843,24 @@ pub(super) fn generate_method_definitions(
 
     let _ = caller_return_type;
 
-    let async_trait_lifetime_decls = async_trait_detected.then(|| quote!( <'life0,'async_trait> ));
+    let mut all_lifetimes:Vec<Lifetime> = vec![Lifetime::new("'life0", Span::call_site())];
+    for lt in arg_lifetimes.iter().cloned() {
+        all_lifetimes.push(lt);
+    }
+    all_lifetimes.push(Lifetime::new("'async_trait", Span::call_site()));
+
+    let async_trait_lifetime_decls = async_trait_detected.then(|| quote!( < #( #all_lifetimes ),* > ));
+
+    let arg_lifetime_bounds = (async_trait_detected && arg_lifetimes.is_empty()==false).then(|| quote!{
+        #( #arg_lifetimes: 'async_trait ),* ,
+    });
 
     let async_trait_where = async_trait_detected.then(|| {
         quote!(
-            where 'life0 : 'async_trait, Self : 'async_trait
+            where
+            'life0 : 'async_trait,
+            #arg_lifetime_bounds
+            Self : 'async_trait
         )
     });
 
