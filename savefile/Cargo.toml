@@ -53,7 +53,7 @@ nalgebra = { version = "0.33", optional = true}
 bit-vec08 = { package="bit-vec", version = "0.8", optional = true}
 arrayvec = { version = "0.7", optional = true}
 smallvec = { version = "1.11", optional = true}
-indexmap = { version = "1.9", optional = true}
+indexmap = { version = "2.6", optional = true}
 parking_lot = { version = "0.12", optional = true }
 ring = {version = "0.16.20", optional = true}
 rand = { version = "0.8", optional = true}
