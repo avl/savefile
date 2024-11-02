@@ -220,7 +220,7 @@ The above syntax describes that the returned future is (potentially) capturing `
 To be able to use Savefile abi with the 'async_trait'-macro, the above must be supported. However, most usages
 of lifetimes in Savefile abi don't make sense, since savefile can always fall back on serialization.
 
-As of version 0.18.2, savefile-abi uses heuristics to detect usage of `#[async_trait]`, and allows lifetime annotations
+As of version 0.18.3, savefile-abi uses heuristics to detect usage of `#[async_trait]`, and allows lifetime annotations
 _only_ if they appear to follow the pattern used by async_trait. This limitation could be relaxed. The main
 challenge is making sure that all the code that savefile-derive generates is compatible with the lifetime annotations,
 and also making sure that adding such annotations can't be used to somehow cause unsoundness. Basically, as long

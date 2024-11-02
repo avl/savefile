@@ -79,6 +79,15 @@ See the docs for more information, including schema-versioning: https://docs.rs/
 
 # Changelog
 
+## 0.18.3
+
+Bump dependencies:
+
+ring -> 0.17.8
+
+indexmap -> 2.6.0
+
+
 ## 0.18.2
 
 Better diagnostics for async functions with reference parameters. 
