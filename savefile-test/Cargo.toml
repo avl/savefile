@@ -19,7 +19,7 @@ savefile-abi = { path = "../savefile-abi" }
 bit-vec = "0.8"
 arrayvec="0.7"
 smallvec="*"
-indexmap = { version = "1.9"}
+indexmap = { version = "2.6"}
 byteorder="*"
 rand="0.8"
 parking_lot="0.12"
