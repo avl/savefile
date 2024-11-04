@@ -2,6 +2,12 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.4
+
+Create a separate CHANGELOG.md-file.
+
+Bump some minor versions of dependencies.
+
 ## 0.18.3
 
 Bump dependencies:
