@@ -14,7 +14,7 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive", "quickcheck", "nalgebra"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.18.3" }
+savefile-derive = { path = "../savefile-derive", version = "=0.18.4" }
 savefile-abi = { path = "../savefile-abi" }
 bit-vec = "0.8"
 arrayvec="0.7"
@@ -30,7 +30,7 @@ bit-set="0.8"
 rustc-hash="2.0"
 quickcheck="1.0"
 quickcheck_macros ="1.0"
-insta = { version = "1.41.0", features = ["yaml"] }
+insta = { version = "1.41.1", features = ["yaml"] }
 nalgebra="0.33"
 tokio= { version = "1.40", features = ["test-util", "rt-multi-thread", "full"] }
 async-trait = "0.1"
