@@ -7,7 +7,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::token::Colon2;
 use syn::{
     GenericArgument, Lifetime, Path, PathArguments, PathSegment, ReturnType, TraitBoundModifier, Type, TypeParamBound,
     TypeTuple,
@@ -95,8 +94,8 @@ fn compile_time_abi_check_size(typ: &Type) -> Option<(usize, usize)> {
                                     }
                                 }
                                 GenericArgument::Const(_) => {}
-                                GenericArgument::Binding(_) => {}
                                 GenericArgument::Constraint(_) => {}
+                                _ => {}
                             }
                         }
                     }
@@ -648,6 +647,13 @@ fn parse_type(
                                 );
                             }
                         }
+                        x => {
+                            abort!(
+                                x.span(),
+                                "{}: Savefile does not support this syntax",
+                                location
+                            );
+                        }
                     })
                     .filter_map(|x| x)
                     .filter(|seg| {
@@ -770,17 +776,21 @@ fn parse_type(
                                     let output = &arg.args[0];
 
                                     match output {
-                                        GenericArgument::Binding(t) => {
+                                        GenericArgument::AssocType(t) => {
                                             if t.ident != "Output" {
-                                                abort!(seg.ident.span(), "{}: Futures must have a a single binding, named Output (Future<Output=?>).", location);
+                                                abort!(seg.ident.span(), "{}: Futures must have a a associated type, named Output (Future<Output=?>).", location);
                                             }
                                             return ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin);
                                         }
                                         GenericArgument::Lifetime(_)
                                         | GenericArgument::Const(_)
                                         | GenericArgument::Type(_)
+                                        | GenericArgument::AssocConst(_)
                                         | GenericArgument::Constraint(_) => {
                                             abort!(output.span(), "{}: Futures must have a a single associated type binding, named 'Output' (Future<Output=?>).", location);
+                                        }
+                                        x => {
+                                            abort!(bound.span(), "{}: Savefile does not support this syntax", location);
                                         }
                                     }
                                 }
@@ -800,6 +810,9 @@ fn parse_type(
                                 "{}: Savefile does not support lifetimes in Futures",
                                 location
                             );
+                        }
+                        x => {
+                            abort!(bound.span(), "{}: Savefile does not support this syntax", location);
                         }
                     }
                     abort!(
@@ -906,11 +919,11 @@ fn parse_type(
                             GenericArgument::Const(_) => {
                                 abort!(arg.span(), "Savefile does not support const in this location.");
                             }
-                            GenericArgument::Binding(_) => {
+                            GenericArgument::AssocType(_) => {
                                 abort!(arg.span(), "Savefile does not support the syntax expressed here.");
                             }
-                            GenericArgument::Constraint(_) => {
-                                abort!(arg.span(), "Savefile does not support constraints at this position.");
+                            x=> {
+                                abort!(x.span(), "Savefile does not support the syntax expressed here.");
                             }
                         }
                         abort!(
@@ -979,11 +992,17 @@ fn parse_type(
                                 GenericArgument::Const(_) => {
                                     abort!(arg.span(), "Savefile does not support const in this location.");
                                 }
-                                GenericArgument::Binding(_) => {
+                                GenericArgument::AssocType(_) => {
+                                    abort!(arg.span(), "Savefile does not support the syntax expressed here.");
+                                }
+                                GenericArgument::AssocConst(_) => {
                                     abort!(arg.span(), "Savefile does not support the syntax expressed here.");
                                 }
                                 GenericArgument::Constraint(_) => {
                                     abort!(arg.span(), "Savefile does not support constraints at this position.");
+                                }
+                                x => {
+                                    abort!(x.span(), "{}: Savefile does not support this syntax", location);
                                 }
                             }
                         }
