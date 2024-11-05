@@ -21,6 +21,7 @@ savefile = { path="../savefile", version = "=0.18.5" }
 savefile-derive = { path="../savefile-derive", version = "=0.18.5" }
 byteorder = "1.4"
 libloading = "0.8"
+bytes = {version = "1.8", optional = true }
 
 [features]
 # Rust version is > 1.78

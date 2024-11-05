@@ -707,6 +707,7 @@ version = "0.18.5"
 dependencies = [
  "async-trait",
  "byteorder",
+ "bytes",
  "libloading",
  "rustc_version",
  "savefile",
@@ -741,6 +742,7 @@ dependencies = [
 name = "savefile-abi-min-lib-impl"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "savefile",
  "savefile-abi",
  "savefile-abi-min-lib",
@@ -777,6 +779,7 @@ dependencies = [
  "bit-set 0.8.0",
  "bit-vec 0.8.0",
  "byteorder",
+ "bytes",
  "indexmap",
  "insta",
  "nalgebra",
