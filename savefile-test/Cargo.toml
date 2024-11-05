@@ -14,13 +14,8 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive", "quickcheck", "nalgebra"]}
-<<<<<<< Updated upstream
-savefile-derive = { path = "../savefile-derive", version = "=0.18.5" }
-savefile-abi = { path = "../savefile-abi" }
-=======
-savefile-derive = { path = "../savefile-derive", version = "=0.18.4" }
-savefile-abi = { path = "../savefile-abi", features=["bytes"] }
->>>>>>> Stashed changes
+savefile-derive = { path = "../savefile-derive", version = "=0.18.5"}
+savefile-abi = { path = "../savefile-abi" , features = ["bytes"]}
 bit-vec = "0.8"
 arrayvec="0.7"
 smallvec="*"
