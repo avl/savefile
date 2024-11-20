@@ -498,6 +498,33 @@ pub fn test_array_vec() {
     assert_roundtrip(data.clone());
 }
 
+
+#[test]
+pub fn lots_of_integers() {
+    use arrayvec::ArrayVec;
+    assert_roundtrip(0);
+    assert_roundtrip(1);
+    assert_roundtrip(2);
+    assert_roundtrip(1i64);
+    assert_roundtrip(2i64);
+    assert_roundtrip(-2i64);
+
+    let mut x = 1;
+    loop {
+        assert_roundtrip(x);
+        if x >= i64::MAX as u64 {
+            break;
+        }
+        x*=2;
+    }
+}
+#[test]
+pub fn lots_of_integers2() {
+    for x in -10000i32..10000i32 {
+        assert_roundtrip(x);
+    }
+}
+
 #[test]
 pub fn test_array_vec_with_string() {
     use arrayvec::ArrayVec;

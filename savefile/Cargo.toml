@@ -27,6 +27,7 @@ default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set
 bit-set = ["dep:bit-set", "bit-vec"]
 bit-set08 = ["dep:bit-set08", "bit-vec08"]
 serde_derive = ["dep:serde_derive", "serde"]
+tight = []
 
 # Enable this to reduce risk of crashing on corrupt input. Provides sanity checks for sizes of objects.
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.

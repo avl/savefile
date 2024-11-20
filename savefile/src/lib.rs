@@ -1186,16 +1186,26 @@ impl IsPacked {
         IsPacked(false)
     }
 
+
     /// If this returns false, "Packed"-Optimization is not allowed.
     #[inline(always)]
     pub fn is_false(self) -> bool {
-        !self.0
+        if cfg!(feature="tight") {
+            true
+        } else {
+            !self.0
+        }
     }
 
     /// If this returns true, "Packed"-Optimization is allowed. Beware.
     #[inline(always)]
     pub fn is_yes(self) -> bool {
-        self.0
+
+        if cfg!(feature="tight") {
+            false
+        } else {
+            self.0
+        }
     }
 }
 
@@ -1398,14 +1408,14 @@ impl Serialize for std::io::Error {
             ErrorKind::Other => 40,
             _ => 42,
         };
-        serializer.write_u16(kind as u16)?;
+        serializer.write_u16_packed(kind as u16)?;
         serializer.write_string(&self.to_string())?;
         Ok(())
     }
 }
 impl Deserialize for std::io::Error {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let kind = deserializer.read_u16()?;
+        let kind = deserializer.read_u16_packed()?;
         let kind = match kind {
             1 => ErrorKind::NotFound,
             2 => ErrorKind::PermissionDenied,
@@ -1744,23 +1754,104 @@ mod crypto {
 #[cfg(feature = "ring")]
 pub use crypto::{load_encrypted_file, save_encrypted_file, CryptoReader, CryptoWriter};
 
+
+
+#[cfg(feature = "tight")]
 impl<'a, W: Write + 'a> Serializer<'a, W> {
-    /// Writes a binary bool to the output
+    /// Writes a binary little endian u16 to the output
     #[inline(always)]
-    pub fn write_bool(&mut self, v: bool) -> Result<(), SavefileError> {
-        Ok(self.writer.write_u8(if v { 1 } else { 0 })?)
+    pub fn write_u16_packed(&mut self, v: u16) -> Result<(), SavefileError> {
+        Ok(self.write_packed_u64_impl(v as u64)?)
     }
-    /// Writes a binary u8 to the output
+    /// Writes a binary little endian i16 to the output
     #[inline(always)]
-    pub fn write_u8(&mut self, v: u8) -> Result<(), SavefileError> {
-        Ok(self.writer.write_all(&[v])?)
-    }
-    /// Writes a binary i8 to the output
-    #[inline(always)]
-    pub fn write_i8(&mut self, v: i8) -> Result<(), SavefileError> {
-        Ok(self.writer.write_i8(v)?)
+    pub fn write_i16_packed(&mut self, v: i16) -> Result<(), SavefileError> {
+        Ok(self.write_packed_i64_impl(v as i64)?)
     }
 
+    /// Writes a binary little endian u32 to the output
+    #[inline(always)]
+    pub fn write_u32_packed(&mut self, v: u32) -> Result<(), SavefileError> {
+        Ok(self.write_packed_u64_impl(v as u64)?)
+    }
+    /// Writes a binary little endian i32 to the output
+    #[inline(always)]
+    pub fn write_i32_packed(&mut self, v: i32) -> Result<(), SavefileError> {
+        Ok(self.write_packed_i64_impl(v as i64)?)
+    }
+
+    /// Writes a binary little endian u64 to the output
+    #[inline(always)]
+    pub fn write_u64_packed(&mut self, v: u64) -> Result<(), SavefileError> {
+        Ok(self.write_packed_u64_impl(v)?)
+    }
+    /// Writes a binary little endian i64 to the output
+    #[inline(always)]
+    pub fn write_i64_packed(&mut self, v: i64) -> Result<(), SavefileError> {
+        Ok(self.write_packed_i64_impl(v)?)
+    }
+    /// Writes a binary little endian usize as u64 to the output
+    #[inline(always)]
+    pub fn write_usize_packed(&mut self, v: usize) -> Result<(), SavefileError> {
+        Ok(self.write_packed_u64_impl(v as u64)?)
+    }
+    /// Writes a binary little endian isize as i64 to the output
+    #[inline(always)]
+    pub fn write_isize_packed(&mut self, v: isize) -> Result<(), SavefileError> {
+        Ok(self.write_packed_i64_impl(v as i64)?)
+    }
+}
+#[cfg(not(feature = "tight"))]
+impl<'a, W: Write + 'a> Serializer<'a, W> {
+    /// Writes a binary little endian u16 to the output
+    #[inline(always)]
+    pub fn write_u16_packed(&mut self, v: u16) -> Result<(), SavefileError> {
+        self.write_u16(v)
+    }
+    /// Writes a binary little endian i16 to the output
+    #[inline(always)]
+    pub fn write_i16_packed(&mut self, v: i16) -> Result<(), SavefileError> {
+        self.write_i16(v)
+    }
+
+    /// Writes a binary little endian u32 to the output
+    #[inline(always)]
+    pub fn write_u32_packed(&mut self, v: u32) -> Result<(), SavefileError> {
+        self.write_u32(v)
+    }
+    /// Writes a binary little endian i32 to the output
+    #[inline(always)]
+    pub fn write_i32_packed(&mut self, v: i32) -> Result<(), SavefileError> {
+        self.write_i32(v)
+    }
+
+    /// Writes a binary little endian u64 to the output
+    #[inline(always)]
+    pub fn write_u64_packed(&mut self, v: u64) -> Result<(), SavefileError> {
+        self.write_u64(v)
+    }
+    /// Writes a binary little endian i64 to the output
+    #[inline(always)]
+    pub fn write_i64_packed(&mut self, v: i64) -> Result<(), SavefileError> {
+        self.write_i64(v)
+    }
+    /// Writes a binary little endian usize as u64 to the output
+    #[inline(always)]
+    pub fn write_usize_packed(&mut self, v: usize) -> Result<(), SavefileError> {
+        self.write_usize(v)
+    }
+    /// Writes a binary little endian isize as i64 to the output
+    #[inline(always)]
+    pub fn write_isize_packed(&mut self, v: isize) -> Result<(), SavefileError> {
+        self.write_isize(v)
+    }
+}
+#[cfg(not(feature = "tight"))]
+const MAGIC: &'static str = "savefile\0";
+#[cfg(feature = "tight")]
+const MAGIC: &'static str = "\0";
+
+impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// Writes a binary little endian u16 to the output
     #[inline(always)]
     pub fn write_u16(&mut self, v: u16) -> Result<(), SavefileError> {
@@ -1783,6 +1874,38 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         Ok(self.writer.write_i32::<LittleEndian>(v)?)
     }
 
+
+    /// Writes a binary little endian u64 to the output
+    #[inline(always)]
+    pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u64::<LittleEndian>(v)?)
+    }
+    /// Writes a binary little endian i64 to the output
+    #[inline(always)]
+    pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
+        Ok(self.writer.write_i64::<LittleEndian>(v)?)
+    }
+    /// Writes a binary little endian usize as u64 to the output
+    #[inline(always)]
+    pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
+    }
+    /// Writes a binary little endian isize as i64 to the output
+    #[inline(always)]
+    pub fn write_isize(&mut self, v: isize) -> Result<(), SavefileError> {
+        Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
+    }
+
+    /// Writes a binary little endian u128 to the output
+    #[inline(always)]
+    pub fn write_u128(&mut self, v: u128) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u128::<LittleEndian>(v)?)
+    }
+    /// Writes a binary little endian i128 to the output
+    #[inline(always)]
+    pub fn write_i128(&mut self, v: i128) -> Result<(), SavefileError> {
+        Ok(self.writer.write_i128::<LittleEndian>(v)?)
+    }
     /// Writes a binary little endian f32 to the output
     #[inline(always)]
     pub fn write_f32(&mut self, v: f32) -> Result<(), SavefileError> {
@@ -1794,10 +1917,39 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         Ok(self.writer.write_f64::<LittleEndian>(v)?)
     }
 
-    /// Writes a binary little endian u64 to the output
+    /// Writes a binary bool to the output
     #[inline(always)]
-    pub fn write_u64(&mut self, v: u64) -> Result<(), SavefileError> {
-        Ok(self.writer.write_u64::<LittleEndian>(v)?)
+    pub fn write_bool(&mut self, v: bool) -> Result<(), SavefileError> {
+        Ok(self.writer.write_u8(if v { 1 } else { 0 })?)
+    }
+    /// Writes a binary u8 to the output
+    #[inline(always)]
+    pub fn write_u8(&mut self, v: u8) -> Result<(), SavefileError> {
+        Ok(self.writer.write_all(&[v])?)
+    }
+    /// Writes a binary i8 to the output
+    #[inline(always)]
+    pub fn write_i8(&mut self, v: i8) -> Result<(), SavefileError> {
+        Ok(self.writer.write_i8(v)?)
+    }
+    #[allow(unused)]
+    #[inline(always)]
+    fn write_packed_u64_impl(&mut self, mut val: u64) -> Result<(), SavefileError> {
+        loop {
+            if val < 128 {
+                self.writer.write_u8(val as u8)?;
+                return Ok(());
+            }
+            self.writer.write_u8(128|((val&127) as u8))?;
+            val >>= 7;
+        }
+    }
+    #[allow(unused)]
+    #[inline(always)]
+    fn write_packed_i64_impl(&mut self, val: i64) -> Result<(), SavefileError> {
+        let val = val as u64;
+        let val = val.rotate_left(1);
+        self.write_packed_u64_impl(val)
     }
 
     /// Serialize the bytes of the pointer itself
@@ -1822,31 +1974,6 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         };
         Ok(self.writer.write_all(slice_to_write)?)
     }
-    /// Writes a binary little endian i64 to the output
-    #[inline(always)]
-    pub fn write_i64(&mut self, v: i64) -> Result<(), SavefileError> {
-        Ok(self.writer.write_i64::<LittleEndian>(v)?)
-    }
-    /// Writes a binary little endian u128 to the output
-    #[inline(always)]
-    pub fn write_u128(&mut self, v: u128) -> Result<(), SavefileError> {
-        Ok(self.writer.write_u128::<LittleEndian>(v)?)
-    }
-    /// Writes a binary little endian i128 to the output
-    #[inline(always)]
-    pub fn write_i128(&mut self, v: i128) -> Result<(), SavefileError> {
-        Ok(self.writer.write_i128::<LittleEndian>(v)?)
-    }
-    /// Writes a binary little endian usize as u64 to the output
-    #[inline(always)]
-    pub fn write_usize(&mut self, v: usize) -> Result<(), SavefileError> {
-        Ok(self.writer.write_u64::<LittleEndian>(v as u64)?)
-    }
-    /// Writes a binary little endian isize as i64 to the output
-    #[inline(always)]
-    pub fn write_isize(&mut self, v: isize) -> Result<(), SavefileError> {
-        Ok(self.writer.write_i64::<LittleEndian>(v as i64)?)
-    }
     /// Writes a binary u8 array to the output
     #[inline(always)]
     pub fn write_buf(&mut self, v: &[u8]) -> Result<(), SavefileError> {
@@ -1856,7 +1983,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     #[inline(always)]
     pub fn write_string(&mut self, v: &str) -> Result<(), SavefileError> {
         let asb = v.as_bytes();
-        self.write_usize(asb.len())?;
+        self.write_usize_packed(asb.len())?;
         Ok(self.writer.write_all(asb)?)
     }
     /// Writes a binary u8 array to the output. Synonym of write_buf.
@@ -1950,7 +2077,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         with_compression: bool,
         lib_version_override: Option<u16>,
     ) -> Result<(), SavefileError> {
-        let header = "savefile\0".to_string().into_bytes();
+        let header = MAGIC.to_string().into_bytes();
 
         writer.write_all(&header)?; //9
 
@@ -2014,18 +2141,86 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         Serializer { writer, file_version }
     }
 }
+#[cfg(not(feature="tight"))]
+impl<TR: Read> Deserializer<'_, TR> {
+    /// Reads a little endian u16
+    pub fn read_u16_packed(&mut self) -> Result<u16, SavefileError> {
+        self.read_u16()
+    }
+    /// Reads a little endian u32
+    pub fn read_u32_packed(&mut self) -> Result<u32, SavefileError> {
+        self.read_u32()
+    }
+    /// Reads a little endian u64
+    pub fn read_u64_packed(&mut self) -> Result<u64, SavefileError> {
+        self.read_u64()
+    }
+    /// Reads a little endian i16
+    pub fn read_i16_packed(&mut self) -> Result<i16, SavefileError> {
+        self.read_i16()
+    }
+    /// Reads a little endian i32
+    pub fn read_i32_packed(&mut self) -> Result<i32, SavefileError> {
+        self.read_i32()
+    }
+    /// Reads a little endian i64
+    pub fn read_i64_packed(&mut self) -> Result<i64, SavefileError> {
+        self.read_i64()
+    }
+    /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_isize_packed(&mut self) -> Result<isize, SavefileError> {
+        self.read_isize()
+    }
+    /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_usize_packed(&mut self) -> Result<usize, SavefileError> {
+        self.read_usize()
+    }
+}
+#[cfg(feature="tight")]
+impl<TR: Read> Deserializer<'_, TR> {
+    /// Reads a little endian u16
+    pub fn read_u16_packed(&mut self) -> Result<u16, SavefileError> {
+        Ok(self.read_packed_u64_impl()? as u16)
+    }
+    /// Reads a little endian u32
+    pub fn read_u32_packed(&mut self) -> Result<u32, SavefileError> {
+        Ok(self.read_packed_u64_impl()? as u32)
+    }
+    /// Reads a little endian u64
+    pub fn read_u64_packed(&mut self) -> Result<u64, SavefileError> {
+        Ok(self.read_packed_u64_impl()? as u64)
+    }
+    /// Reads a little endian i16
+    pub fn read_i16_packed(&mut self) -> Result<i16, SavefileError> {
+        Ok(self.read_packed_i64_impl()? as i16)
+    }
+    /// Reads a little endian i32
+    pub fn read_i32_packed(&mut self) -> Result<i32, SavefileError> {
+        Ok(self.read_packed_i64_impl()? as i32)
+    }
+    /// Reads a little endian i64
+    pub fn read_i64_packed(&mut self) -> Result<i64, SavefileError> {
+        Ok(self.read_packed_i64_impl()?)
+    }
+    /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_isize_packed(&mut self) -> Result<isize, SavefileError> {
+        if let Ok(val) = TryFrom::try_from(self.read_packed_i64_impl()?) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
+    }
+    /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_usize_packed(&mut self) -> Result<usize, SavefileError> {
+        if let Ok(val) = TryFrom::try_from(self.read_packed_u64_impl()?) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
+    }
+}
 
 impl<TR: Read> Deserializer<'_, TR> {
-    /// Reads a u8 and return true if equal to 1
-    pub fn read_bool(&mut self) -> Result<bool, SavefileError> {
-        Ok(self.reader.read_u8()? == 1)
-    }
-    /// Reads an u8
-    pub fn read_u8(&mut self) -> Result<u8, SavefileError> {
-        let mut buf = [0u8];
-        self.reader.read_exact(&mut buf)?;
-        Ok(buf[0])
-    }
     /// Reads a little endian u16
     pub fn read_u16(&mut self) -> Result<u16, SavefileError> {
         Ok(self.reader.read_u16::<LittleEndian>()?)
@@ -2038,7 +2233,91 @@ impl<TR: Read> Deserializer<'_, TR> {
     pub fn read_u64(&mut self) -> Result<u64, SavefileError> {
         Ok(self.reader.read_u64::<LittleEndian>()?)
     }
+    /// Reads a little endian i16
+    pub fn read_i16(&mut self) -> Result<i16, SavefileError> {
+        Ok(self.reader.read_i16::<LittleEndian>()?)
+    }
+    /// Reads a little endian i32
+    pub fn read_i32(&mut self) -> Result<i32, SavefileError> {
+        Ok(self.reader.read_i32::<LittleEndian>()?)
+    }
+    /// Reads a little endian i64
+    pub fn read_i64(&mut self) -> Result<i64, SavefileError> {
+        Ok(self.reader.read_i64::<LittleEndian>()?)
+    }
+    /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_isize(&mut self) -> Result<isize, SavefileError> {
+        if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()?) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
+    }
+    /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
+    pub fn read_usize(&mut self) -> Result<usize, SavefileError> {
+        if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()?) {
+            Ok(val)
+        } else {
+            Err(SavefileError::SizeOverflow)
+        }
+    }
 
+    /// Reads an i8
+    pub fn read_i8(&mut self) -> Result<i8, SavefileError> {
+        Ok(self.reader.read_i8()?)
+    }
+
+    /// Reads an u8
+    pub fn read_u8(&mut self) -> Result<u8, SavefileError> {
+        Ok(self.reader.read_u8()?)
+    }
+
+    /// Reads a little endian f32
+    pub fn read_f32(&mut self) -> Result<f32, SavefileError> {
+        Ok(self.reader.read_f32::<LittleEndian>()?)
+    }
+    /// Reads a little endian f64
+    pub fn read_f64(&mut self) -> Result<f64, SavefileError> {
+        Ok(self.reader.read_f64::<LittleEndian>()?)
+    }
+    /// Reads a little endian u128
+    pub fn read_u128(&mut self) -> Result<u128, SavefileError> {
+        Ok(self.reader.read_u128::<LittleEndian>()?)
+    }
+    /// Reads a little endian i128
+    pub fn read_i128(&mut self) -> Result<i128, SavefileError> {
+        Ok(self.reader.read_i128::<LittleEndian>()?)
+    }
+    #[allow(unused)]
+    #[inline(always)]
+    fn read_packed_u64_impl(&mut self) -> Result<u64, SavefileError> {
+        let mut val = 0u64;
+        let mut shift = 0;
+        loop {
+            let x = self.reader.read_u8()?;
+            if x < 128 {
+                val |= (x as u64) << shift;
+                return Ok(val);
+            }
+            shift+= 7;
+            if shift > 63 {
+                return Err(SavefileError::GeneralError {
+                    msg: "corrupt integer".to_string(),
+                })
+            }
+        }
+    }
+    #[allow(unused)]
+    #[inline(always)]
+    fn read_packed_i64_impl(&mut self) -> Result<i64, SavefileError> {
+        let u = self.read_packed_u64_impl()?;
+        Ok(u.rotate_right(1) as i64)
+    }
+
+    /// Reads a u8 and return true if equal to 1
+    pub fn read_bool(&mut self) -> Result<bool, SavefileError> {
+        Ok(self.reader.read_u8()? == 1)
+    }
     /// Reads the raw bit pattern of a pointer
     /// # Safety
     /// The stream must contain a valid pointer to T.
@@ -2075,57 +2354,10 @@ impl<TR: Read> Deserializer<'_, TR> {
         self.reader.read_exact(target)?;
         Ok(unsafe { ptr.assume_init() })
     }
-    /// Reads a little endian u128
-    pub fn read_u128(&mut self) -> Result<u128, SavefileError> {
-        Ok(self.reader.read_u128::<LittleEndian>()?)
-    }
-    /// Reads an i8
-    pub fn read_i8(&mut self) -> Result<i8, SavefileError> {
-        Ok(self.reader.read_i8()?)
-    }
-    /// Reads a little endian i16
-    pub fn read_i16(&mut self) -> Result<i16, SavefileError> {
-        Ok(self.reader.read_i16::<LittleEndian>()?)
-    }
-    /// Reads a little endian i32
-    pub fn read_i32(&mut self) -> Result<i32, SavefileError> {
-        Ok(self.reader.read_i32::<LittleEndian>()?)
-    }
-    /// Reads a little endian i64
-    pub fn read_i64(&mut self) -> Result<i64, SavefileError> {
-        Ok(self.reader.read_i64::<LittleEndian>()?)
-    }
-    /// Reads a little endian i128
-    pub fn read_i128(&mut self) -> Result<i128, SavefileError> {
-        Ok(self.reader.read_i128::<LittleEndian>()?)
-    }
-    /// Reads a little endian f32
-    pub fn read_f32(&mut self) -> Result<f32, SavefileError> {
-        Ok(self.reader.read_f32::<LittleEndian>()?)
-    }
-    /// Reads a little endian f64
-    pub fn read_f64(&mut self) -> Result<f64, SavefileError> {
-        Ok(self.reader.read_f64::<LittleEndian>()?)
-    }
-    /// Reads an i64 into an isize. For 32 bit architectures, the function fails on overflow.
-    pub fn read_isize(&mut self) -> Result<isize, SavefileError> {
-        if let Ok(val) = TryFrom::try_from(self.reader.read_i64::<LittleEndian>()?) {
-            Ok(val)
-        } else {
-            Err(SavefileError::SizeOverflow)
-        }
-    }
-    /// Reads an u64 into an usize. For 32 bit architectures, the function fails on overflow.
-    pub fn read_usize(&mut self) -> Result<usize, SavefileError> {
-        if let Ok(val) = TryFrom::try_from(self.reader.read_u64::<LittleEndian>()?) {
-            Ok(val)
-        } else {
-            Err(SavefileError::SizeOverflow)
-        }
-    }
+
     /// Reads a 64 bit length followed by an utf8 encoded string. Fails if data is not valid utf8
     pub fn read_string(&mut self) -> Result<String, SavefileError> {
-        let l = self.read_usize()?;
+        let l = self.read_usize_packed()?;
         #[cfg(feature = "size_sanity_checks")]
         {
             if l > 1_000_000 {
@@ -2187,10 +2419,12 @@ impl<TR: Read> Deserializer<'_, TR> {
         version: u32,
         expected_schema: Option<impl FnOnce(u32) -> Schema>,
     ) -> Result<T, SavefileError> {
-        let mut head: [u8; 9] = [0u8; 9];
+        let mut head: [u8; MAGIC.len()] = [0u8; MAGIC.len()];
         reader.read_exact(&mut head)?;
 
-        if head[..] != ("savefile\0".to_string().into_bytes())[..] {
+
+
+        if head[..] != (MAGIC.to_string().into_bytes())[..] {
             return Err(SavefileError::GeneralError {
                 msg: "File is not in new savefile-format.".into(),
             });
@@ -4020,7 +4254,7 @@ impl Serialize for Variant {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.name)?;
         serializer.write_u8(self.discriminant)?;
-        serializer.write_usize(self.fields.len())?;
+        serializer.write_usize_packed(self.fields.len())?;
         for field in &self.fields {
             field.serialize(serializer)?;
         }
@@ -4035,7 +4269,7 @@ impl Deserialize for Variant {
             name: deserializer.read_string()?,
             discriminant: deserializer.read_u8()?,
             fields: {
-                let l = deserializer.read_usize()?;
+                let l = deserializer.read_usize_packed()?;
                 let mut ret = Vec::new();
                 for _ in 0..l {
                     ret.push(Field {
@@ -4055,7 +4289,7 @@ impl Deserialize for Variant {
 }
 impl Serialize for SchemaArray {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.count)?;
+        serializer.write_usize_packed(self.count)?;
         self.item_type.serialize(serializer)?;
         Ok(())
     }
@@ -4063,7 +4297,7 @@ impl Serialize for SchemaArray {
 impl Packed for SchemaArray {}
 impl Deserialize for SchemaArray {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let count = deserializer.read_usize()?;
+        let count = deserializer.read_usize_packed()?;
         let item_type = Box::new(Schema::deserialize(deserializer)?);
         Ok(SchemaArray { count, item_type })
     }
@@ -4082,7 +4316,7 @@ impl WithSchema for SchemaStruct {
 impl Serialize for SchemaStruct {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
-        serializer.write_usize(self.fields.len())?;
+        serializer.write_usize_packed(self.fields.len())?;
         self.size.serialize(serializer)?;
         self.alignment.serialize(serializer)?;
         for field in &self.fields {
@@ -4095,7 +4329,7 @@ impl Packed for SchemaStruct {}
 impl Deserialize for SchemaStruct {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         Ok(SchemaStruct {
             dbg_name,
             size: if deserializer.file_version > 0 {
@@ -4221,7 +4455,7 @@ impl WithSchema for SchemaEnum {
 impl Serialize for SchemaEnum {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_string(&self.dbg_name)?;
-        serializer.write_usize(self.variants.len())?;
+        serializer.write_usize_packed(self.variants.len())?;
         for var in &self.variants {
             var.serialize(serializer)?;
         }
@@ -4236,7 +4470,7 @@ impl Packed for SchemaEnum {}
 impl Deserialize for SchemaEnum {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let dbg_name = deserializer.read_string()?;
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret = Vec::new();
         for _ in 0..l {
             ret.push(Variant::deserialize(deserializer)?);
@@ -4470,7 +4704,7 @@ impl Serialize for Schema {
             }
             Schema::Recursion(depth) => {
                 serializer.write_u8(16)?;
-                serializer.write_usize(*depth)?;
+                serializer.write_usize_packed(*depth)?;
                 Ok(())
             }
             Schema::StdIoError => {
@@ -5043,7 +5277,7 @@ impl<K: WithSchema + 'static> WithSchema for BTreeSet<K> {
 }
 impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.len())?;
+        serializer.write_usize_packed(self.len())?;
         for item in self {
             item.serialize(serializer)?;
         }
@@ -5052,7 +5286,7 @@ impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
 }
 impl<K: Deserialize + 'static + Ord> Deserialize for BTreeSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let cnt = deserializer.read_usize()?;
+        let cnt = deserializer.read_usize_packed()?;
         let mut ret = BTreeSet::new();
         for _ in 0..cnt {
             ret.insert(<_ as Deserialize>::deserialize(deserializer)?);
@@ -5072,7 +5306,7 @@ impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSe
 }
 impl<K: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.len())?;
+        serializer.write_usize_packed(self.len())?;
         for item in self {
             item.serialize(serializer)?;
         }
@@ -5081,7 +5315,7 @@ impl<K: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize for HashSet<
 }
 impl<K: Deserialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher + Default> Deserialize for HashSet<K, S> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let cnt = deserializer.read_usize()?;
+        let cnt = deserializer.read_usize_packed()?;
         let mut ret = HashSet::with_capacity_and_hasher(cnt, S::default());
         for _ in 0..cnt {
             ret.insert(<_ as Deserialize>::deserialize(deserializer)?);
@@ -5121,7 +5355,7 @@ impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash:
     for HashMap<K, V, S>
 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.len())?;
+        serializer.write_usize_packed(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
             v.serialize(serializer)?;
@@ -5134,7 +5368,7 @@ impl<K: Deserialize + Eq + Hash + 'static, V: Deserialize + 'static, S: ::std::h
     for HashMap<K, V, S>
 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret: Self = HashMap::with_capacity_and_hasher(l, Default::default());
         for _ in 0..l {
             ret.insert(K::deserialize(deserializer)?, V::deserialize(deserializer)?);
@@ -5262,7 +5496,7 @@ impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash:
     for IndexMap<K, V, S>
 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.len())?;
+        serializer.write_usize_packed(self.len())?;
         for (k, v) in self.iter() {
             k.serialize(serializer)?;
             v.serialize(serializer)?;
@@ -5274,7 +5508,7 @@ impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash:
 #[cfg(feature = "indexmap")]
 impl<K: Deserialize + Eq + Hash + 'static, V: Deserialize + 'static> Deserialize for IndexMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret = IndexMap::with_capacity(l);
         for _ in 0..l {
             ret.insert(K::deserialize(deserializer)?, V::deserialize(deserializer)?);
@@ -5327,7 +5561,7 @@ impl<K: WithSchema + Eq + Hash + 'static, S: ::std::hash::BuildHasher> WithSchem
 #[cfg(feature = "indexmap")]
 impl<K: Serialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.len())?;
+        serializer.write_usize_packed(self.len())?;
         for k in self.iter() {
             k.serialize(serializer)?;
         }
@@ -5338,7 +5572,7 @@ impl<K: Serialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher> Serialize 
 #[cfg(feature = "indexmap")]
 impl<K: Deserialize + Eq + Hash + 'static> Deserialize for IndexSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret = IndexSet::with_capacity(l);
         for _ in 0..l {
             ret.insert(K::deserialize(deserializer)?);
@@ -5760,7 +5994,7 @@ impl Introspect for bit_vec::BitVec {
 impl Serialize for bit_vec::BitVec<u32> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
-        serializer.write_usize(l)?;
+        serializer.write_usize_packed(l)?;
         let storage = self.storage();
         let rawbytes_ptr = storage.as_ptr() as *const u8;
         let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
@@ -5776,7 +6010,7 @@ impl Packed for bit_vec::BitVec<u32> {}
 #[cfg(feature = "bit-vec")]
 impl Deserialize for bit_vec::BitVec<u32> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let numbits = deserializer.read_usize()?;
+        let numbits = deserializer.read_usize_packed()?;
         let mut numbytes = deserializer.read_usize()?;
         if numbytes & (1 << 63) != 0 {
             //New format
@@ -5926,7 +6160,7 @@ impl Introspect for bit_vec08::BitVec {
 impl Serialize for bit_vec08::BitVec<u32> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
-        serializer.write_usize(l)?;
+        serializer.write_usize_packed(l)?;
         let storage = self.storage();
         let rawbytes_ptr = storage.as_ptr() as *const u8;
         let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
@@ -5942,7 +6176,7 @@ impl Packed for bit_vec08::BitVec<u32> {}
 #[cfg(feature = "bit-vec08")]
 impl Deserialize for bit_vec08::BitVec<u32> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let numbits = deserializer.read_usize()?;
+        let numbits = deserializer.read_usize_packed()?;
         let mut numbytes = deserializer.read_usize()?;
         if numbytes & (1 << 63) != 0 {
             //New format
@@ -6067,7 +6301,7 @@ impl<T: WithSchema + 'static> WithSchema for BinaryHeap<T> {
 impl<T: Serialize + Ord + 'static> Serialize for BinaryHeap<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
-        serializer.write_usize(l)?;
+        serializer.write_usize_packed(l)?;
         for item in self.iter() {
             item.serialize(serializer)?
         }
@@ -6076,7 +6310,7 @@ impl<T: Serialize + Ord + 'static> Serialize for BinaryHeap<T> {
 }
 impl<T: Deserialize + Ord + 'static> Deserialize for BinaryHeap<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret = BinaryHeap::with_capacity(l);
         for _ in 0..l {
             ret.push(T::deserialize(deserializer)?);
@@ -6129,7 +6363,7 @@ where
 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
-        serializer.write_usize(l)?;
+        serializer.write_usize_packed(l)?;
         for item in self.iter() {
             item.serialize(serializer)?
         }
@@ -6142,7 +6376,7 @@ where
     T::Item: Deserialize,
 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         let mut ret = Self::with_capacity(l);
         for _ in 0..l {
             ret.push(T::Item::deserialize(deserializer)?);
@@ -6156,7 +6390,7 @@ fn regular_serialize_vec<T: Serialize>(
     serializer: &mut Serializer<impl Write>,
 ) -> Result<(), SavefileError> {
     let l = items.len();
-    serializer.write_usize(l)?;
+    serializer.write_usize_packed(l)?;
     if std::mem::size_of::<T>() == 0 {
         return Ok(());
     }
@@ -6277,7 +6511,7 @@ impl<T: Serialize + Packed + 'static> Serialize for Box<[T]> {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
-                serializer.write_usize(l)?;
+                serializer.write_usize_packed(l)?;
                 serializer.write_buf(std::slice::from_raw_parts(
                     (*self).as_ptr() as *const u8,
                     std::mem::size_of::<T>() * l,
@@ -6295,7 +6529,7 @@ impl<T: Serialize + Packed + 'static> Serialize for Arc<[T]> {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
-                serializer.write_usize(l)?;
+                serializer.write_usize_packed(l)?;
                 serializer.write_buf(std::slice::from_raw_parts(
                     (*self).as_ptr() as *const u8,
                     std::mem::size_of::<T>() * l,
@@ -6325,7 +6559,7 @@ impl WithSchema for &'_ str {
 impl Serialize for &'_ str {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
-        serializer.write_usize(l)?;
+        serializer.write_usize_packed(l)?;
         serializer.write_buf(self.as_bytes())
     }
 }
@@ -6346,7 +6580,7 @@ impl<T: Serialize + Packed + 'static> Serialize for &'_ [T] {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
-                serializer.write_usize(l)?;
+                serializer.write_usize_packed(l)?;
                 #[allow(clippy::manual_slice_size_calculation)] // I feel this way is clearer
                 serializer.write_buf(std::slice::from_raw_parts(
                     self.as_ptr() as *const u8,
@@ -6489,7 +6723,7 @@ impl<T: Serialize + Packed + 'static> Serialize for Vec<T> {
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
-                serializer.write_usize(l)?;
+                serializer.write_usize_packed(l)?;
                 serializer.write_buf(std::slice::from_raw_parts(
                     self.as_ptr() as *const u8,
                     std::mem::size_of::<T>() * l,
@@ -6502,7 +6736,7 @@ impl<T: Serialize + Packed + 'static> Serialize for Vec<T> {
 fn regular_deserialize_vec<T: Deserialize>(
     deserializer: &mut Deserializer<impl Read>,
 ) -> Result<Vec<T>, SavefileError> {
-    let l = deserializer.read_usize()?;
+    let l = deserializer.read_usize_packed()?;
 
     #[cfg(feature = "size_sanity_checks")]
     {
@@ -6528,7 +6762,7 @@ impl<T: Deserialize + Packed + 'static> Deserialize for Vec<T> {
 
             let align = mem::align_of::<T>();
             let elem_size = mem::size_of::<T>();
-            let num_elems = deserializer.read_usize()?;
+            let num_elems = deserializer.read_usize_packed()?;
 
             if num_elems == 0 {
                 return Ok(Vec::new());
@@ -6614,7 +6848,7 @@ fn regular_serialize_vecdeque<T: Serialize>(
     serializer: &mut Serializer<impl Write>,
 ) -> Result<(), SavefileError> {
     let l = item.len();
-    serializer.write_usize(l)?;
+    serializer.write_usize_packed(l)?;
     for item in item.iter() {
         item.serialize(serializer)?
     }
@@ -6624,7 +6858,7 @@ fn regular_serialize_vecdeque<T: Serialize>(
 fn regular_deserialize_vecdeque<T: Deserialize>(
     deserializer: &mut Deserializer<impl Read>,
 ) -> Result<VecDeque<T>, SavefileError> {
-    let l = deserializer.read_usize()?;
+    let l = deserializer.read_usize_packed()?;
     let mut ret = VecDeque::with_capacity(l);
     for _ in 0..l {
         ret.push_back(T::deserialize(deserializer)?);
@@ -7145,7 +7379,7 @@ impl<const C: usize> Serialize for arrayvec::ArrayString<C> {
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> Deserialize for arrayvec::ArrayString<C> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         if l > C {
             return Err(SavefileError::ArrayvecCapacityError {
                 msg: format!("Deserialized data had length {}, but ArrayString capacity is {}", l, C),
@@ -7215,7 +7449,7 @@ impl<V: Serialize + Packed, const C: usize> Serialize for arrayvec::ArrayVec<V, 
                 regular_serialize_vec(self, serializer)
             } else {
                 let l = self.len();
-                serializer.write_usize(l)?;
+                serializer.write_usize_packed(l)?;
                 serializer.write_buf(std::slice::from_raw_parts(
                     self.as_ptr() as *const u8,
                     std::mem::size_of::<V>() * l,
@@ -7229,7 +7463,7 @@ impl<V: Serialize + Packed, const C: usize> Serialize for arrayvec::ArrayVec<V, 
 impl<V: Deserialize + Packed, const C: usize> Deserialize for arrayvec::ArrayVec<V, C> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<arrayvec::ArrayVec<V, C>, SavefileError> {
         let mut ret = arrayvec::ArrayVec::new();
-        let l = deserializer.read_usize()?;
+        let l = deserializer.read_usize_packed()?;
         if l > ret.capacity() {
             return Err(SavefileError::ArrayvecCapacityError {
                 msg: format!("ArrayVec with capacity {} can't hold {} items", ret.capacity(), l),
@@ -7879,22 +8113,22 @@ impl Deserialize for i8 {
 }
 impl Serialize for u16 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_u16(*self)
+        serializer.write_u16_packed(*self)
     }
 }
 impl Deserialize for u16 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_u16()
+        deserializer.read_u16_packed()
     }
 }
 impl Serialize for i16 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_i16(*self)
+        serializer.write_i16_packed(*self)
     }
 }
 impl Deserialize for i16 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_i16()
+        deserializer.read_i16_packed()
     }
 }
 
@@ -7976,12 +8210,12 @@ impl Deserialize for i128 {
 
 impl Serialize for usize {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(*self)
+        serializer.write_usize_packed(*self)
     }
 }
 impl Deserialize for usize {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_usize()
+        deserializer.read_usize_packed()
     }
 }
 impl Serialize for isize {
@@ -8091,12 +8325,12 @@ impl Deserialize for AtomicI64 {
 
 impl Serialize for AtomicUsize {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_usize(self.load(Ordering::SeqCst))
+        serializer.write_usize_packed(self.load(Ordering::SeqCst))
     }
 }
 impl Deserialize for AtomicUsize {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        Ok(AtomicUsize::new(deserializer.read_usize()?))
+        Ok(AtomicUsize::new(deserializer.read_usize_packed()?))
     }
 }
 impl Serialize for AtomicIsize {
