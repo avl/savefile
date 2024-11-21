@@ -1,6 +1,6 @@
 [package]
 name = "savefile-abi"
-version = "0.18.5"
+version = "0.18.5-beta1"
 edition = "2021"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile-abi/"
@@ -17,8 +17,8 @@ keywords = ["dylib", "dlopen", "ffi"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-savefile = { path="../savefile", version = "=0.18.5" }
-savefile-derive = { path="../savefile-derive", version = "=0.18.5" }
+savefile = { path="../savefile", version = "=0.18.5-beta1" }
+savefile-derive = { path="../savefile-derive", version = "=0.18.5-beta1" }
 byteorder = "1.4"
 libloading = "0.8"
 

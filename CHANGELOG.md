@@ -2,7 +2,7 @@
 
 This file contains information about changes in each version of savefile.
 
-## 0.18.5
+## 0.18.5-beta1
 
 Savefile has gained experimental support for tighter packed data!
 
