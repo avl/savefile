@@ -1893,6 +1893,7 @@ pub(super) fn generate_method_definitions(
             let mut serializer = Serializer {
                 writer: &mut __savefile_internal_data,
                 file_version: self.template.effective_version,
+                ephemeral_state: Default::default(),
             };
             serializer.write_u32(self.template.effective_version).unwrap();
             #(#caller_arg_serializers)*
@@ -1976,6 +1977,7 @@ pub(super) fn generate_method_definitions(
             let mut serializer = Serializer {
                 writer: &mut __savefile_internal_data,
                 file_version: #version,
+                ephemeral_state: Default::default(),
             };
 
             #return_ser_temp
