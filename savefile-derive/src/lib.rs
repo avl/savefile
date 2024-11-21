@@ -221,10 +221,15 @@ mod savefile_abi;
 static HAVE_EMITTED_ASSERT_TIGHT: AtomicBool = AtomicBool::new(false);
 fn assert_tight() -> TokenStream {
     if HAVE_EMITTED_ASSERT_TIGHT.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+        let tight = cfg!(feature="tight");
         quote! {
             const _ASSERT_TIGHT:() = {
-                if cfg!(feature="tight") != savefile::TIGHT {
-                    panic!("The feature 'tight' must be enabled in both savefile and savefile_derive, or in neither.");
+                if #tight != savefile::TIGHT {
+                    if savefile::TIGHT {
+                        panic!("The feature 'tight' must be enabled in both savefile and savefile_derive, or in neither. It is only enabled in savefile.");
+                    } else {
+                        panic!("The feature 'tight' must be enabled in both savefile and savefile_derive, or in neither. It is only enabled in savefile-derive.");
+                    }
                 }
             };
         }
