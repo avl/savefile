@@ -1853,6 +1853,15 @@ const MAGIC: &'static str = "savefile\0";
 #[cfg(feature = "tight")]
 const MAGIC: &'static str = "";
 
+/// True if the 'tight' feature has been enabled.
+/// This changes the binary format!
+#[cfg(feature="tight")]
+pub const TIGHT:bool = true;
+/// True if the 'tight' feature has been enabled.
+/// This changes the binary format!
+#[cfg(not(feature="tight"))]
+pub const TIGHT:bool = false;
+
 impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// Get ephemeral state of type R, for type T
     pub fn get_state<T: 'static, R: Default + 'static>(&mut self) -> &mut R {
@@ -1959,8 +1968,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     #[allow(unused)]
     #[inline(always)]
     fn write_packed_i64_impl(&mut self, val: i64) -> Result<(), SavefileError> {
-        let val = val as u64;
-        let val = val.rotate_left(1);
+        let val = map_i64_to_u64(val);
         self.write_packed_u64_impl(val)
     }
 
@@ -2018,10 +2026,14 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         full: &T,
         t1: &T1,
         t2: &T2,
+        #[allow(unused)]
         version: u32,
     ) -> Result<(), SavefileError> {
-        assert!(T1::repr_c_optimization_safe(version).is_yes());
-        assert!(T2::repr_c_optimization_safe(version).is_yes());
+        #[cfg(not(feature="tight"))]
+        {
+            assert!(T1::repr_c_optimization_safe(version).is_yes());
+            assert!(T2::repr_c_optimization_safe(version).is_yes());
+        }
 
         let base = full as *const T as *const u8;
         let totlen = std::mem::size_of::<T>();
@@ -2080,6 +2092,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         Ok(())
     }
 
+
     #[inline(always)]
     fn save_impl<T: Serialize>(
         writer: &mut W,
@@ -2093,12 +2106,12 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 
         writer.write_all(&header)?; //9
 
-        if !cfg!(feature="tight") {
-            writer.write_u16::<LittleEndian>(
-                lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION), /*savefile format version*/
-            )?;
-            writer.write_u32::<LittleEndian>(version)?;
-        }
+
+        writer.write_u16::<LittleEndian>(
+            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION), /*savefile format version*/
+        )?;
+        writer.write_u32::<LittleEndian>(version)?;
+
         // 9 + 2 + 4 = 15
         {
             if with_compression {
@@ -2204,7 +2217,9 @@ impl<TR: Read> Deserializer<'_, TR> {
     }
     /// Reads a little endian u32
     pub fn read_u32_packed(&mut self) -> Result<u32, SavefileError> {
-        Ok(self.read_packed_u64_impl()? as u32)
+        let t = self.read_packed_u64_impl()?;
+        dbg!(&t);
+        Ok(t as u32)
     }
     /// Reads a little endian u64
     pub fn read_u64_packed(&mut self) -> Result<u64, SavefileError> {
@@ -2350,7 +2365,7 @@ impl<TR: Read> Deserializer<'_, TR> {
     #[inline(always)]
     fn read_packed_i64_impl(&mut self) -> Result<i64, SavefileError> {
         let u = self.read_packed_u64_impl()?;
-        Ok(u.rotate_right(1) as i64)
+        Ok(map_u64_to_i64(u))
     }
 
     /// Reads a u8 and return true if equal to 1
@@ -2471,7 +2486,7 @@ impl<TR: Read> Deserializer<'_, TR> {
         let savefile_lib_version;
         let file_ver;
         let with_compression;
-        if !cfg!(feature = "tight") {
+        {
             savefile_lib_version = reader.read_u16::<LittleEndian>()?;
             if savefile_lib_version > CURRENT_SAVEFILE_LIB_VERSION {
                 return Err(SavefileError::GeneralError {
@@ -2488,11 +2503,14 @@ impl<TR: Read> Deserializer<'_, TR> {
                     ),
                 });
             }
-            with_compression = reader.read_u8()? != 0;
-        } else {
-            savefile_lib_version = CURRENT_SAVEFILE_LIB_VERSION;
-            with_compression = false;
-            file_ver = version;
+            #[cfg(not(feature="tight"))]
+            {
+                with_compression = reader.read_u8()? != 0;
+            }
+            #[cfg(feature="tight")]
+            {
+                with_compression = false;
+            }
         }
 
         if with_compression {
@@ -8227,7 +8245,7 @@ impl Deserialize for i64 {
 }
 impl Deserialize for char {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        let uc = deserializer.read_u32()?;
+        let uc = deserializer.read_u32_packed()?;
         match uc.try_into() {
             Ok(x) => Ok(x),
             Err(_) => Err(SavefileError::InvalidChar),

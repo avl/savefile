@@ -3,6 +3,8 @@ name = "savefile-abi-min-lib"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+tight = ["savefile/tight", "savefile-derive/tight"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["derive"], default-features = false }

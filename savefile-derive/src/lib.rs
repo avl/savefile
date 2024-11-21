@@ -27,6 +27,7 @@ use common::{
     check_is_remove, compile_time_check_reprc, compile_time_size, get_extra_where_clauses, parse_attr_tag,
     path_to_string, FieldInfo,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use proc_macro2::TokenStream;
 use proc_macro2::{Span, TokenTree};
 use quote::ToTokens;
@@ -216,6 +217,22 @@ mod serialize;
 mod deserialize;
 
 mod savefile_abi;
+
+static HAVE_EMITTED_ASSERT_TIGHT: AtomicBool = AtomicBool::new(false);
+fn assert_tight() -> TokenStream {
+    if HAVE_EMITTED_ASSERT_TIGHT.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+        quote! {
+            const _ASSERT_TIGHT:() = {
+                if cfg!(feature="tight") != savefile::TIGHT {
+                    panic!("The feature 'tight' must be enabled in both savefile and savefile_derive, or in neither.");
+                }
+            };
+        }
+    }
+    else {
+        quote!()
+    }
+}
 
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -749,6 +766,7 @@ pub fn savefile_abi_exportable(
     //let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
     let input = TokenStream::from(input);
     let extra_definitions: Vec<_> = extra_definitions.values().map(|(_, x)| x).collect();
+    let assert_tight = assert_tight();
     let expanded = quote! {
         #[allow(clippy::double_comparisons)]
         #[allow(clippy::needless_question_mark)]
@@ -760,6 +778,8 @@ pub fn savefile_abi_exportable(
         #[allow(non_local_definitions)]
         const _:() = {
             #uses
+
+            #assert_tight
 
             #(#extra_definitions)*
 
@@ -814,12 +834,16 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         Span::call_site(),
     );
 
+    let assert_tight = assert_tight();
     let expanded = quote! {
         #[allow(clippy::needless_question_mark)]
         #[allow(clippy::double_comparisons)]
         #[allow(non_local_definitions)]
         const _:() = {
             #uses
+
+            #assert_tight
+
             #[automatically_derived]
             unsafe impl AbiExportableImplementation for #implementing_type where #implementing_type: Default + #trait_type {
                 const ABI_ENTRY: unsafe extern "C" fn (AbiProtocol) = #abi_entry;
@@ -867,6 +891,8 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let r = derive_reprc_new(input);
 
+    let assert_tight = assert_tight();
+
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
     let expanded = quote! {
@@ -883,6 +909,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             extern crate savefile as _savefile;
             use std::mem::MaybeUninit;
             use savefile::prelude::Packed;
+            #assert_tight
 
             #w
             #r
@@ -920,6 +947,8 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
+    let assert_tight = assert_tight();
+
     let expanded = quote! {
         #s
 
@@ -932,6 +961,8 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
             extern crate savefile as _savefile;
             use std::mem::MaybeUninit;
             use savefile::prelude::Packed;
+
+            #assert_tight
 
             #w
             #r

@@ -1,6 +1,6 @@
 [package]
 name = "savefile-abi"
-version = "0.18.4"
+version = "0.18.5"
 edition = "2021"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 documentation = "https://docs.rs/savefile-abi/"
@@ -17,8 +17,8 @@ keywords = ["dylib", "dlopen", "ffi"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-savefile = { path="../savefile", version = "=0.18.4" }
-savefile-derive = { path="../savefile-derive", version = "=0.18.4" }
+savefile = { path="../savefile", version = "=0.18.5" }
+savefile-derive = { path="../savefile-derive", version = "=0.18.5" }
 byteorder = "1.4"
 libloading = "0.8"
 
@@ -26,6 +26,7 @@ libloading = "0.8"
 # Rust version is > 1.78
 # Automatically set by build.rs
 rust1_78=[]
+tight = ["savefile/tight", "savefile-derive/tight"]
 
 [dev-dependencies]
 async-trait = "0.1"

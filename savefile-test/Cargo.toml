@@ -11,10 +11,11 @@ default = ["external_benchmarks"]
 # This is mostly to be able to run fuzzers against the deserializers without them being guaranteed to easily find out-of-memory crashes.
 external_benchmarks = []
 nightly=["savefile/nightly"]
+tight=["savefile/tight", "savefile-derive/tight"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive", "quickcheck", "nalgebra"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.18.4" }
+savefile-derive = { path = "../savefile-derive", version = "=0.18.5" }
 savefile-abi = { path = "../savefile-abi" }
 bit-vec = "0.8"
 arrayvec="0.7"

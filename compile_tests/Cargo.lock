@@ -488,7 +488,7 @@ checksum = "e86697c916019a8588c99b5fac3cead74ec0b4b819707a682fd4d23fa0ce1ba1"
 
 [[package]]
 name = "savefile"
-version = "0.18.4"
+version = "0.18.5"
 dependencies = [
  "arrayvec",
  "bit-set 0.5.3",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-abi"
-version = "0.18.4"
+version = "0.18.5"
 dependencies = [
  "byteorder",
  "libloading",
@@ -517,7 +517,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.18.4"
+version = "0.18.5"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",

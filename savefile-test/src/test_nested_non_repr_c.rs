@@ -19,6 +19,7 @@ struct Inner {
 
 #[test]
 #[cfg(debug_assertions)] //This test only works in debug builds
+#[cfg(not(feature="tight"))]
 fn test_misaligned1() {
     assert_eq!(unsafe { Inner::repr_c_optimization_safe(0).is_yes() }, false);
     assert_eq!(unsafe { CorrectlyAligned::repr_c_optimization_safe(0).is_yes() }, true);
@@ -39,6 +40,7 @@ struct Inner2 {
 
 #[test]
 #[cfg(debug_assertions)] //This test only works in debug builds
+#[cfg(not(feature="tight"))]
 fn test_misaligned2() {
     assert_eq!(unsafe { Inner2::repr_c_optimization_safe(0).is_yes() }, false);
     assert_eq!(unsafe { CorrectlyAligned::repr_c_optimization_safe(0).is_yes() }, true);

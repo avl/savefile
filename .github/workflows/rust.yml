@@ -30,7 +30,9 @@ jobs:
     - name: Build (stable)
       run: cargo +stable build --workspace 
     - name: Run tests (stable)
-      run: cargo +stable test --workspace 
+      run: cargo +stable test --workspace
+    - name: Run tests (tight/stable)
+      run: cargo +stable test --workspace --feature=tight
     - name: Build min-deps (stable)
       run: cargo +stable build -p savefile-min-build
     - name: compile_tests (stable)

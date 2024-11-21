@@ -11,9 +11,11 @@ savefile-abi = { path = "../savefile-abi" }
 savefile-derive = {path = "../savefile-derive"}
 async-trait = "0.1"
 
+
 [dev-dependencies]
 compiletest_rs = { version = "0.10", features = [ "tmp" ] }
 
 [features]
 rustc = ["compiletest_rs/rustc"]
 assembly = []
+tight = ["savefile/tight", "savefile-derive/tight"]
