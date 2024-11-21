@@ -104,6 +104,27 @@ pub fn assert_roundtrip_by<E: Serialize + Deserialize + Debug>(sample: E, comp: 
     assert_eq!(f.position() as usize, f_internal_size);
 }
 
+pub fn assert_roundtrip_size<E: Serialize + Deserialize + Debug + PartialEq>(sample: E, version: u32, expected_size: usize) {
+    let mut f = Vec::new();
+    {
+        let mut bufw = BufWriter::new(&mut f);
+        {
+            Serializer::bare_serialize(&mut bufw, version, &sample).unwrap();
+        }
+        bufw.flush().unwrap();
+    }
+
+    let mut cursor = Cursor::new(&f);
+    {
+        let roundtrip_result = Deserializer::bare_deserialize(&mut cursor, version).unwrap();
+        assert_eq!(sample, roundtrip_result);
+    }
+
+    let f_internal_size = cursor.get_ref().len();
+    assert_eq!(f_internal_size, expected_size);
+    assert_eq!(cursor.position() as usize, f_internal_size);
+}
+
 pub fn assert_roundtrip_debug<E: Serialize + Deserialize + Debug>(sample: E) {
     let sample_debug_string = format!("{:?}", sample);
     let round_tripped = roundtrip(sample);
@@ -872,7 +893,7 @@ pub fn test_terrain() {
 use arrayvec::ArrayString;
 use quickcheck::{Arbitrary, Gen};
 use rustc_hash::{FxHashMap, FxHashSet};
-use savefile::{diff_schema, save_compressed, VecOrStringLayout};
+use savefile::{diff_schema, save_compressed, VecOrStringLayout, TIGHT};
 use savefile_abi::AbiConnection;
 use smallvec::alloc::collections::BTreeMap;
 use std::borrow::Cow;
@@ -992,7 +1013,7 @@ pub fn test_crypto1() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_compressed_big() {
     let mut zeros = Vec::new();
     for _ in 0..100_000 {
@@ -1009,7 +1030,7 @@ pub fn test_compressed_big() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_compressed_small() {
     let input = 42u8;
     let mut buf = Vec::new();
@@ -1020,7 +1041,7 @@ pub fn test_compressed_small() {
     assert_eq!(input, roundtripped);
 }
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_compressed_smallish() {
     let input = 42u64;
     let mut buf = Vec::new();
@@ -1032,7 +1053,7 @@ pub fn test_compressed_smallish() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_crypto_big1() {
     use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
@@ -1058,7 +1079,7 @@ pub fn test_crypto_big1() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_crypto_big2() {
     use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
@@ -1095,7 +1116,7 @@ pub fn test_crypto_big2() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_crypto_big3() {
     use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
@@ -1132,7 +1153,7 @@ pub fn test_crypto_big3() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_crypto_big4() {
     use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
@@ -1168,7 +1189,7 @@ pub fn test_crypto_big4() {
     }
 }
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_crypto_big5() {
     use byteorder::LittleEndian;
     use byteorder::ReadBytesExt;
@@ -1239,7 +1260,7 @@ pub fn test_crypto_big5() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_encrypted_file1() {
     save_encrypted_file("test.bin", 1, &47usize, "mypassword").unwrap();
     let result: usize = load_encrypted_file("test.bin", 1, "mypassword").unwrap();
@@ -1247,7 +1268,7 @@ pub fn test_encrypted_file1() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_encrypted_file_bad_password() {
     save_encrypted_file("test2.bin", 1, &47usize, "mypassword").unwrap();
     let result = load_encrypted_file::<usize, _>("test2.bin", 1, "mypassword2");
@@ -1255,7 +1276,7 @@ pub fn test_encrypted_file_bad_password() {
 }
 
 #[test]
-#[cfg(not(miri))]
+#[cfg(all(not(miri),not(feature="tight")))]
 pub fn test_decrypt_junk_file() {
     {
         use byteorder::WriteBytesExt;
@@ -1703,6 +1724,7 @@ pub enum FastEnum {
 }
 
 #[test]
+#[cfg(not(feature="tight"))]
 fn test_enum_optimizations() {
     assert_eq!(unsafe { FastEnum::repr_c_optimization_safe(0).is_yes() }, true);
 }
@@ -1741,7 +1763,9 @@ pub enum GoodEnum {
     Variant1(u8),
     Variant2(u8),
 }
+
 #[test]
+#[cfg(not(feature="tight"))]
 fn test_good_enum() {
     assert!(unsafe { GoodEnum::repr_c_optimization_safe(0) }.is_yes())
 }
@@ -1791,4 +1815,25 @@ fn test_vector() {
         nalgebra::Point3::new(4.0, 5.5, 6.0),
     ];
     assert_roundtrip(a);
+}
+
+#[test]
+#[cfg(feature="tight")]
+fn test_tight() {
+    assert_roundtrip_size(1u32, 1, 1);
+    assert_roundtrip_size(0u32, 1, 1);
+    assert_roundtrip_size(u16::MAX, 1, 3);
+    assert_roundtrip_size(u32::MAX, 1, 5);
+    assert_roundtrip_size(u64::MAX, 1, 10);
+
+    assert_roundtrip_size(0usize, 1, 1);
+    assert_roundtrip_size(127usize, 1, 1);
+    assert_roundtrip_size(1000usize, 1, 2);
+
+    assert_roundtrip_size(-1i32, 1, 1);
+    assert_roundtrip_size(-63i32, 1, 1);
+    assert_roundtrip_size(-250i32, 1, 2);
+    assert_roundtrip_size(i16::MIN, 1, 3);
+    assert_roundtrip_size(i32::MIN, 1, 5);
+    assert_roundtrip_size(i64::MIN, 1, 10);
 }

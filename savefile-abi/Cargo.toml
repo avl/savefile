@@ -26,6 +26,7 @@ libloading = "0.8"
 # Rust version is > 1.78
 # Automatically set by build.rs
 rust1_78=[]
+tight = ["savefile/tight", "savefile-derive/tight"]
 
 [dev-dependencies]
 async-trait = "0.1"

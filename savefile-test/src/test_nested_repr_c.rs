@@ -1,5 +1,6 @@
 #![cfg(test)]
 use savefile::prelude::*;
+use savefile::TIGHT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Savefile)]
 #[savefile_unsafe_and_fast]
@@ -44,10 +45,17 @@ fn test_not_raw_memcpy2() {
     let is_compressed = 1;
     let misaligner = 1;
     let inner = 4;
-    assert_eq!(
-        f_internal_size,
-        version + vec_overhead + misaligner + inner + savefile_header + savefile_lib_version + is_compressed
-    ); //3 bytes padding also because of Packed-optimization
+    if !TIGHT {
+        assert_eq!(
+            f_internal_size,
+            version + vec_overhead + misaligner + inner + savefile_header + savefile_lib_version + is_compressed
+        ); //3 bytes padding also because of Packed-optimization
+    } else {
+        assert_eq!(
+            f_internal_size,
+            9);
+
+    }
 }
 
 #[derive(Savefile, Clone, Copy)]
@@ -61,6 +69,8 @@ struct MyUnitStruct {}
 struct UnnamedFieldsStruct(usize);
 
 #[test]
+#[cfg(not(feature="tight"))]
+
 fn test_various_types_for_reprc() {
     assert_eq!(unsafe { <() as Packed>::repr_c_optimization_safe(0).is_yes() }, true);
     assert_eq!(unsafe { <u8>::repr_c_optimization_safe(0) }.is_yes(), true);

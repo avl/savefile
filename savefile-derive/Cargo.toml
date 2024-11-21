@@ -19,6 +19,7 @@ edition = "2021"
 [features]
 default = []
 nightly = []
+tight = []
 
 [lib]
 proc-macro = true

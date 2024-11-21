@@ -398,6 +398,12 @@ pub(crate) fn compile_time_size(typ: &Type) -> Option<(usize /*size*/, usize /*a
         _ => None,
     }
 }
+#[cfg(feature="tight")]
+pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
+    false
+}
+
+#[cfg(not(feature="tight"))]
 pub(crate) fn compile_time_check_reprc(typ: &Type) -> bool {
     match typ {
         Type::Path(p) => {

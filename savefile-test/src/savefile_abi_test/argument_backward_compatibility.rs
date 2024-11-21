@@ -2,7 +2,7 @@ use crate::savefile_abi_test::argument_backward_compatibility::v1::{ArgInterface
 use crate::savefile_abi_test::argument_backward_compatibility::v2::{ArgInterfaceV2, Implementation2};
 use crate::savefile_abi_test::basic_abi_tests::CowSmuggler;
 use savefile::prelude::AbiRemoved;
-use savefile::{get_schema, SavefileError, WithSchemaContext};
+use savefile::{get_schema, SavefileError, WithSchemaContext, TIGHT};
 use savefile_abi::RawAbiCallResult::AbiError;
 use savefile_abi::{verify_compatiblity, AbiConnection, AbiExportable};
 use savefile_derive::Savefile;
@@ -86,6 +86,7 @@ mod v2 {
     pub struct Implementation2 {}
     impl ArgInterfaceV2 for Implementation2 {
         fn sums(&self, a: ArgArgument, b: ArgArgument) -> u32 {
+            dbg!(&a,&b);
             a.data3 + a.data2 + b.data2 + b.data3
         }
 
@@ -106,7 +107,13 @@ pub fn test_abi_schemas_get_def() {
 #[test]
 #[cfg(not(miri))]
 pub fn test_backward_compatibility() -> Result<(), SavefileError> {
-    verify_compatiblity::<dyn ArgInterfaceV2>("schemas")
+    verify_compatiblity::<dyn ArgInterfaceV2>(
+        if TIGHT {
+            "tight_schemas"
+        } else {
+            "schemas"
+        }
+    )
 }
 
 #[test]
@@ -136,6 +143,7 @@ pub fn test_caller_has_older_version() {
         10
     );
 
+    println!("PHase 2");
     let conn1 = unsafe {
         AbiConnection::<dyn ArgInterfaceV1>::from_boxed_trait_for_test(
             <dyn ArgInterfaceV2 as AbiExportable>::ABI_ENTRY,

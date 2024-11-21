@@ -2,6 +2,7 @@ use rand::Rng;
 use std::hint::black_box;
 #[cfg(feature = "nightly")]
 use test::Bencher;
+use savefile::TIGHT;
 
 mod savefile_test_bad_schema {
     use savefile::prelude::*;
@@ -216,7 +217,9 @@ fn bench_ext_triangle(b: &mut Bencher) {
 #[test]
 fn test_triangle() {
     use savefile::Packed;
-    assert!(unsafe { Triangle::repr_c_optimization_safe(0).is_yes() });
+    if !TIGHT {
+        assert!(unsafe { Triangle::repr_c_optimization_safe(0).is_yes() });
+    }
     let mesh = generate_mesh();
 
     let mut encoded = Vec::new();

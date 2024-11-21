@@ -2,6 +2,16 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.5
+
+Savefile has gained experimental support for tighter packed data!
+
+The main claim-to-fame of savefile is that it is fast. Savefile now gains a disabled-by-default feature
+that changes the binary format to be more space efficient.
+
+This is not expected to be used by the vast majority of savefile's users.
+
+
 ## 0.18.4
 
 Create a separate CHANGELOG.md-file.

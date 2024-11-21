@@ -2,6 +2,7 @@ use crate::assert_roundtrip;
 use savefile::prelude::*;
 use std::fmt::Debug;
 use std::marker::{PhantomData, PhantomPinned};
+use savefile::TIGHT;
 
 #[derive(Savefile, Debug, PartialEq)]
 pub struct ExampleGeneric<T> {
@@ -76,7 +77,9 @@ pub enum ExampleGenericEnum2<T1> {
 pub fn test_generic_example_enum2() {
     let a = ExampleGenericEnum::Value2(42u8);
     assert_roundtrip(a);
-    assert!(unsafe { ExampleGenericEnum2::<u8>::repr_c_optimization_safe(0) }.is_yes());
+    if !TIGHT {
+        assert!(unsafe { ExampleGenericEnum2::<u8>::repr_c_optimization_safe(0) }.is_yes());
+    }
     assert!(unsafe { ExampleGenericEnum2::<u16>::repr_c_optimization_safe(0) }.is_false());
     //Padding
 }
