@@ -1114,6 +1114,8 @@ pub struct Serializer<'a, W: Write> {
     /// If this is < memory_version, we're serializing into an older format.
     /// Serializing into a future format is logically impossible.
     pub file_version: u32,
+    /// State
+    pub ephemeral_state: HashMap<TypeId, Box<dyn Any>>,
 }
 
 /// Object from which bytes to be deserialized are read.
@@ -1849,9 +1851,19 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 #[cfg(not(feature = "tight"))]
 const MAGIC: &'static str = "savefile\0";
 #[cfg(feature = "tight")]
-const MAGIC: &'static str = "\0";
+const MAGIC: &'static str = "";
 
 impl<'a, W: Write + 'a> Serializer<'a, W> {
+    /// Get ephemeral state of type R, for type T
+    pub fn get_state<T: 'static, R: Default + 'static>(&mut self) -> &mut R {
+        let type_id = TypeId::of::<T>();
+        let the_any = self
+            .ephemeral_state
+            .entry(type_id)
+            .or_insert_with(|| Box::new(R::default()));
+
+        the_any.downcast_mut().unwrap()
+    }
     /// Writes a binary little endian u16 to the output
     #[inline(always)]
     pub fn write_u16(&mut self, v: u16) -> Result<(), SavefileError> {
@@ -2062,7 +2074,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// Serialize without any header. Using this means that bare_deserialize must be used to
     /// deserialize. No metadata is sent, not even version.
     pub fn bare_serialize<T: Serialize>(writer: &mut W, file_version: u32, data: &T) -> Result<(), SavefileError> {
-        let mut serializer = Serializer { writer, file_version };
+        let mut serializer = Serializer { writer, file_version, ephemeral_state: Default::default() };
         data.serialize(&mut serializer)?;
         writer.flush()?;
         Ok(())
@@ -2081,13 +2093,18 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 
         writer.write_all(&header)?; //9
 
-        writer.write_u16::<LittleEndian>(
-            lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION), /*savefile format version*/
-        )?;
-        writer.write_u32::<LittleEndian>(version)?;
+        if !cfg!(feature="tight") {
+            writer.write_u16::<LittleEndian>(
+                lib_version_override.unwrap_or(CURRENT_SAVEFILE_LIB_VERSION), /*savefile format version*/
+            )?;
+            writer.write_u32::<LittleEndian>(version)?;
+        }
         // 9 + 2 + 4 = 15
         {
             if with_compression {
+                if cfg!(feature="tight") {
+                    panic!("compression not supported with the 'tight' feature");
+                }
                 writer.write_u8(1)?; //15 + 1 = 16
 
                 #[cfg(feature = "bzip2")]
@@ -2103,7 +2120,8 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 
                     let mut serializer = Serializer {
                         writer: &mut compressed_writer,
-                        file_version: version,
+                        file_version: version, ephemeral_state: Default::default()
+
                     }; //Savefile always serializes most recent version. Only savefile-abi ever writes old formats.
                     data.serialize(&mut serializer)?;
                     compressed_writer.flush()?;
@@ -2114,7 +2132,9 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
                     return Err(SavefileError::CompressionSupportNotCompiledIn);
                 }
             } else {
-                writer.write_u8(0)?;
+                if !cfg!(feature="tight") {
+                    writer.write_u8(0)?;
+                }
                 if let Some(schema) = with_schema {
                     let mut schema_serializer = Serializer::<W>::new_raw(
                         writer,
@@ -2125,7 +2145,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
 
                 let mut serializer = Serializer {
                     writer,
-                    file_version: version,
+                    file_version: version, ephemeral_state: Default::default()
                 };
                 data.serialize(&mut serializer)?;
                 writer.flush()?;
@@ -2138,7 +2158,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
     pub fn new_raw(writer: &mut impl Write, file_version: u32) -> Serializer<impl Write> {
-        Serializer { writer, file_version }
+        Serializer { writer, file_version, ephemeral_state: Default::default() }
     }
 }
 #[cfg(not(feature="tight"))]
@@ -2188,7 +2208,8 @@ impl<TR: Read> Deserializer<'_, TR> {
     }
     /// Reads a little endian u64
     pub fn read_u64_packed(&mut self) -> Result<u64, SavefileError> {
-        Ok(self.read_packed_u64_impl()? as u64)
+        let got = self.read_packed_u64_impl()? as u64;
+        Ok(got)
     }
     /// Reads a little endian i16
     pub fn read_i16_packed(&mut self) -> Result<i16, SavefileError> {
@@ -2218,6 +2239,21 @@ impl<TR: Read> Deserializer<'_, TR> {
             Err(SavefileError::SizeOverflow)
         }
     }
+}
+///
+pub fn map_i64_to_u64(i: i64) -> u64 {
+    if i >= 0 {
+        return (i as u64)<<1;
+    }
+    return ((!i) as u64)<<1 | 1;
+}
+///
+pub fn map_u64_to_i64(i: u64) -> i64 {
+    if i&1 == 1 {
+        let base = (i>>1) as u64;
+        return (!base) as i64;
+    }
+    (i>>1) as i64
 }
 
 impl<TR: Read> Deserializer<'_, TR> {
@@ -2299,6 +2335,7 @@ impl<TR: Read> Deserializer<'_, TR> {
                 val |= (x as u64) << shift;
                 return Ok(val);
             }
+            val |= ((x&127) as u64) << shift;
             shift+= 7;
             if shift > 63 {
                 return Err(SavefileError::GeneralError {
@@ -2307,6 +2344,8 @@ impl<TR: Read> Deserializer<'_, TR> {
             }
         }
     }
+
+
     #[allow(unused)]
     #[inline(always)]
     fn read_packed_i64_impl(&mut self) -> Result<i64, SavefileError> {
@@ -2429,24 +2468,32 @@ impl<TR: Read> Deserializer<'_, TR> {
                 msg: "File is not in new savefile-format.".into(),
             });
         }
+        let savefile_lib_version;
+        let file_ver;
+        let with_compression;
+        if !cfg!(feature = "tight") {
+            savefile_lib_version = reader.read_u16::<LittleEndian>()?;
+            if savefile_lib_version > CURRENT_SAVEFILE_LIB_VERSION {
+                return Err(SavefileError::GeneralError {
+                    msg: "This file has been created by a future, incompatible version of the savefile crate.".into(),
+                });
+            }
+            file_ver = reader.read_u32::<LittleEndian>()?;
 
-        let savefile_lib_version = reader.read_u16::<LittleEndian>()?;
-        if savefile_lib_version > CURRENT_SAVEFILE_LIB_VERSION {
-            return Err(SavefileError::GeneralError {
-                msg: "This file has been created by a future, incompatible version of the savefile crate.".into(),
-            });
+            if file_ver > version {
+                return Err(SavefileError::WrongVersion {
+                    msg: format!(
+                        "File has later version ({}) than structs in memory ({}).",
+                        file_ver, version
+                    ),
+                });
+            }
+            with_compression = reader.read_u8()? != 0;
+        } else {
+            savefile_lib_version = CURRENT_SAVEFILE_LIB_VERSION;
+            with_compression = false;
+            file_ver = version;
         }
-        let file_ver = reader.read_u32::<LittleEndian>()?;
-
-        if file_ver > version {
-            return Err(SavefileError::WrongVersion {
-                msg: format!(
-                    "File has later version ({}) than structs in memory ({}).",
-                    file_ver, version
-                ),
-            });
-        }
-        let with_compression = reader.read_u8()? != 0;
 
         if with_compression {
             #[cfg(feature = "bzip2")]
@@ -8134,48 +8181,48 @@ impl Deserialize for i16 {
 
 impl Serialize for u32 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_u32(*self)
+        serializer.write_u32_packed(*self)
     }
 }
 impl Deserialize for u32 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_u32()
+        deserializer.read_u32_packed()
     }
 }
 impl Serialize for i32 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_i32(*self)
+        serializer.write_i32_packed(*self)
     }
 }
 impl Deserialize for i32 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_i32()
+        deserializer.read_i32_packed()
     }
 }
 
 impl Serialize for u64 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_u64(*self)
+        serializer.write_u64_packed(*self)
     }
 }
 impl Deserialize for u64 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_u64()
+        deserializer.read_u64_packed()
     }
 }
 impl Serialize for i64 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_i64(*self)
+        serializer.write_i64_packed(*self)
     }
 }
 impl Serialize for char {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_u32((*self).into())
+        serializer.write_u32_packed((*self).into())
     }
 }
 impl Deserialize for i64 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_i64()
+        deserializer.read_i64_packed()
     }
 }
 impl Deserialize for char {
@@ -8220,12 +8267,12 @@ impl Deserialize for usize {
 }
 impl Serialize for isize {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
-        serializer.write_isize(*self)
+        serializer.write_isize_packed(*self)
     }
 }
 impl Deserialize for isize {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
-        deserializer.read_isize()
+        deserializer.read_isize_packed()
     }
 }
 

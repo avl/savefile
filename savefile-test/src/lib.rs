@@ -1654,6 +1654,7 @@ pub fn test_raw_write_region() {
     let mut ser = Serializer {
         writer: &mut data,
         file_version: 0,
+        ephemeral_state: Default::default(),
     };
     let r = RawStruct { a: 0, b: 0, c: 42 };
     let _ = r.c;
