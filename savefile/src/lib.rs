@@ -2218,7 +2218,6 @@ impl<TR: Read> Deserializer<'_, TR> {
     /// Reads a little endian u32
     pub fn read_u32_packed(&mut self) -> Result<u32, SavefileError> {
         let t = self.read_packed_u64_impl()?;
-        dbg!(&t);
         Ok(t as u32)
     }
     /// Reads a little endian u64

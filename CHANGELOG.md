@@ -2,6 +2,10 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.5-beta2
+
+Remove a debug-printout that was left in.
+
 ## 0.18.5-beta1
 
 Savefile has gained experimental support for tighter packed data!
