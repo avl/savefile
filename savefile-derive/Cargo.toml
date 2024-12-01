@@ -1,6 +1,6 @@
 [package]
 name = "savefile-derive"
-version = "0.18.4"
+version = "0.18.5"
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 repository = "https://github.com/avl/savefile"
 rust-version = "1.74"
@@ -25,7 +25,7 @@ proc-macro = true
 
 [dependencies]
 quote = "1.0"
-syn = { version = "1.0" , features = ["full","extra-traits"]}
+syn = { version = "2.0" , features = ["full","extra-traits"]}
 proc-macro2 = { version = "1.0", features = ["nightly"] }
 proc-macro-error2 = "2.0.1"
 

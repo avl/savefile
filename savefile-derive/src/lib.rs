@@ -252,9 +252,9 @@ pub fn savefile_abi_exportable(
     }
 
     for attr in &parsed.attrs {
-        let name_segs: Vec<_> = attr.path.segments.iter().map(|x| &x.ident).collect();
+        let name_segs: Vec<_> = attr.path().segments.iter().map(|x| &x.ident).collect();
         if name_segs == ["async_trait"] || name_segs == ["async_trait", "async_trait"] {
-            abort!(attr.path.segments.span(), "async_trait-attribute macro detected. The {} macro must go _before_ the #[savefile_abi_exportable(..)] macro!",
+            abort!(attr.path().segments.span(), "async_trait-attribute macro detected. The {} macro must go _before_ the #[savefile_abi_exportable(..)] macro!",
             attr.to_token_stream());
         }
     }
@@ -318,6 +318,15 @@ pub fn savefile_abi_exportable(
                     abort!(lif.span(), "Savefile does not support lifetimes");
                 }
             }
+            TypeParamBound::PreciseCapture(c) => {
+                abort!(c.span(), "Savefile does not support precise captures");
+            }
+            TypeParamBound::Verbatim(v) => {
+                abort!(v.span(), "Savefile does not support verbatim bounds");
+            }
+            x => {
+                abort!(x.span(), "Savefile does not support this syntax");
+            }
         }
     }
 
@@ -342,7 +351,7 @@ pub fn savefile_abi_exportable(
                     c.ident
                 );
             }
-            TraitItem::Method(method) => {
+            TraitItem::Fn(method) => {
                 let mut is_ok = true;
                 let mut async_trait_life_time = 0;
                 let mut life0_life_time = 0;
@@ -384,6 +393,9 @@ pub fn savefile_abi_exportable(
                                                 is_ok = false;
                                             }
                                         }
+                                        x => {
+                                            abort!(x.span(), "Savefile does not support this syntax",);
+                                        }
                                     }
                                 }
                             }
@@ -403,8 +415,8 @@ pub fn savefile_abi_exportable(
                                     }
                                 }
                             }
-                            WherePredicate::Eq(_) => {
-                                is_ok = false;
+                            x => {
+                                abort!(x.span(), "Savefile does not support this syntax");
                             }
                         }
                     }
@@ -461,85 +473,95 @@ pub fn savefile_abi_exportable(
                         method_name
                     )
                 });
+                let unsupported = || {
+                    abort!(
+                                        method.sig.span(),
+                                        "Method '{}' has an unsupported 'self'-parameter. Try '&self', '&mut self', or 'self: Pin<&mut Self>'. Not supported: {}",
+                                        method_name, self_arg.to_token_stream()
+                                    );
+                };
+
+                let mut parse_receiver_ty = |typ: &Type| {
+                    if let Type::Path(path) = typ {
+                        if !is_well_known(&path.path.segments, ["std", "pin", "Pin"]) {
+                            unsupported();
+                        }
+                        let seg = &path.path.segments.last().unwrap();
+                        let PathArguments::AngleBracketed(args) = &seg.arguments else {
+                            unsupported();
+                            unreachable!();
+                        };
+                        if args.args.len() != 1 {
+                            unsupported();
+                        }
+                        let arg = &args.args[0];
+                        let GenericArgument::Type(Type::Reference(typref)) = arg else {
+                            unsupported();
+                            unreachable!();
+                        };
+                        if typref.mutability.is_none() {
+                            abort!(
+                                            method.sig.span(),
+                                            "Method '{}' has an unsupported 'self'-parameter. Non-mutable references in Pin are presently not supported: {}",
+                                            method_name, self_arg.to_token_stream()
+                                        );
+                        }
+                        let Type::Path(typepath) = &*typref.elem else {
+                            unsupported();
+                            unreachable!();
+                        };
+                        if typepath.path.segments.len() != 1 {
+                            unsupported();
+                            unreachable!()
+                        };
+                        if typepath.path.segments[0].ident != "Self" {
+                            unsupported();
+                        }
+                        receiver_is_mut = true;
+                        receiver_is_pin = true;
+                    } else {
+                        unsupported();
+                    }
+                };
                 match self_arg {
                     FnArg::Receiver(recv) => {
-                        if let Some(reference) = &recv.reference {
-                            if let Some(reference) = &reference.1 {
-                                if reference.ident != "life0" {
-                                    abort!(
+
+                        if recv.colon_token.is_some() {
+                            parse_receiver_ty(&*recv.ty);
+                        } else {
+                            if let Some(reference) = &recv.reference {
+                                if let Some(reference) = &reference.1 {
+                                    if reference.ident != "life0" {
+                                        abort!(
                                         reference.span(),
                                         "Method '{}' has a lifetime \"'{}\" for 'self' argument. This is not supported by savefile-abi",
                                         method_name,
                                         reference.ident,
                                     );
-                                } else {
-                                    life0_life_time += 1;
+                                    } else {
+                                        life0_life_time += 1;
+                                    }
                                 }
-                            }
-                            if recv.mutability.is_some() {
-                                receiver_is_mut = true;
-                            }
-                        } else {
-                            abort!(
+                                if recv.mutability.is_some() {
+                                    receiver_is_mut = true;
+                                }
+                            } else {
+                                abort!(
                                 self_arg.span(),
                                 "Method '{}' takes 'self' by value. This is not supported by savefile-abi. Use &self",
                                 method_name
                             );
+                            }
                         }
                     }
                     FnArg::Typed(pat) => {
-                        let unsupported = || {
-                            abort!(
-                                        method.sig.span(),
-                                        "Method '{}' has an unsupported 'self'-parameter. Try '&self', '&mut self', or 'self: Pin<&mut Self>'. Not supported: {}",
-                                        method_name, self_arg.to_token_stream()
-                                    );
-                        };
+
                         match &*pat.pat {
                             Pat::Ident(ident) if ident.ident == "self" => {
                                 if ident.by_ref.is_some() || ident.mutability.is_some() {
                                     unsupported();
                                 }
-                                if let Type::Path(path) = &*pat.ty {
-                                    if !is_well_known(&path.path.segments, ["std", "pin", "Pin"]) {
-                                        unsupported();
-                                    }
-                                    let seg = &path.path.segments.last().unwrap();
-                                    let PathArguments::AngleBracketed(args) = &seg.arguments else {
-                                        unsupported();
-                                        unreachable!();
-                                    };
-                                    if args.args.len() != 1 {
-                                        unsupported();
-                                    }
-                                    let arg = &args.args[0];
-                                    let GenericArgument::Type(Type::Reference(typref)) = arg else {
-                                        unsupported();
-                                        unreachable!();
-                                    };
-                                    if typref.mutability.is_none() {
-                                        abort!(
-                                            method.sig.span(),
-                                            "Method '{}' has an unsupported 'self'-parameter. Non-mutable references in Pin are presently not supported: {}",
-                                            method_name, self_arg.to_token_stream()
-                                        );
-                                    }
-                                    let Type::Path(typepath) = &*typref.elem else {
-                                        unsupported();
-                                        unreachable!();
-                                    };
-                                    if typepath.path.segments.len() != 1 {
-                                        unsupported();
-                                        unreachable!()
-                                    };
-                                    if typepath.path.segments[0].ident != "Self" {
-                                        unsupported();
-                                    }
-                                    receiver_is_mut = true;
-                                    receiver_is_pin = true;
-                                } else {
-                                    unsupported();
-                                }
+                                parse_receiver_ty(&*pat.ty);
                             }
                             _ => {
                                 abort!(
@@ -1125,77 +1147,68 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     let mut size_u8: Option<u8> = None;
     let mut repr_c_seen = false;
     let mut have_seen_explicit_size = false;
+
     for attr in attrs.iter() {
-        if let Ok(ref meta) = attr.parse_meta() {
-            match meta {
-                &syn::Meta::NameValue(ref _x) => {}
-                &syn::Meta::Path(ref _x) => {}
-                &syn::Meta::List(ref metalist) => {
-                    let path = path_to_string(&metalist.path);
-                    if path == "repr" {
-                        for x in &metalist.nested {
-                            let size_str: String = match *x {
-                                syn::NestedMeta::Meta(ref inner_x) => match inner_x {
-                                    &syn::Meta::NameValue(ref _x) => {
-                                        continue;
-                                    }
-                                    &syn::Meta::Path(ref path) => path_to_string(path),
-                                    &syn::Meta::List(ref _metalist) => {
-                                        continue;
-                                    }
-                                },
-                                syn::NestedMeta::Lit(ref lit) => match lit {
-                                    &syn::Lit::Str(ref litstr) => litstr.value(),
-                                    _ => {
-                                        continue;
-                                        //panic!("Unsupported repr-attribute: repr({:?})", x.clone().into_token_stream());
-                                    }
-                                },
-                            };
-                            match size_str.as_ref() {
-                                "C" => repr_c_seen = true,
-                                "u8" => {
-                                    size_u8 = Some(1);
-                                    have_seen_explicit_size = true;
-                                }
-                                "i8" => {
-                                    size_u8 = Some(1);
-                                    have_seen_explicit_size = true;
-                                }
-                                "u16" => {
-                                    size_u8 = Some(2);
-                                    have_seen_explicit_size = true;
-                                }
-                                "i16" => {
-                                    size_u8 = Some(2);
-                                    have_seen_explicit_size = true;
-                                }
-                                "u32" => {
-                                    size_u8 = Some(4);
-                                    have_seen_explicit_size = true;
-                                }
-                                "i32" => {
-                                    size_u8 = Some(4);
-                                    have_seen_explicit_size = true;
-                                }
-                                "u64" | "i64" => {
-                                    abort!(
-                                        metalist.path.span(),
-                                        "Savefile does not support enums with more than 2^32 variants."
-                                    )
-                                }
-                                _ => abort!(
-                                    metalist.path.span(),
-                                    "Unsupported repr(X) attribute on enum: {}",
-                                    size_str
-                                ),
-                            }
-                        }
-                    }
+        let path = attr.path();
+
+        if path.is_ident("repr") {
+            if let Err(err) = attr.parse_nested_meta(|meta| {
+
+                //for x in &metalist.nested {
+                if meta.path.segments.len() != 1 {
+                    abort!(
+                        meta.path.span(),
+                        "Unsupported repr(X) attribute on enum: {}",
+                        meta.path.to_token_stream());
                 }
-            }
+                match meta.path.segments[0].ident.to_string().as_str() {
+                    "C" => repr_c_seen = true,
+                    "u8" => {
+                        size_u8 = Some(1);
+                        have_seen_explicit_size = true;
+                    }
+                    "i8" => {
+                        size_u8 = Some(1);
+                        have_seen_explicit_size = true;
+                    }
+                    "u16" => {
+                        size_u8 = Some(2);
+                        have_seen_explicit_size = true;
+                    }
+                    "i16" => {
+                        size_u8 = Some(2);
+                        have_seen_explicit_size = true;
+                    }
+                    "u32" => {
+                        size_u8 = Some(4);
+                        have_seen_explicit_size = true;
+                    }
+                    "i32" => {
+                        size_u8 = Some(4);
+                        have_seen_explicit_size = true;
+                    }
+                    "u64" | "i64" => {
+                        abort!(
+                            meta.path.span(),
+                            "Savefile does not support enums with more than 2^32 variants."
+                        )
+                    }
+                    _ => abort!(
+                        meta.path.span(),
+                        "Unsupported repr(X) attribute on enum: {}",
+                        meta.path.to_token_stream()
+                    ),
+                };
+                Ok(())
+            }) {
+                abort!(
+                        attr.span(),
+                        "Unsupported repr(X) attribute: {}",
+                        attr.to_token_stream());
+            };
         }
     }
+
     let discriminant_size = size_u8.unwrap_or_else(|| {
         if actual_variants <= 256 {
             1
@@ -1214,6 +1227,8 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
         explicit_size: have_seen_explicit_size,
     }
 }
+
+
 #[proc_macro_error]
 #[proc_macro_derive(
     Packed,
@@ -1234,7 +1249,11 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
-        match attr.parse_meta() {
+        if attr.path().is_ident("savefile_unsafe_and_fast") ||
+            attr.path().is_ident("savefile_require_fast") {
+            opt_in_fast = true;
+        }
+        /*match attr.parse_meta() {
             Ok(ref meta) => match meta {
                 &syn::Meta::Path(ref x) => {
                     let x = path_to_string(x);
@@ -1245,7 +1264,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 _ => {}
             },
             _ => {}
-        }
+        }*/
     }
 
     /*if !opt_in_fast {

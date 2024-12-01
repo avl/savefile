@@ -8,11 +8,11 @@ edition = "2021"
 [dependencies]
 savefile = { path = "../savefile", features = ["derive"], default-features = false }
 savefile-abi = { path = "../savefile-abi" }
-savefile-derive = {path = "../savefile-derive"}
+savefile-derive = { path = "../savefile-derive" }
 async-trait = "0.1"
 
 [dev-dependencies]
-compiletest_rs = { version = "0.10", features = [ "tmp" ] }
+compiletest_rs = { version = "0.11", features = [ "tmp" ] }
 
 [features]
 rustc = ["compiletest_rs/rustc"]

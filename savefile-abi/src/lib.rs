@@ -357,6 +357,8 @@ impl SimpleAsyncInterface for SimpleImpl {
 
 extern crate savefile;
 extern crate savefile_derive;
+extern crate core;
+
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
 use savefile::{
@@ -917,7 +919,6 @@ pub fn parse_return_value_impl<T>(
                 ephemeral_state: HashMap::new(),
             };
             deserialize_action(&mut deserializer)
-            //T::deserialize(&mut deserializer)
         }
         RawAbiCallResult::Panic(AbiErrorMsg { error_msg_utf8, len }) => {
             let errdata = unsafe { std::slice::from_raw_parts(*error_msg_utf8, *len) };
@@ -1849,3 +1850,6 @@ impl Wake for AbiWaker {
         (self.waker)();
     }
 }
+
+#[cfg(feature="bytes")]
+mod bytes;

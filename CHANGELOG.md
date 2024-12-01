@@ -2,6 +2,24 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.5
+
+Switch parsing library from syn 1 o syn 2. This should have no effect for users.
+
+Add support for the `BufMut` trait from the 'bytes'-crate to savefile-abi.
+
+This allows the following function signature:
+
+```rust
+async fn read(&self, buf: &mut dyn bytes::BufMut) {}
+```
+
+
+
+Require rust version 1.74 or later, also for 'savefile'. This constraint was previously
+only added on savefile-derive and savefile-abi. Savefile was not tested with earlier versions,
+so this was an oversight.
+
 ## 0.18.4
 
 Create a separate CHANGELOG.md-file.

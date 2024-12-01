@@ -14,8 +14,8 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive", "quickcheck", "nalgebra"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.18.4" }
-savefile-abi = { path = "../savefile-abi" }
+savefile-derive = { path = "../savefile-derive", version = "=0.18.5"}
+savefile-abi = { path = "../savefile-abi" , features = ["bytes"]}
 bit-vec = "0.8"
 arrayvec="0.7"
 smallvec="*"
@@ -34,6 +34,7 @@ insta = { version = "1.41.1", features = ["yaml"] }
 nalgebra="0.33"
 tokio= { version = "1.40", features = ["test-util", "rt-multi-thread", "full"] }
 async-trait = "0.1"
+bytes="1.8"
 
 [build-dependencies]
 rustc_version="0.4"

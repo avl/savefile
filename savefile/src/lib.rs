@@ -1814,6 +1814,13 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
         self.write_bytes(buf)
     }
 
+    /// Write a ptr + size
+    pub unsafe fn write_raw_ptr_size<T>(&mut self, data: *const T, len: usize) -> Result<(), SavefileError> {
+        self.write_raw_ptr(data)?;
+        self.write_usize(len)?;
+        Ok(())
+    }
+
     /// Writes a binary little endian u64 to the output
     #[inline(always)]
     pub fn write_ptr(&mut self, v: *const ()) -> Result<(), SavefileError> {
@@ -3545,6 +3552,8 @@ pub enum Schema {
         /*sync*/ bool,
         /*unpin*/ bool,
     ),
+    /// UninitSlice from 'bytes' crate
+    UninitSlice,
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3582,6 +3591,7 @@ impl Schema {
             }
             Schema::StdIoError => "stdioerror".into(),
             Schema::Future(_, _, _, _) => "future".into(),
+            Schema::UninitSlice => {"UninitSlice".into()}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3738,6 +3748,7 @@ impl Schema {
             Schema::Recursion(_) => None,
             Schema::StdIoError => None,
             Schema::Future(_, _, _, _) => None,
+            Schema::UninitSlice => None,
         }
     }
 }
@@ -3946,6 +3957,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
                 }
             }
             return diff_abi_def(a, b, path, is_return_pos);
+        }
+        (Schema::UninitSlice, Schema::UninitSlice) => {
+            return None; //Ok
         }
         (a, b) => (a.top_level_description(), b.top_level_description()),
     };
@@ -4484,6 +4498,10 @@ impl Serialize for Schema {
                 o.serialize(serializer)?;
                 Ok(())
             }
+            Schema::UninitSlice => {
+                serializer.write_u8(19)?;
+                Ok(())
+            }
         }
     }
 }
@@ -4529,6 +4547,9 @@ impl Deserialize for Schema {
                 let sync = (mask & 2) != 0;
                 let unpin = (mask & 4) != 0;
                 Schema::Future(<_ as Deserialize>::deserialize(deserializer)?, send, sync, unpin)
+            }
+            19 => {
+                Schema::UninitSlice
             }
             c => {
                 return Err(SavefileError::GeneralError {

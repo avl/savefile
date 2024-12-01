@@ -5,6 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use bytes::BufMut;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait SimpleInterface {
@@ -28,6 +29,8 @@ pub trait AdvancedTestInterface: Send {
 
     fn pinned_self(self: Pin<&mut Self>, arg: u32) -> u32;
     fn boxed_future(&self) -> Pin<Box<dyn Future<Output = u32>>>;
+
+    fn bufmut(&self, buf: &mut dyn BufMut);
 }
 
 struct SimpleImpl;
@@ -95,6 +98,11 @@ impl AdvancedTestInterface for AdvancedTestInterfaceImpl {
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
             42
         })
+    }
+    fn bufmut(&self, buf: &mut dyn bytes::BufMut) {
+        for x in 0..100 {
+            buf.put_u8(x as u8);
+        }
     }
 }
 
@@ -216,4 +224,16 @@ fn test_advanced_abi2() {
 
     assert!(mymap2.contains_key("mascot"));
     assert_eq!(mymap2["mascot"], "ferris");
+}
+#[test]
+fn test_buf_mut() {
+    let boxed: Box<dyn AdvancedTestInterface> = Box::new(AdvancedTestInterfaceImpl {});
+    let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
+
+    let mut vec = vec![];
+    conn.bufmut(&mut vec);
+    for i in 0..100u8 {
+        assert_eq!(vec[i as usize], i);
+    }
+
 }
