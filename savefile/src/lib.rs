@@ -1305,6 +1305,89 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
     }
 }
 
+
+impl WithSchema for SocketAddr {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Enum(SchemaEnum{
+            dbg_name: "SocketAddr".to_string(),
+            variants: vec![
+                Variant {
+                    name: "IPV4".to_string(),
+                    discriminant: 0,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)),
+                            offset: None,
+                        }
+                    ],
+                },
+                Variant {
+                    name: "IPV6".to_string(),
+                    discriminant: 0,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                            offset: None,
+                        }
+                    ],
+                }
+
+            ],
+            discriminant_size: 1,
+            has_explicit_repr: false,
+            size: None,
+            alignment: None,
+        })
+    }
+}
+impl Packed for SocketAddr {}
+
+impl Serialize for SocketAddr {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        match self {
+            SocketAddr::V4(v4) => {
+                serializer.write_u8(0)?;
+                serializer.write_u16(v4.port())?;
+                serializer.write_u32(v4.ip().to_bits())?;
+            }
+            SocketAddr::V6(v6) => {
+                serializer.write_u8(1)?;
+                serializer.write_u16(v6.port())?;
+                serializer.write_u128(v6.ip().to_bits())?;
+                serializer.write_u32(v6.flowinfo())?;
+                serializer.write_u32(v6.scope_id())?;
+            }
+        }
+        Ok(())
+    }
+}
+impl Deserialize for SocketAddr {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let variant = deserializer.read_u8()?;
+        match variant {
+            0 => {
+                let port = deserializer.read_u16()?;
+                let ip = deserializer.read_u32()?;
+                Ok(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from_bits(ip), port)))
+            }
+            1 => {
+                let port = deserializer.read_u16()?;
+                let ip = deserializer.read_u128()?;
+                let flowinfo = deserializer.read_u32()?;
+                let scope_id = deserializer.read_u32()?;
+                Ok(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_bits(ip), port, flowinfo, scope_id)))
+            }
+            _ => {
+                Err(SavefileError::GeneralError {
+                    msg: "corrupt stream: invalid ip address type".to_string(),
+                })
+            }
+        }
+    }
+}
+
 impl WithSchema for PathBuf {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
@@ -7336,6 +7419,7 @@ use std::collections::hash_map::Entry;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::slice;
