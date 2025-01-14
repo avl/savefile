@@ -1304,6 +1304,27 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
         SavefileError::ArrayvecCapacityError { msg: s.to_string() }
     }
 }
+
+impl Introspect for IpAddr {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+impl Introspect for SocketAddr {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
 impl WithSchema for IpAddr {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Enum(SchemaEnum{
