@@ -851,7 +851,7 @@ use smallvec::alloc::collections::BTreeMap;
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::convert::TryInto;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::string::ToString;
 use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64};
@@ -1767,7 +1767,7 @@ fn test_vector() {
 }
 
 #[test]
-fn test_ipv4(){
+fn test_ipv4_sockaddr(){
 
     assert_roundtrip::<SocketAddr>("0.0.0.0:0".parse().unwrap());
     assert_roundtrip::<SocketAddr>("127.0.0.1:32".parse().unwrap());
@@ -1775,10 +1775,27 @@ fn test_ipv4(){
 
 }
 #[test]
-fn test_ipv6(){
+fn test_ipv6_sockaddr(){
 
     assert_roundtrip::<SocketAddr>("[fe80::1ff:fe23:4567:890a]:32".parse().unwrap());
     assert_roundtrip::<SocketAddr>("[fe80::1ff:fe23:4567:890a%3]:32".parse().unwrap());
     assert_roundtrip::<SocketAddr>("[::]:1".parse().unwrap());
+
+}
+
+#[test]
+fn test_ipv4(){
+
+    assert_roundtrip::<IpAddr>("0.0.0.0".parse().unwrap());
+    assert_roundtrip::<IpAddr>("127.0.0.1".parse().unwrap());
+    assert_roundtrip::<IpAddr>("255.255.255.255".parse().unwrap());
+
+}
+#[test]
+fn test_ipv6(){
+
+    assert_roundtrip::<IpAddr>("fe80::1ff:fe23:4567:890a".parse().unwrap());
+    assert_roundtrip::<IpAddr>("fe80::1ff:fe23:4567:890a".parse().unwrap());
+    assert_roundtrip::<IpAddr>("::1".parse().unwrap());
 
 }
