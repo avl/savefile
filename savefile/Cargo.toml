@@ -25,7 +25,7 @@ edition = "2021"
 rust-version = "1.74"
 
 [features]
-default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set", "bit-set08", "bit-vec08"]
+default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set", "bit-set08", "bit-vec08", "chrono"]
 bit-set = ["dep:bit-set", "bit-vec"]
 bit-set08 = ["dep:bit-set08", "bit-vec08"]
 serde_derive = ["dep:serde_derive", "serde"]
@@ -56,6 +56,7 @@ bit-vec08 = { package="bit-vec", version = "0.8", optional = true}
 arrayvec = { version = "0.7", optional = true}
 smallvec = { version = "1.11", optional = true}
 indexmap = { version = "2.6", optional = true}
+chrono = { version = "0.4.39", optional = true}
 parking_lot = { version = "0.12", optional = true }
 ring = {version = "0.17.8", optional = true}
 rand = { version = "0.8", optional = true}

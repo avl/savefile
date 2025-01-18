@@ -1014,6 +1014,8 @@ pub enum SavefileError {
         /// Possible descriptive message
         msg: String,
     },
+    /// A timestamp was encountered which is out of range for the Savefile timestamp type
+    TimestampOutOfRange
 }
 impl From<Utf8Error> for SavefileError {
     fn from(value: Utf8Error) -> Self {
@@ -1085,6 +1087,9 @@ impl Display for SavefileError {
                     "Failed while loading symbol {} from library {}: {}",
                     symbol, libname, msg
                 )
+            }
+            SavefileError::TimestampOutOfRange => {
+                write!(f, "A timestamp value outside the range 1677-09-21T00:12:43.145224192 .. 2262-04-11T23:47:16.854775807 was encountered.")
             }
         }
     }
@@ -3729,6 +3734,9 @@ pub enum Schema {
     ),
     /// UninitSlice from 'bytes' crate
     UninitSlice,
+    /// A signed unix timestamp, with nanosecond precision. Range:
+    /// 1677-09-21T00:12:43.145224192 .. 2262-04-11T23:47:16.854775807.
+    UtcTimestamp
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3767,6 +3775,7 @@ impl Schema {
             Schema::StdIoError => "stdioerror".into(),
             Schema::Future(_, _, _, _) => "future".into(),
             Schema::UninitSlice => {"UninitSlice".into()}
+            Schema::UtcTimestamp => {"UtcTimestamp".into()}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3924,6 +3933,7 @@ impl Schema {
             Schema::StdIoError => None,
             Schema::Future(_, _, _, _) => None,
             Schema::UninitSlice => None,
+            Schema::UtcTimestamp => Some(8),
         }
     }
 }
@@ -4074,6 +4084,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
             return None;
         }
         (Schema::Str, Schema::Str) => {
+            return None;
+        }
+        (Schema::UtcTimestamp, Schema::UtcTimestamp) => {
             return None;
         }
         (Schema::StdIoError, Schema::StdIoError) => {
@@ -4677,6 +4690,10 @@ impl Serialize for Schema {
                 serializer.write_u8(19)?;
                 Ok(())
             }
+            Schema::UtcTimestamp => {
+                serializer.write_u8(20)?;
+                Ok(())
+            }
         }
     }
 }
@@ -4725,6 +4742,9 @@ impl Deserialize for Schema {
             }
             19 => {
                 Schema::UninitSlice
+            }
+            20 => {
+                Schema::UtcTimestamp
             }
             c => {
                 return Err(SavefileError::GeneralError {
@@ -5897,6 +5917,48 @@ impl<T: Deserialize, R: Deserialize> Deserialize for Result<T, R> {
         }
     }
 }
+
+
+#[cfg(feature = "chrono")]
+impl Introspect for chrono::DateTime<chrono::Utc> {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl Packed for chrono::DateTime<chrono::Utc> {
+}
+
+#[cfg(feature = "chrono")]
+impl WithSchema for chrono::DateTime<chrono::Utc> {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::UtcTimestamp
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl Serialize for chrono::DateTime<chrono::Utc> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let Some(t) = self.timestamp_nanos_opt() else {
+            return Err(SavefileError::TimestampOutOfRange)
+        };
+        Ok(serializer.write_i64(t)?)
+    }
+}
+#[cfg(feature = "chrono")]
+impl Deserialize for chrono::DateTime<chrono::Utc> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let t = deserializer.read_i64()?;
+        Ok(chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(t))
+    }
+}
+
+
 
 #[cfg(any(feature = "bit-vec", feature = "bit-vec08"))]
 #[cfg(target_endian = "big")]

@@ -1799,3 +1799,9 @@ fn test_ipv6(){
     assert_roundtrip::<IpAddr>("::1".parse().unwrap());
 
 }
+#[test]
+fn chrono_datetime(){
+
+    let now = chrono::Utc::now();
+    assert_roundtrip(now);
+}
