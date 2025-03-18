@@ -5918,6 +5918,185 @@ impl<T: Deserialize, R: Deserialize> Deserialize for Result<T, R> {
     }
 }
 
+#[cfg(feature = "ecolor")]
+impl Packed for ecolor::Color32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 4 {
+                panic!("Unexpected change in size of ecolor::Color32 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "ecolor")]
+impl WithSchema for ecolor::Color32 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(Schema::Primitive(SchemaPrimitive::schema_u8)),
+            count: 4,
+        })
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Serialize for ecolor::Color32 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.to_array().serialize(serializer)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Deserialize for ecolor::Color32 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x:[u8;4] = <_ as Deserialize>::deserialize(deserializer)?;
+        Ok(Self::from_rgba_premultiplied(
+            x[0],x[1],x[2],x[3]
+        ))
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Introspect for ecolor::Color32 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
+
+#[cfg(feature = "emath")]
+impl Packed for emath::Pos2 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 8 {
+                panic!("Unexpected change in size of emath::Pos2 type");
+            }
+            if std::mem::offset_of!(emath::Vec2, x) != 0 ||
+                std::mem::offset_of!(emath::Vec2, y) != 4 {
+                panic!("Unexpected change in layout of emath::Pos2 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "emath")]
+impl WithSchema for emath::Pos2 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "Pos2".to_string(),
+            size: Some(8),
+            alignment: Some(4),
+            fields: vec![
+                Field {
+                    name: "x".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(0),
+                },
+                Field {
+                    name: "y".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(4),
+                }
+            ],
+        })
+    }
+}
+#[cfg(feature = "emath")]
+impl Serialize for emath::Pos2 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_f32(self.x)?;
+        serializer.write_f32(self.y)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "emath")]
+impl Deserialize for emath::Pos2 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x = deserializer.read_f32()?;
+        let y = deserializer.read_f32()?;
+        Ok(emath::Pos2::new(x, y))
+    }
+}
+#[cfg(feature = "emath")]
+impl Introspect for emath::Pos2 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
+
+#[cfg(feature = "emath")]
+impl Packed for emath::Vec2 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 8 {
+                panic!("Unexpected change in size of emath::Vec2 type");
+            }
+            if std::mem::offset_of!(emath::Vec2, x) != 0 ||
+                std::mem::offset_of!(emath::Vec2, y) != 4 {
+                panic!("Unexpected change in layout of emath::Vec2 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "emath")]
+impl WithSchema for emath::Vec2 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "Vec2".to_string(),
+            size: Some(8),
+            alignment: Some(4),
+            fields: vec![
+                Field {
+                    name: "x".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(0),
+                },
+                Field {
+                    name: "y".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(4),
+                }
+            ],
+        })
+    }
+}
+#[cfg(feature = "emath")]
+impl Serialize for emath::Vec2 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_f32(self.x)?;
+        serializer.write_f32(self.y)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "emath")]
+impl Deserialize for emath::Vec2 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x = deserializer.read_f32()?;
+        let y = deserializer.read_f32()?;
+        Ok(emath::Vec2::new(x, y))
+    }
+}
+#[cfg(feature = "emath")]
+impl Introspect for emath::Vec2 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
 
 #[cfg(feature = "chrono")]
 impl Introspect for chrono::DateTime<chrono::Utc> {
