@@ -1800,8 +1800,8 @@ fn test_ipv6(){
 
 }
 #[test]
+#[cfg(not(miri))]
 fn chrono_datetime(){
-
     let now = chrono::Utc::now();
     assert_roundtrip(now);
 }
