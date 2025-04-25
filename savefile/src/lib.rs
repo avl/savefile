@@ -1486,10 +1486,9 @@ mod crypto {
             if self.data2 == 0 {
                 self.data1 = self.data1.wrapping_add(1);
             }
-            use std::mem::transmute;
             let mut bytes = [0u8; 12];
-            let bytes1: [u8; 8] = unsafe { transmute(self.data1.to_le()) };
-            let bytes2: [u8; 4] = unsafe { transmute(self.data2.to_le()) };
+            let bytes1: [u8; 8] = self.data1.to_le_bytes();
+            let bytes2: [u8; 4] = self.data2.to_le_bytes();
             for i in 0..8 {
                 bytes[i] = bytes1[i];
             }
