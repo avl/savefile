@@ -2,6 +2,10 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.6
+
+Fix warning on latest rust nightly.
+
 ## 0.18.5
 
 Switch parsing library from syn 1 o syn 2. This should have no effect for users.
