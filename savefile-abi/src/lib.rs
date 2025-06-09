@@ -2,6 +2,8 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![allow(clippy::needless_late_init)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::unnecessary_cast)]
 
 /*!
 This is the documentation for `savefile-abi`
