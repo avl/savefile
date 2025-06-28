@@ -11,10 +11,10 @@ use savefile_derive::savefile_abi_exportable;
 use std::borrow::Cow;
 #[savefile_abi_exportable(version = 0)]
 pub trait CowSmuggler {
-    fn smuggle(&mut self, x: Cow<str>) -> Cow<str>;
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<'_, str>;
 }
 impl CowSmuggler for () {
-    fn smuggle(&mut self, x: Cow<str>) -> Cow<str> {
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<'_, str> {
         x
 //~^ 18:9: 18:10: lifetime may not live long enough
     }

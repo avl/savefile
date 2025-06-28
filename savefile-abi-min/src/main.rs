@@ -39,7 +39,7 @@ fn main() {
 
     let res = connection.add(1, &2, &Box::new(MyStuff { x: 43, y: [0; 10000] }));
     assert_eq!(res, 1 + 2 + 43);
-    println!("Result: {}", res);
+    println!("Result: {res}");
     let my_cb = Box::new(MyCallback {
         value: Arc::new(Mutex::new(32)),
     });

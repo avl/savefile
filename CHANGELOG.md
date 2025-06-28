@@ -8,6 +8,8 @@ Support for std::net::SocketAddr.
 
 Support for chrono::DateTime<Utc> .
 
+Fix warning on latest rust nightly.
+
 ## 0.18.5
 
 Switch parsing library from syn 1 o syn 2. This should have no effect for users.

@@ -78,6 +78,9 @@ unsafe impl AbiExportable for dyn BufMut {
     fn get_latest_version() -> u32 {
         0u32
     }
+
+    // TODO: This method should be marked unsafe!
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn call(
         trait_object: TraitObject,
         method_number: u16,
@@ -213,7 +216,7 @@ unsafe impl BufMut for AbiConnection<dyn BufMut> {
         };
         serializer.write_u32(self.template.effective_version).unwrap();
         unsafe {
-            unsafe extern "C" fn abi_result_receiver<'async_trait>(
+            unsafe extern "C" fn abi_result_receiver(
                 outcome: *const RawAbiCallResult,
                 result_receiver: *mut (),
             ) {
@@ -226,8 +229,8 @@ unsafe impl BufMut for AbiConnection<dyn BufMut> {
                     .write(
                         parse_return_value_impl(
                             outcome,
-                            |mut deserializer| -> Result<usize, SavefileError> {
-                                Ok(<usize as Deserialize>::deserialize(&mut deserializer)?)
+                            |deserializer| -> Result<usize, SavefileError> {
+                                <usize as Deserialize>::deserialize(deserializer)
                             },
                         ),
                     );
@@ -328,7 +331,7 @@ unsafe impl BufMut for AbiConnection<dyn BufMut> {
         };
         serializer.write_u32(self.template.effective_version).unwrap();
         unsafe {
-            unsafe extern "C" fn abi_result_receiver<'async_trait>(
+            unsafe extern "C" fn abi_result_receiver(
                 outcome: *const RawAbiCallResult,
                 result_receiver: *mut (),
             ) {

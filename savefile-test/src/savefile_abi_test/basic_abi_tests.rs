@@ -307,10 +307,10 @@ pub trait CowSmuggler {
     fn smuggle2(&mut self, x: Cow<str>) -> Cow<'static, str>;
     // In this case, the lifetime of Cow is that of &mut self.
     // (Rust lifetime elision rules).
-    fn smuggle(&mut self, x: Cow<str>) -> Cow<str>;
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<'_, str>;
 }
 impl CowSmuggler for () {
-    fn smuggle(&mut self, x: Cow<str>) -> Cow<str> {
+    fn smuggle(&mut self, x: Cow<str>) -> Cow<'_, str> {
         (*x).to_owned().into()
     }
     fn smuggle2(&mut self, x: Cow<str>) -> Cow<'static, str> {

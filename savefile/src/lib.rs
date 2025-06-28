@@ -11,9 +11,12 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::len_zero)]
 #![allow(clippy::new_without_default)]
+#![allow(renamed_and_removed_lints)]
 #![allow(clippy::transmute_num_to_bytes)] //Clean this up some day
 #![allow(clippy::manual_memcpy)] //Clean up some day
 #![allow(clippy::needless_late_init)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::io_other_error)]
 
 /*!
 This is the documentation for `savefile`
@@ -244,7 +247,7 @@ Rules for using the #\[savefile_versions] attribute:
  * You must keep track of what the current version of your data is. Let's call this version N.
  * You may only save data using version N (supply this number when calling `save`)
  * When data is loaded, you must supply version N as the memory-version number to `load`. Load will
-    adapt the deserialization operation to the version of the serialized data.
+   adapt the deserialization operation to the version of the serialized data.
  * The version number N is "global" (called GLOBAL_VERSION in the previous source example). All components of the saved data must have the same version.
  * Whenever changes to the data are to be made, the global version number N must be increased.
  * You may add a new field to your structs, iff you also give it a #\[savefile_versions = "N.."] attribute. N must be the new version of your data.
@@ -1507,7 +1510,7 @@ impl Introspect for PathBuf {
         self.to_string_lossy().to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_>>> {
         None
     }
 }
@@ -1995,6 +1998,8 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     }
 
     /// Write a ptr + size
+    /// # Safety
+    /// `data` must point at `len` valid bytes.
     pub unsafe fn write_raw_ptr_size<T>(&mut self, data: *const T, len: usize) -> Result<(), SavefileError> {
         self.write_raw_ptr(data)?;
         self.write_usize(len)?;
@@ -2197,7 +2202,7 @@ impl<'a, W: Write + 'a> Serializer<'a, W> {
     /// Create a Serializer.
     /// Don't use this method directly, use the [crate::save] function
     /// instead.
-    pub fn new_raw(writer: &mut impl Write, file_version: u32) -> Serializer<impl Write> {
+    pub fn new_raw(writer: &mut impl Write, file_version: u32) -> Serializer<'_, impl Write> {
         Serializer { writer, file_version }
     }
 }
@@ -2458,7 +2463,7 @@ impl<TR: Read> Deserializer<'_, TR> {
 /// Create a Deserializer.
 /// Don't use this method directly, use the [crate::load] function
 /// instead.
-pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<impl Read> {
+pub fn new_schema_deserializer(reader: &mut impl Read, file_schema_version: u16) -> Deserializer<'_, impl Read> {
     Deserializer {
         reader,
         file_version: file_schema_version as u32,
@@ -4772,7 +4777,7 @@ impl Introspect for str {
         self.to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_>>> {
         None
     }
 }
@@ -4781,7 +4786,7 @@ impl Introspect for String {
         self.to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_>>> {
         None
     }
 }
@@ -4829,7 +4834,7 @@ impl<T: Introspect> Introspect for Mutex<T> {
         format!("Mutex<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             Some(Box::new(IntrospectItemMutex { g: self.lock() }))
         } else {
@@ -4858,7 +4863,7 @@ impl<T: Introspect> Introspect for std::sync::Mutex<T> {
         format!("Mutex<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         match self.lock() {
             Ok(item) => {
                 if index == 0 {
@@ -4938,7 +4943,7 @@ impl<T: Introspect> Introspect for std::cell::Ref<'_, T> {
         let sub_value = (**self).introspect_value();
         format!("Ref({})", sub_value)
     }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         (**self).introspect_child(index)
     }
     fn introspect_len(&self) -> usize {
@@ -4962,7 +4967,7 @@ impl<T: Introspect> Introspect for RefCell<T> {
         format!("RefCell({})", sub_value)
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         // Introspect not supported
         if index != 0 {
             return None;
@@ -4982,7 +4987,7 @@ impl<T: Introspect> Introspect for Rc<T> {
         format!("Rc({})", self.deref().introspect_value())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         self.deref().introspect_child(index)
     }
 
@@ -4996,7 +5001,7 @@ impl<T: Introspect> Introspect for Arc<T> {
         format!("Arc({})", self.deref().introspect_value())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         self.deref().introspect_child(index)
     }
 
@@ -5009,7 +5014,7 @@ impl<T: Introspect> Introspect for RwLock<T> {
     fn introspect_value(&self) -> String {
         format!("RwLock<{}>", std::any::type_name::<T>())
     }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             Some(Box::new(IntrospectItemRwLock { g: self.read() }))
         } else {
@@ -5074,7 +5079,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
         format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         let bucket = index / 2;
         let off = index % 2;
         if let Some((key, val)) = self.iter().nth(bucket) {
@@ -5098,7 +5103,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
         format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         let bucket = index / 2;
         let off = index % 2;
         if let Some((key, val)) = self.iter().nth(bucket) {
@@ -5125,7 +5130,7 @@ where
         format!("HashMap<{},{}>", std::any::type_name::<K>(), std::any::type_name::<V>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some((key, val)) = self.iter().nth(index) {
             Some(introspect_item(key.to_string(), val))
         } else {
@@ -5142,7 +5147,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Hash
         format!("HashSet<{}>", std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(key) = self.iter().nth(index) {
             Some(introspect_item(format!("#{}", index), key))
         } else {
@@ -5159,7 +5164,7 @@ impl<K: Introspect> Introspect for BTreeSet<K> {
         format!("BTreeSet<{}>", std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(key) = self.iter().nth(index) {
             Some(introspect_item(format!("#{}", index), key))
         } else {
@@ -5182,7 +5187,7 @@ impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
 
     // This has very bad performance. But with the model behind Savefile Introspect it
     // is presently hard to do much better
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         let bucket = index / 2;
         let off = index % 2;
         if let Some((key, val)) = self.iter().nth(bucket) {
@@ -5397,7 +5402,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
         )
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         let bucket = index / 2;
         let off = index % 2;
         if let Some((k, v)) = self.get_index(bucket) {
@@ -5426,7 +5431,7 @@ impl<K: Introspect + Eq + Hash, V: Introspect, S: ::std::hash::BuildHasher> Intr
         )
     }
 
-    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    default fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         let bucket = index / 2;
         let off = index % 2;
         if let Some((k, v)) = self.get_index(bucket) {
@@ -5458,7 +5463,7 @@ where
         )
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some((k, v)) = self.get_index(index) {
             Some(introspect_item(k.to_string(), v))
         } else {
@@ -5505,7 +5510,7 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
         format!("IndexSet<{}>", std::any::type_name::<K>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(val) = self.get_index(index) {
             Some(introspect_item(format!("#{}", index), val))
         } else {
@@ -5653,7 +5658,7 @@ impl<T: Introspect> Introspect for Removed<T> {
         format!("Removed<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -5720,7 +5725,7 @@ impl<T: Introspect, D: ValueConstructor<T>> Introspect for AbiRemoved<T, D> {
         format!("AbiRemoved<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -5750,7 +5755,7 @@ impl<T> Introspect for PhantomData<T> {
         "PhantomData".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -5779,7 +5784,7 @@ impl<T: Introspect> Introspect for Box<T> {
     fn introspect_value(&self) -> String {
         self.deref().introspect_value()
     }
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         self.deref().introspect_child(index)
     }
     fn introspect_len(&self) -> usize {
@@ -5795,7 +5800,7 @@ impl<T: Introspect> Introspect for Option<T> {
         }
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(cont) = self {
             cont.introspect_child(index)
         } else {
@@ -5847,7 +5852,7 @@ impl<T: Introspect, R: Introspect> Introspect for Result<T, R> {
         }
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         match self {
             Ok(cont) => cont.introspect_child(index),
             Err(cont) => cont.introspect_child(index),
@@ -6188,7 +6193,7 @@ impl Introspect for bit_vec::BitVec {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -6285,7 +6290,7 @@ impl Introspect for bit_set::BitSet {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -6354,7 +6359,7 @@ impl Introspect for bit_vec08::BitVec {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -6451,7 +6456,7 @@ impl Introspect for bit_set08::BitSet {
         ret
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -6531,7 +6536,7 @@ where
         format!("SmallVec<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(val) = self.get(index) {
             Some(introspect_item(index.to_string(), val))
         } else {
@@ -6640,7 +6645,7 @@ impl<T: Introspect> Introspect for Box<[T]> {
         return "Box[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index >= self.len() {
             return None;
         }
@@ -6656,7 +6661,7 @@ impl<T: Introspect> Introspect for Arc<[T]> {
         return "Arc[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index >= self.len() {
             return None;
         }
@@ -6677,7 +6682,7 @@ impl Introspect for Arc<str> {
         self.deref().to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_>>> {
         None
     }
     fn introspect_len(&self) -> usize {
@@ -6908,7 +6913,7 @@ impl<T: Introspect> Introspect for Vec<T> {
         return "vec[]".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index >= self.len() {
             return None;
         }
@@ -7011,7 +7016,7 @@ impl<T: Introspect> Introspect for VecDeque<T> {
         format!("VecDeque<{}>", std::any::type_name::<T>())
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if let Some(val) = self.get(index) {
             Some(introspect_item(index.to_string(), val))
         } else {
@@ -7169,7 +7174,7 @@ impl<T: Introspect, const N: usize> Introspect for [T; N] {
         format!("[{}; {}]", std::any::type_name::<T>(), N)
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index >= self.len() {
             None
         } else {
@@ -7264,7 +7269,7 @@ impl<T1: Introspect> Introspect for Range<T1> {
         return "Range".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             return Some(introspect_item("start".to_string(), &self.start));
         }
@@ -7605,7 +7610,7 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
         self.to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_>>> {
         None
     }
 }
@@ -7813,7 +7818,7 @@ impl Introspect for () {
     fn introspect_value(&self) -> String {
         "()".to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7828,7 +7833,7 @@ impl<T: Introspect> Introspect for (T,) {
         return "1-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -7841,7 +7846,7 @@ impl<T1: Introspect, T2: Introspect> Introspect for (T1, T2) {
         return "2-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -7856,7 +7861,7 @@ impl<T1: Introspect, T2: Introspect, T3: Introspect> Introspect for (T1, T2, T3)
         return "3-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -7874,7 +7879,7 @@ impl<T1: Introspect, T2: Introspect, T3: Introspect, T4: Introspect> Introspect 
         return "4-tuple".to_string();
     }
 
-    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         if index == 0 {
             return Some(introspect_item("0".to_string(), &self.0));
         }
@@ -7895,7 +7900,7 @@ impl Introspect for AtomicBool {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7903,7 +7908,7 @@ impl Introspect for AtomicU8 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7911,7 +7916,7 @@ impl Introspect for AtomicI8 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7919,7 +7924,7 @@ impl Introspect for AtomicU16 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7927,7 +7932,7 @@ impl Introspect for AtomicI16 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7935,7 +7940,7 @@ impl Introspect for AtomicU32 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7943,7 +7948,7 @@ impl Introspect for AtomicI32 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7951,7 +7956,7 @@ impl Introspect for AtomicU64 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7959,7 +7964,7 @@ impl Introspect for AtomicI64 {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7967,7 +7972,7 @@ impl Introspect for AtomicUsize {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -7975,7 +7980,7 @@ impl Introspect for AtomicIsize {
     fn introspect_value(&self) -> String {
         self.load(Ordering::SeqCst).to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8137,7 +8142,7 @@ impl Introspect for bool {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8145,7 +8150,7 @@ impl Introspect for u8 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8153,7 +8158,7 @@ impl Introspect for u16 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8161,7 +8166,7 @@ impl Introspect for u32 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8169,7 +8174,7 @@ impl Introspect for u64 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8177,7 +8182,7 @@ impl Introspect for u128 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8185,7 +8190,7 @@ impl Introspect for i8 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8193,7 +8198,7 @@ impl Introspect for i16 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8201,7 +8206,7 @@ impl Introspect for i32 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8209,7 +8214,7 @@ impl Introspect for i64 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8217,7 +8222,7 @@ impl Introspect for char {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8225,7 +8230,7 @@ impl Introspect for i128 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8233,7 +8238,7 @@ impl Introspect for f32 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8241,7 +8246,7 @@ impl Introspect for f64 {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8249,7 +8254,7 @@ impl Introspect for usize {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8257,7 +8262,7 @@ impl Introspect for isize {
     fn introspect_value(&self) -> String {
         self.to_string()
     }
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
@@ -8578,7 +8583,7 @@ impl Introspect for Canary1 {
         "Canary1".to_string()
     }
 
-    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem + '_>> {
+    fn introspect_child(&self, _index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
         None
     }
 }
