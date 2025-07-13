@@ -82,7 +82,7 @@ fn test_closure() {
     let boxed: Box<dyn Example> = Box::new(ExampleImplementation {});
     let conn = AbiConnection::from_boxed_trait(boxed).unwrap();
 
-    conn.call_closure(&|x, y| (x + y));
+    conn.call_closure(&|x, y| x + y);
 }
 
 #[test]
