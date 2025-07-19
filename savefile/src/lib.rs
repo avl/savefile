@@ -1017,6 +1017,8 @@ pub enum SavefileError {
         /// Possible descriptive message
         msg: String,
     },
+    /// A timestamp was encountered which is out of range for the Savefile timestamp type
+    TimestampOutOfRange
 }
 impl From<Utf8Error> for SavefileError {
     fn from(value: Utf8Error) -> Self {
@@ -1088,6 +1090,9 @@ impl Display for SavefileError {
                     "Failed while loading symbol {} from library {}: {}",
                     symbol, libname, msg
                 )
+            }
+            SavefileError::TimestampOutOfRange => {
+                write!(f, "A timestamp value outside the range 1677-09-21T00:12:43.145224192 .. 2262-04-11T23:47:16.854775807 was encountered.")
             }
         }
     }
@@ -1308,6 +1313,181 @@ impl<T> From<arrayvec::CapacityError<T>> for SavefileError {
     }
 }
 
+impl Introspect for IpAddr {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+impl Introspect for SocketAddr {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+impl WithSchema for IpAddr {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Enum(SchemaEnum{
+            dbg_name: "IpAddr".to_string(),
+            variants: vec![
+                Variant {
+                    name: "IPV4".to_string(),
+                    discriminant: 0,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)),
+                            offset: None,
+                        }
+                    ],
+                },
+                Variant {
+                    name: "IPV6".to_string(),
+                    discriminant: 1,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                            offset: None,
+                        }
+                    ],
+                }
+
+            ],
+            discriminant_size: 1,
+            has_explicit_repr: false,
+            size: None,
+            alignment: None,
+        })
+    }
+}
+impl Packed for IpAddr{}
+impl Serialize for IpAddr {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        match self {
+            IpAddr::V4(v4) => {
+                serializer.write_u8(0)?;
+                serializer.write_u32(v4.to_bits())?;
+            }
+            IpAddr::V6(v6) => {
+                serializer.write_u8(1)?;
+                serializer.write_u128(v6.to_bits())?;
+            }
+        }
+        Ok(())
+    }
+}
+impl Deserialize for IpAddr {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let variant = deserializer.read_u8()?;
+        match variant {
+            0 => {
+                let ip = deserializer.read_u32()?;
+                Ok(IpAddr::V4(Ipv4Addr::from_bits(ip)))
+            }
+            1 => {
+                let ip = deserializer.read_u128()?;
+                Ok(IpAddr::V6(Ipv6Addr::from_bits(ip)))
+            }
+            _ => {
+                Err(SavefileError::GeneralError {
+                    msg: "corrupt stream: invalid ip address type".to_string(),
+                })
+            }
+        }
+    }
+}
+
+impl WithSchema for SocketAddr {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Enum(SchemaEnum{
+            dbg_name: "SocketAddr".to_string(),
+            variants: vec![
+                Variant {
+                    name: "IPV4".to_string(),
+                    discriminant: 0,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u32)),
+                            offset: None,
+                        }
+                    ],
+                },
+                Variant {
+                    name: "IPV6".to_string(),
+                    discriminant: 1,
+                    fields: vec![
+                        Field {
+                            name: "0".to_string(),
+                            value: Box::new(Schema::Primitive(SchemaPrimitive::schema_u128)),
+                            offset: None,
+                        }
+                    ],
+                }
+
+            ],
+            discriminant_size: 1,
+            has_explicit_repr: false,
+            size: None,
+            alignment: None,
+        })
+    }
+}
+impl Packed for SocketAddr {}
+
+impl Serialize for SocketAddr {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        match self {
+            SocketAddr::V4(v4) => {
+                serializer.write_u8(0)?;
+                serializer.write_u16(v4.port())?;
+                serializer.write_u32(v4.ip().to_bits())?;
+            }
+            SocketAddr::V6(v6) => {
+                serializer.write_u8(1)?;
+                serializer.write_u16(v6.port())?;
+                serializer.write_u128(v6.ip().to_bits())?;
+                serializer.write_u32(v6.flowinfo())?;
+                serializer.write_u32(v6.scope_id())?;
+            }
+        }
+        Ok(())
+    }
+}
+impl Deserialize for SocketAddr {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let variant = deserializer.read_u8()?;
+        match variant {
+            0 => {
+                let port = deserializer.read_u16()?;
+                let ip = deserializer.read_u32()?;
+                Ok(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from_bits(ip), port)))
+            }
+            1 => {
+                let port = deserializer.read_u16()?;
+                let ip = deserializer.read_u128()?;
+                let flowinfo = deserializer.read_u32()?;
+                let scope_id = deserializer.read_u32()?;
+                Ok(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_bits(ip), port, flowinfo, scope_id)))
+            }
+            _ => {
+                Err(SavefileError::GeneralError {
+                    msg: "corrupt stream: invalid ip address type".to_string(),
+                })
+            }
+        }
+    }
+}
+
 impl WithSchema for PathBuf {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
@@ -1489,6 +1669,7 @@ mod crypto {
             if self.data2 == 0 {
                 self.data1 = self.data1.wrapping_add(1);
             }
+
             let mut bytes = [0u8; 12];
             let bytes1: [u8; 8] = self.data1.to_le_bytes();
             let bytes2: [u8; 4] = self.data2.to_le_bytes();
@@ -3558,6 +3739,9 @@ pub enum Schema {
     ),
     /// UninitSlice from 'bytes' crate
     UninitSlice,
+    /// A signed unix timestamp, with nanosecond precision. Range:
+    /// 1677-09-21T00:12:43.145224192 .. 2262-04-11T23:47:16.854775807.
+    UtcTimestamp
 }
 /// Introspect is not implemented for Schema, though it could be
 impl Introspect for Schema {
@@ -3596,6 +3780,7 @@ impl Schema {
             Schema::StdIoError => "stdioerror".into(),
             Schema::Future(_, _, _, _) => "future".into(),
             Schema::UninitSlice => {"UninitSlice".into()}
+            Schema::UtcTimestamp => {"UtcTimestamp".into()}
         }
     }
     /// Determine if the two fields are laid out identically in memory, in their parent objects.
@@ -3753,6 +3938,7 @@ impl Schema {
             Schema::StdIoError => None,
             Schema::Future(_, _, _, _) => None,
             Schema::UninitSlice => None,
+            Schema::UtcTimestamp => Some(8),
         }
     }
 }
@@ -3903,6 +4089,9 @@ pub fn diff_schema(a: &Schema, b: &Schema, path: String, is_return_pos: bool) ->
             return None;
         }
         (Schema::Str, Schema::Str) => {
+            return None;
+        }
+        (Schema::UtcTimestamp, Schema::UtcTimestamp) => {
             return None;
         }
         (Schema::StdIoError, Schema::StdIoError) => {
@@ -4506,6 +4695,10 @@ impl Serialize for Schema {
                 serializer.write_u8(19)?;
                 Ok(())
             }
+            Schema::UtcTimestamp => {
+                serializer.write_u8(20)?;
+                Ok(())
+            }
         }
     }
 }
@@ -4554,6 +4747,9 @@ impl Deserialize for Schema {
             }
             19 => {
                 Schema::UninitSlice
+            }
+            20 => {
+                Schema::UtcTimestamp
             }
             c => {
                 return Err(SavefileError::GeneralError {
@@ -5726,6 +5922,227 @@ impl<T: Deserialize, R: Deserialize> Deserialize for Result<T, R> {
         }
     }
 }
+
+#[cfg(feature = "ecolor")]
+impl Packed for ecolor::Color32 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 4 {
+                panic!("Unexpected change in size of ecolor::Color32 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "ecolor")]
+impl WithSchema for ecolor::Color32 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Array(SchemaArray {
+            item_type: Box::new(Schema::Primitive(SchemaPrimitive::schema_u8)),
+            count: 4,
+        })
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Serialize for ecolor::Color32 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.to_array().serialize(serializer)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Deserialize for ecolor::Color32 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x:[u8;4] = <_ as Deserialize>::deserialize(deserializer)?;
+        Ok(Self::from_rgba_premultiplied(
+            x[0],x[1],x[2],x[3]
+        ))
+    }
+}
+#[cfg(feature = "ecolor")]
+impl Introspect for ecolor::Color32 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
+
+#[cfg(feature = "emath")]
+impl Packed for emath::Pos2 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 8 {
+                panic!("Unexpected change in size of emath::Pos2 type");
+            }
+            if std::mem::offset_of!(emath::Vec2, x) != 0 ||
+                std::mem::offset_of!(emath::Vec2, y) != 4 {
+                panic!("Unexpected change in layout of emath::Pos2 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "emath")]
+impl WithSchema for emath::Pos2 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "Pos2".to_string(),
+            size: Some(8),
+            alignment: Some(4),
+            fields: vec![
+                Field {
+                    name: "x".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(0),
+                },
+                Field {
+                    name: "y".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(4),
+                }
+            ],
+        })
+    }
+}
+#[cfg(feature = "emath")]
+impl Serialize for emath::Pos2 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_f32(self.x)?;
+        serializer.write_f32(self.y)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "emath")]
+impl Deserialize for emath::Pos2 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x = deserializer.read_f32()?;
+        let y = deserializer.read_f32()?;
+        Ok(emath::Pos2::new(x, y))
+    }
+}
+#[cfg(feature = "emath")]
+impl Introspect for emath::Pos2 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
+
+#[cfg(feature = "emath")]
+impl Packed for emath::Vec2 {
+    unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
+        const {
+            if size_of::<Self>() != 8 {
+                panic!("Unexpected change in size of emath::Vec2 type");
+            }
+            if std::mem::offset_of!(emath::Vec2, x) != 0 ||
+                std::mem::offset_of!(emath::Vec2, y) != 4 {
+                panic!("Unexpected change in layout of emath::Vec2 type");
+            }
+        }
+        IsPacked::yes()
+    }
+}
+#[cfg(feature = "emath")]
+impl WithSchema for emath::Vec2 {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Struct(SchemaStruct {
+            dbg_name: "Vec2".to_string(),
+            size: Some(8),
+            alignment: Some(4),
+            fields: vec![
+                Field {
+                    name: "x".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(0),
+                },
+                Field {
+                    name: "y".to_string(),
+                    value: Box::new(Schema::Primitive(SchemaPrimitive::schema_f32)),
+                    offset: Some(4),
+                }
+            ],
+        })
+    }
+}
+#[cfg(feature = "emath")]
+impl Serialize for emath::Vec2 {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        serializer.write_f32(self.x)?;
+        serializer.write_f32(self.y)?;
+        Ok(())
+    }
+}
+#[cfg(feature = "emath")]
+impl Deserialize for emath::Vec2 {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let x = deserializer.read_f32()?;
+        let y = deserializer.read_f32()?;
+        Ok(emath::Vec2::new(x, y))
+    }
+}
+#[cfg(feature = "emath")]
+impl Introspect for emath::Vec2 {
+    fn introspect_value(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+
+#[cfg(feature = "chrono")]
+impl Introspect for chrono::DateTime<chrono::Utc> {
+    fn introspect_value(&self) -> String {
+        self.to_string()
+    }
+
+    fn introspect_child<'a>(&'a self, _index: usize) -> Option<Box<dyn IntrospectItem<'a> + 'a>> {
+        None
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl Packed for chrono::DateTime<chrono::Utc> {
+}
+
+#[cfg(feature = "chrono")]
+impl WithSchema for chrono::DateTime<chrono::Utc> {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::UtcTimestamp
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl Serialize for chrono::DateTime<chrono::Utc> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let Some(t) = self.timestamp_nanos_opt() else {
+            return Err(SavefileError::TimestampOutOfRange)
+        };
+        Ok(serializer.write_i64(t)?)
+    }
+}
+#[cfg(feature = "chrono")]
+impl Deserialize for chrono::DateTime<chrono::Utc> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let t = deserializer.read_i64()?;
+        Ok(chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(t))
+    }
+}
+
+
 
 #[cfg(any(feature = "bit-vec", feature = "bit-vec08"))]
 #[cfg(target_endian = "big")]
@@ -7340,6 +7757,7 @@ use std::collections::hash_map::Entry;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::slice;

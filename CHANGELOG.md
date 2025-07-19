@@ -2,11 +2,21 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.19.0
+
+Optional support for chrono, and some types from egui.
+
+Bumps MSRV to 1.80.
+
 ## 0.18.7
 
 Minor fixes to fix build. No impact on features or correctness.
 
 ## 0.18.6
+
+Support for std::net::SocketAddr.
+
+Support for chrono::DateTime<Utc> .
 
 Fix warning on latest rust nightly.
 
