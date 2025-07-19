@@ -1351,7 +1351,7 @@ impl WithSchema for IpAddr {
                 },
                 Variant {
                     name: "IPV6".to_string(),
-                    discriminant: 0,
+                    discriminant: 1,
                     fields: vec![
                         Field {
                             name: "0".to_string(),
@@ -1424,7 +1424,7 @@ impl WithSchema for SocketAddr {
                 },
                 Variant {
                     name: "IPV6".to_string(),
-                    discriminant: 0,
+                    discriminant: 1,
                     fields: vec![
                         Field {
                             name: "0".to_string(),
