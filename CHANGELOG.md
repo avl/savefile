@@ -2,9 +2,11 @@
 
 This file contains information about changes in each version of savefile.
 
-## 0.18.8
+## 0.19.0
 
 Optional support for chrono, and some types from egui.
+
+Bumps MSRV to 1.80.
 
 ## 0.18.7
 
