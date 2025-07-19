@@ -2,6 +2,10 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.18.8
+
+Optional support for chrono, and some types from egui.
+
 ## 0.18.7
 
 Minor fixes to fix build. No impact on features or correctness.
