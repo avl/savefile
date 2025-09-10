@@ -1,6 +1,6 @@
 [package]
 name = "savefile-test"
-version = "0.0.1"
+version.workspace = true
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 resolver = "2"
 edition = "2021"

@@ -1,6 +1,15 @@
 # Changelog
 
+
 This file contains information about changes in each version of savefile.
+
+## 0.20.0
+ 
+ * Removes the requirement that items in collections be `'static`.
+ * Add associated type to `WithSchema` trait (breaking change)
+ * Savefile-derive no longer adds trait-bounds on generic parameters that only occur inside PhantomData
+ * Enable the `derive` feature by default, meaning clients no longer have to depend on `savefile_derive`.
+ * Support for basic egui types.
 
 ## 0.19.0
 
@@ -221,7 +230,6 @@ Serializing things with lifetimes is still possible, the only place where 'stati
 is the contents of containers such as Box, Vec etc. The reason is that the new recursion
 support needs to be able to create TypeIds, and this is only possible for objects with
 'static lifetime.
-
 
 ## 0.16.5
 

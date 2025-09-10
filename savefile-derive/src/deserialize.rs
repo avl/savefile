@@ -120,12 +120,12 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
-    let name = input.ident;
+    let name = &input.ident;
 
-    let generics = input.generics;
+    let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(
-        &generics,
+        &input,
         where_clause,
         quote! {_savefile::prelude::Deserialize + _savefile::prelude::Packed},
     );

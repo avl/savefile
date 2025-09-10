@@ -12,6 +12,9 @@ members = [
 exclude = ["compile_tests"]
 resolver = "2"
 
+[workspace.package]
+version = "0.20.0"
+
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3

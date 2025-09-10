@@ -1,14 +1,22 @@
+use std::collections::HashSet;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use syn::spanned::Spanned;
-use syn::{Error, Expr, ExprLit, GenericParam, Generics, Lit, LitStr, Meta, MetaNameValue, RangeLimits, Type, WhereClause};
+use syn::{DeriveInput, Error, Expr, ExprLit, GenericParam, Generics, Lit, LitStr, Meta, MetaNameValue, RangeLimits, Type, WhereClause};
 use syn::token::Token;
+use crate::get_phantomdata_types;
 
 pub(crate) fn get_extra_where_clauses(
-    gen2: &Generics,
+    input: &DeriveInput,
     where_clause: Option<&WhereClause>,
     the_trait: TokenStream,
 ) -> TokenStream {
+    let gen2 = &input.generics;
+
+    let mut names_that_need_where_clauses: HashSet<Ident> = HashSet::new();
+    get_phantomdata_types(&input.data, false, &mut names_that_need_where_clauses);
+
+
     let extra_where_separator;
     if let Some(where_clause) = where_clause {
         if where_clause.predicates.trailing_punct() {
@@ -22,6 +30,9 @@ pub(crate) fn get_extra_where_clauses(
     let mut where_clauses = vec![];
     for param in gen2.params.iter() {
         if let GenericParam::Type(t) = param {
+            if !names_that_need_where_clauses.contains(&t.ident) {
+                continue;
+            }
             let t_name = &t.ident;
             let clause = quote! {#t_name : #the_trait};
             where_clauses.push(clause);

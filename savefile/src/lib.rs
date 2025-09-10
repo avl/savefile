@@ -23,7 +23,7 @@ This is the documentation for `savefile`
 
 # Introduction
 
-Savefile is a rust library to conveniently, quickly and correctly
+Savefile is a rust library to conveniently, quickly, and correctly
 serialize and deserialize arbitrary rust structs and enums into
 an efficient and compact binary version controlled format.
 
@@ -41,7 +41,6 @@ computer game is saved to disk using Savefile.
 
 ```
 use savefile::prelude::*;
-use savefile_derive::Savefile;
 
 # #[cfg(miri)] fn main() {}
 # #[cfg(not(miri))]
@@ -89,14 +88,14 @@ architecture with different formats. This format is generally pretty 'raw', data
 formatted the same way as it is in RAM. There is support for bzip2, but this is just a simple
 post-processing step.
 
-2: It does not support serializing 'graphs'. I.e, it does not have a concept of object identity,
+2: It does not support serializing 'graphs'. I.e., it does not have a concept of object identity,
 and cannot handle situations where the same object is reachable through many paths. If two
 objects both have a reference to a common object, it will be serialized twice and deserialized
 twice.
 
 3: Since it doesn't support 'graphs', it doesn't do well with recursive data structures. When
 schema serialization is activated (which is the default), it also doesn't support 'potentially
-recursive' data structures. I.e, serializing a tree-object where the same node type can occur
+recursive' data structures. I.e., serializing a tree-object where the same node type can occur
 on different levels is not possible, even if the actual links in the tree do not cause any cycles.
 This is because the serialized schema is very detailed, and tries to describe exactly what
 types may be contained in each node. In a tree, it will determine that children of the node
@@ -115,7 +114,7 @@ Mark the struct like so:
 ```
 use savefile::prelude::*;
 use std::path::Path;
-use savefile_derive::Savefile;
+
 # #[cfg(miri)] fn main() {}
 # #[cfg(not(miri))]
 # fn main() {
@@ -213,7 +212,7 @@ The savefile-derive macro does support serializing old versions, with some limit
 # Versions and derive
 
 The derive macro used by Savefile supports multiple versions of structs. To make this work,
-you have to add attributes whenever fields are removed, added or have their types changed.
+you have to add attributes whenever fields are removed, added, or have their types changed.
 
 When adding or removing fields, use the #\[savefile_versions] attribute.
 
@@ -269,7 +268,7 @@ primitive types, when fields are added.
 Example:
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 #[derive(Savefile)]
 struct SomeType {
@@ -294,7 +293,7 @@ The default_val attribute only works for simple types.
 The default_fn attribute allows constructing more complex values as defaults.
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 fn make_hello_pair() -> (String,String) {
  ("Hello".to_string(),"World".to_string())
@@ -322,7 +321,7 @@ In this example, the value will be 0.0 after deserialization, regardless
 of the value when serializing.
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 #[derive(Savefile)]
 struct IgnoreExample {
@@ -345,7 +344,7 @@ The savefile_versions_as attribute can be used to support changing the type of a
 Let's say the first version of our protocol uses the following struct:
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 #[derive(Savefile)]
 struct Employee {
@@ -363,7 +362,7 @@ which sometimes appear in phone numbers, like '+' or '-' etc.
 So, we change the type of phone_number to String:
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 fn convert(phone_number:u64) -> String {
  phone_number.to_string()
@@ -388,7 +387,7 @@ function need not be specified in these cases.
 Let's say we have the following struct:
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 #[derive(Savefile)]
 struct Racecar {
@@ -400,7 +399,7 @@ struct Racecar {
 We realize that we need to increase the range of the max_speed_kmh variable, and change it like this:
 
 ```
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 
 #[derive(Savefile)]
 struct Racecar {
@@ -429,7 +428,7 @@ serializing this is as low as possible.
 ```
 use savefile::prelude::*;
 use std::path::Path;
-use savefile_derive::Savefile;
+use savefile::prelude::Savefile;
 # #[cfg(miri)] fn main() {}
 # #[cfg(not(miri))]
 # fn main() {
@@ -536,7 +535,7 @@ struct Good {
 }
 ```
 
-And simpy don't use the pad1, pad2 and pad3 fields. Note, at time of writing, Savefile requires that the struct
+And simpy don't use the pad1, pad2, and pad3 fields. Note, at time of writing, Savefile requires that the struct
 be free of all padding. Even padding at the end is not allowed. This means that the following does not work:
 
 ```
@@ -636,7 +635,7 @@ savefile_require_fast, unless compilation failure on bad alignment is desired.
 For most user types, the savefile-derive crate can be used to automatically derive serializers
 and deserializers. This is not always possible, however.
 
-By implementing the traits Serialize, Deserialize and WithSchema, it's possible to create custom
+By implementing the traits Serialize, Deserialize, and WithSchema, it's possible to create custom
 serializers for any type.
 
 Let's create a custom serializer for an object MyPathBuf, as an example (this is just an example, because of
@@ -669,6 +668,7 @@ pub struct MyPathBuf {
  path: String,
 }
 impl WithSchema for MyPathBuf {
+ type StaticPrototype = Self;
  fn schema(_version: u32, context: &mut WithSchemaContext) -> Schema {
      Schema::Primitive(SchemaPrimitive::schema_string((Default::default())))
  }
@@ -704,7 +704,7 @@ Here is an example of using the trait directly:
 
 ````rust
 use savefile::prelude::*;
-use savefile_derive::Savefile;
+use savefile::prelude::Savefile;
 use savefile::Introspect;
 use savefile::IntrospectItem;
 #[derive(Savefile)]
@@ -753,7 +753,7 @@ Example:
 
 ````rust
 # use savefile::prelude::*;
-# use savefile_derive::Savefile;
+# use savefile::prelude::Savefile;
 # use savefile::prelude::*;
 
 #[derive(Savefile)]
@@ -777,7 +777,7 @@ when formatted using the Debug-trait in this way.
 An example:
 ````rust
 
-use savefile_derive::Savefile;
+use savefile::prelude::Savefile;
 use savefile::Introspect;
 use savefile::IntrospectItem;
 use savefile::prelude::*;
@@ -919,7 +919,7 @@ extern crate rustc_hash;
 extern crate memoffset;
 
 #[cfg(feature = "derive")]
-extern crate savefile_derive;
+pub extern crate savefile_derive;
 
 /// The current savefile version.
 ///
@@ -949,7 +949,7 @@ pub enum SavefileError {
     },
     /// The binary data which is being deserialized, contained an invalid utf8 sequence
     /// where a String was expected. If this occurs, it is either a bug in savefile,
-    /// a bug in an implementation of Deserialize, Serialize or WithSchema, or
+    /// a bug in an implementation of Deserialize, Serialize, or WithSchema, or
     /// a corrupt data file.
     InvalidUtf8 {
         /// descriptive message
@@ -1148,8 +1148,8 @@ impl<TR: Read> Deserializer<'_, TR> {
     /// Out of the box, `Arc<str>` has this deduplication done for it.
     /// The type T must be set to the type being deserialized, and is used as a key in a hashmap
     /// separating the state for different types.
-    pub fn get_state<T: 'static, R: Default + 'static>(&mut self) -> &mut R {
-        let type_id = TypeId::of::<T>();
+    pub fn get_state<T: WithSchema, R: Default + 'static>(&mut self) -> &mut R {
+        let type_id = TypeId::of::<T::StaticPrototype>();
         let the_any = self
             .ephemeral_state
             .entry(type_id)
@@ -1334,6 +1334,8 @@ impl Introspect for SocketAddr {
 }
 
 impl WithSchema for IpAddr {
+    type StaticPrototype = IpAddr;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Enum(SchemaEnum{
             dbg_name: "IpAddr".to_string(),
@@ -1407,6 +1409,7 @@ impl Deserialize for IpAddr {
 }
 
 impl WithSchema for SocketAddr {
+    type StaticPrototype = SocketAddr;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Enum(SchemaEnum{
             dbg_name: "SocketAddr".to_string(),
@@ -1489,6 +1492,7 @@ impl Deserialize for SocketAddr {
 }
 
 impl WithSchema for PathBuf {
+    type StaticPrototype = PathBuf;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
@@ -1515,7 +1519,11 @@ impl Introspect for PathBuf {
     }
 }
 
+#[doc(hidden)]
+pub struct CowStaticWrapper<T:?Sized>(PhantomData<T>);
+
 impl<'a, T: 'a + WithSchema + ToOwned + ?Sized> WithSchema for Cow<'a, T> {
+    type StaticPrototype = CowStaticWrapper<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -1550,6 +1558,7 @@ impl<'a, T: 'a + Introspect + ToOwned + ?Sized> Introspect for Cow<'a, T> {
 }
 
 impl WithSchema for std::io::Error {
+    type StaticPrototype = std::io::Error;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::StdIoError
     }
@@ -2595,7 +2604,7 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
 /// Context object used to keep track of recursion.
 ///
 /// Datastructures which cannot contain recursion do not need to concern themselves with
-/// this. Recursive data structures in rust require the use of Box, Vec, Arc or similar.
+/// this. Recursive data structures in rust require the use of Box, Vec, Arc, or similar.
 /// The most common of these datatypes from std are supported by savefile, and will guard
 /// against recursion in a well-defined way.
 /// As a user of Savefile, you only need to use this if you are implementing Savefile for
@@ -2623,7 +2632,9 @@ impl WithSchemaContext {
     /// struct MyBox<T> {
     ///    content: *const T
     /// }
-    /// impl<T:WithSchema + 'static> WithSchema for MyBox<T> {
+    /// impl<T:WithSchema> WithSchema for MyBox<T> {
+    ///     type StaticPrototype = MyBox<T::StaticPrototype>;
+    ///
     ///     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
     ///         context.possible_recursion::<MyBox<T>>(|context| Schema::Boxed(Box::new(T::schema(version, context))))
     ///     }
@@ -2633,8 +2644,8 @@ impl WithSchemaContext {
     /// If recursion is detected (traversing to exactly `MyBox<T>` twice, in the above example), the method
     /// 'possible_recursion' will return Schema::Recursion, stopping the Schema instance from becoming infinitely big.
     ///
-    pub fn possible_recursion<T: 'static>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
-        let typeid = TypeId::of::<T>();
+    pub fn possible_recursion<T:WithSchema>(&mut self, cb: impl FnOnce(&mut WithSchemaContext) -> Schema) -> Schema {
+        let typeid = TypeId::of::<T::StaticPrototype>();
         let prevlen = self.seen_types.len();
         match self.seen_types.entry(typeid) {
             Entry::Occupied(occ) => {
@@ -2670,6 +2681,39 @@ impl WithSchemaContext {
     )
 )]
 pub trait WithSchema {
+    /// Just set this equal to Self:
+    ///
+    /// ```ignore
+    /// type StaticPrototype = Self;
+    /// ```
+    ///
+    /// For types with a lifetime, set this to a static version of Self:
+    ///
+    /// ```ignore
+    /// type StaticPrototype = TypeOfSelf<'static>;
+    /// ```
+    ///
+    /// The only way this may be used is internal in savefile, where it's used
+    /// to detect recursive schemas. The only thing this type may be used for
+    /// is calling its type_id-method.
+    ///
+    /// If Self is !Sized, StaticPrototype has to be some sort of wrapper/placeholder type
+    /// which is Sized.
+    ///
+    /// # Motivation
+    /// In order for Savefile's support for recursive types to work, we need to be able
+    /// to get the type_id of every type.
+    ///
+    /// Rust does not support retrieving the type_id of non-static types.
+    ///
+    /// To work around this limitation, each implementation of WithSchema for a type
+    /// that contains lifetimes, must provide a 'static version of itself that is used
+    /// for the recursion detection. This, of course, assumes that the object graph
+    /// doesn't in fact contain the same type in two different positions in the graph with
+    /// only differing lifetimes. This is a safe assumption, since lifetimes are erased
+    /// at runtime, and two such positions in the graph would use the same code, and thus
+    /// must have the same wire format and in fact bet compatible.
+    type StaticPrototype : 'static;
     /// Returns a representation of the schema used by this Serialize implementation for the given version.
     /// The WithSchemaContext can be used to guard against recursive data structures.
     /// See documentation of WithSchemaContext.
@@ -2678,7 +2722,7 @@ pub trait WithSchema {
 
 /// Create a new WithSchemaContext, and then call 'schema' on type T.
 /// This is a useful convenience method.
-pub fn get_schema<T: WithSchema + 'static>(version: u32) -> Schema {
+pub fn get_schema<T: WithSchema>(version: u32) -> Schema {
     T::schema(version, &mut WithSchemaContext::new())
 }
 
@@ -2874,6 +2918,15 @@ pub trait Deserialize: WithSchema + Sized {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError>; //TODO: Do error handling
 }
 
+/// Convenience trait that has `Serialize + Deserialize + WithSchema + Packed` as
+/// supertrait.
+///
+/// Adding this as a bound on a type, ensures that type can be serialized and deserialized
+/// effectively.
+pub trait Savefile: Serialize + Deserialize + WithSchema + Packed {}
+
+impl<T:Serialize + Deserialize + WithSchema + Packed> Savefile for T {}
+
 /// A field is serialized according to its value.
 /// The name is just for diagnostics.
 #[derive(Debug, PartialEq, Clone)]
@@ -2953,7 +3006,7 @@ impl SchemaArray {
 /// A struct is serialized by serializing its fields one by one,
 /// without any padding.
 /// The dbg_name is just for diagnostics.
-/// The memory format is given by size, alignment and the various
+/// The memory format is given by size, alignment, and the various
 /// field offsets. If any field lacks an offset, the memory format
 /// is unspecified.
 #[derive(Debug, PartialEq, Clone)]
@@ -3087,7 +3140,7 @@ pub struct SchemaEnum {
     /// Variants of enum
     pub variants: Vec<Variant>,
     /// If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
-    /// Valid values are 1, 2 or 4.
+    /// Valid values are 1, 2, or 4.
     /// Otherwise, this is the number of bytes needed to represent the discriminant.
     /// In either case, this is the size of the enum in the disk-format.
     pub discriminant_size: u8,
@@ -3115,7 +3168,7 @@ impl SchemaEnum {
     /// * dbg_name - Name of the enum type.
     /// * discriminant_size:
     ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
-    ///   Valid values are 1, 2 or 4.
+    ///   Valid values are 1, 2, or 4.
     ///   Otherwise, this is the number of bytes needed to represent the discriminant.
     ///   In either case, this is the size of the enum in the disk-format.
     /// * variants - The variants of the enum
@@ -3137,7 +3190,7 @@ impl SchemaEnum {
     /// * variants - The variants of the enum
     /// * discriminant_size:
     ///   If this is a repr(uX)-enum, then the size of the discriminant, in bytes.
-    ///   Valid values are 1, 2 or 4.
+    ///   Valid values are 1, 2, or 4.
     ///   Otherwise, this is the number of bytes needed to represent the discriminant.
     ///   In either case, this is the size of the enum in the disk-format.
     /// * has_explicit_repr: True if this enum type has a repr(uX) attribute, and thus a predictable
@@ -3353,6 +3406,7 @@ impl Deserialize for AbiMethodArgument {
 }
 
 impl WithSchema for AbiMethodArgument {
+    type StaticPrototype = AbiMethodArgument;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -3396,6 +3450,7 @@ pub struct AbiMethodInfo {
 
 impl Packed for AbiMethodInfo {}
 impl WithSchema for AbiMethodInfo {
+    type StaticPrototype = AbiMethodInfo;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -3456,6 +3511,7 @@ pub struct AbiMethod {
 }
 impl Packed for AbiMethod {}
 impl WithSchema for AbiMethod {
+    type StaticPrototype = AbiMethod;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -3491,6 +3547,7 @@ pub struct AbiTraitDefinition {
 }
 impl Packed for AbiTraitDefinition {}
 impl WithSchema for AbiTraitDefinition {
+    type StaticPrototype = AbiTraitDefinition;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4191,6 +4248,7 @@ fn diff_abi_def(a: &AbiTraitDefinition, b: &AbiTraitDefinition, path: String, is
 }
 
 impl WithSchema for Field {
+    type StaticPrototype = Field;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4219,6 +4277,7 @@ impl Deserialize for Field {
     }
 }
 impl WithSchema for Variant {
+    type StaticPrototype = Variant;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4276,12 +4335,14 @@ impl Deserialize for SchemaArray {
     }
 }
 impl WithSchema for SchemaArray {
+    type StaticPrototype = SchemaArray;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
 }
 
 impl WithSchema for SchemaStruct {
+    type StaticPrototype = SchemaStruct;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4327,6 +4388,7 @@ impl Deserialize for SchemaStruct {
 }
 
 impl WithSchema for SchemaPrimitive {
+    type StaticPrototype = SchemaPrimitive;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4361,6 +4423,7 @@ impl Serialize for SchemaPrimitive {
     }
 }
 impl WithSchema for VecOrStringLayout {
+    type StaticPrototype =VecOrStringLayout;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4420,6 +4483,7 @@ impl Deserialize for SchemaPrimitive {
 }
 
 impl WithSchema for SchemaEnum {
+    type StaticPrototype = SchemaEnum;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4603,6 +4667,7 @@ impl Arbitrary for Schema {
 }
 
 impl WithSchema for Schema {
+    type StaticPrototype = Schema;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
     }
@@ -4761,13 +4826,20 @@ impl Deserialize for Schema {
         Ok(schema)
     }
 }
+
+#[doc(hidden)]
+pub struct StrStaticWrapper;
+
 impl WithSchema for str {
+    // This is never part of a cycle anywway
+    type StaticPrototype = StrStaticWrapper;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
 }
 
 impl WithSchema for String {
+    type StaticPrototype = String;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
     }
@@ -4878,6 +4950,7 @@ impl<T: Introspect> Introspect for std::sync::Mutex<T> {
 }
 
 impl<T: WithSchema> WithSchema for std::sync::Mutex<T> {
+    type StaticPrototype = std::sync::Mutex<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -4898,6 +4971,7 @@ impl<T: Deserialize> Deserialize for std::sync::Mutex<T> {
 
 #[cfg(feature = "parking_lot")]
 impl<T: WithSchema> WithSchema for Mutex<T> {
+    type StaticPrototype = Mutex<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -5029,6 +5103,7 @@ impl<T: Introspect> Introspect for RwLock<T> {
 
 #[cfg(feature = "parking_lot")]
 impl<T: WithSchema> WithSchema for RwLock<T> {
+    type StaticPrototype = RwLock<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -5204,7 +5279,9 @@ impl<K: Introspect, V: Introspect> Introspect for BTreeMap<K, V> {
         self.len()
     }
 }
-impl<K: WithSchema + 'static, V: WithSchema + 'static> WithSchema for BTreeMap<K, V> {
+
+impl<K: WithSchema, V: WithSchema> WithSchema for BTreeMap<K, V> {
+    type StaticPrototype = BTreeMap<K::StaticPrototype, V::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -5229,7 +5306,7 @@ impl<K: WithSchema + 'static, V: WithSchema + 'static> WithSchema for BTreeMap<K
     }
 }
 impl<K, V> Packed for BTreeMap<K, V> {}
-impl<K: Serialize + 'static, V: Serialize + 'static> Serialize for BTreeMap<K, V> {
+impl<K: Serialize, V: Serialize> Serialize for BTreeMap<K, V> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.len().serialize(serializer)?;
         for (k, v) in self {
@@ -5239,7 +5316,7 @@ impl<K: Serialize + 'static, V: Serialize + 'static> Serialize for BTreeMap<K, V
         Ok(())
     }
 }
-impl<K: Deserialize + Ord + 'static, V: Deserialize + 'static> Deserialize for BTreeMap<K, V> {
+impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let mut ret = BTreeMap::new();
         let count = <usize as Deserialize>::deserialize(deserializer)?;
@@ -5254,7 +5331,8 @@ impl<K: Deserialize + Ord + 'static, V: Deserialize + 'static> Deserialize for B
 }
 
 impl<K> Packed for BTreeSet<K> {}
-impl<K: WithSchema + 'static> WithSchema for BTreeSet<K> {
+impl<K: WithSchema> WithSchema for BTreeSet<K> {
+    type StaticPrototype = BTreeSet<K::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<K>(|context| K::schema(version, context))),
@@ -5262,7 +5340,7 @@ impl<K: WithSchema + 'static> WithSchema for BTreeSet<K> {
         )
     }
 }
-impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
+impl<K: Serialize> Serialize for BTreeSet<K> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for item in self {
@@ -5271,7 +5349,7 @@ impl<K: Serialize + 'static> Serialize for BTreeSet<K> {
         Ok(())
     }
 }
-impl<K: Deserialize + 'static + Ord> Deserialize for BTreeSet<K> {
+impl<K: Deserialize + Ord> Deserialize for BTreeSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
         let mut ret = BTreeSet::new();
@@ -5283,7 +5361,8 @@ impl<K: Deserialize + 'static + Ord> Deserialize for BTreeSet<K> {
 }
 
 impl<K, S: ::std::hash::BuildHasher> Packed for HashSet<K, S> {}
-impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
+impl<K: WithSchema, S: ::std::hash::BuildHasher> WithSchema for HashSet<K, S> {
+    type StaticPrototype = HashSet<K::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<K>(|context| K::schema(version, context))),
@@ -5291,7 +5370,7 @@ impl<K: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema for HashSe
         )
     }
 }
-impl<K: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
+impl<K: Serialize, S: ::std::hash::BuildHasher> Serialize for HashSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for item in self {
@@ -5300,7 +5379,7 @@ impl<K: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize for HashSet<
         Ok(())
     }
 }
-impl<K: Deserialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher + Default> Deserialize for HashSet<K, S> {
+impl<K: Deserialize + Eq + Hash, S: ::std::hash::BuildHasher + Default> Deserialize for HashSet<K, S> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let cnt = deserializer.read_usize()?;
         let mut ret = HashSet::with_capacity_and_hasher(cnt, S::default());
@@ -5311,9 +5390,10 @@ impl<K: Deserialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher + Default
     }
 }
 
-impl<K: WithSchema + Eq + Hash + 'static, V: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
     for HashMap<K, V, S>
 {
+    type StaticPrototype = HashMap<K::StaticPrototype, V::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -5338,7 +5418,7 @@ impl<K: WithSchema + Eq + Hash + 'static, V: WithSchema + 'static, S: ::std::has
     }
 }
 impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> Packed for HashMap<K, V, S> {}
-impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
     for HashMap<K, V, S>
 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
@@ -5351,7 +5431,7 @@ impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash:
     }
 }
 
-impl<K: Deserialize + Eq + Hash + 'static, V: Deserialize + 'static, S: ::std::hash::BuildHasher + Default> Deserialize
+impl<K: Deserialize + Eq + Hash, V: Deserialize, S: ::std::hash::BuildHasher + Default> Deserialize
     for HashMap<K, V, S>
 {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
@@ -5364,10 +5444,12 @@ impl<K: Deserialize + Eq + Hash + 'static, V: Deserialize + 'static, S: ::std::h
     }
 }
 
+
 #[cfg(feature = "indexmap")]
-impl<K: WithSchema + Eq + Hash + 'static, V: WithSchema + 'static, S: ::std::hash::BuildHasher> WithSchema
+impl<K: WithSchema + Eq + Hash, V: WithSchema, S: ::std::hash::BuildHasher> WithSchema
     for IndexMap<K, V, S>
 {
+    type StaticPrototype = IndexMap<K::StaticPrototype, V::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -5479,7 +5561,7 @@ where
 impl<K: Eq + Hash, V, S: ::std::hash::BuildHasher> Packed for IndexMap<K, V, S> {}
 
 #[cfg(feature = "indexmap")]
-impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash::BuildHasher> Serialize
+impl<K: Serialize + Eq + Hash, V: Serialize, S: ::std::hash::BuildHasher> Serialize
     for IndexMap<K, V, S>
 {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
@@ -5493,7 +5575,7 @@ impl<K: Serialize + Eq + Hash + 'static, V: Serialize + 'static, S: ::std::hash:
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Deserialize + Eq + Hash + 'static, V: Deserialize + 'static> Deserialize for IndexMap<K, V> {
+impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for IndexMap<K, V> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexMap::with_capacity(l);
@@ -5527,7 +5609,8 @@ impl<K: Introspect + Eq + Hash, S: ::std::hash::BuildHasher> Introspect for Inde
 impl<K: Eq + Hash, S: ::std::hash::BuildHasher> Packed for IndexSet<K, S> {}
 
 #[cfg(feature = "indexmap")]
-impl<K: WithSchema + Eq + Hash + 'static, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
+impl<K: WithSchema + Eq + Hash, S: ::std::hash::BuildHasher> WithSchema for IndexSet<K, S> {
+    type StaticPrototype = IndexSet<K::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Struct(SchemaStruct {
@@ -5546,7 +5629,7 @@ impl<K: WithSchema + Eq + Hash + 'static, S: ::std::hash::BuildHasher> WithSchem
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Serialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
+impl<K: Serialize + Eq + Hash, S: ::std::hash::BuildHasher> Serialize for IndexSet<K, S> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         serializer.write_usize(self.len())?;
         for k in self.iter() {
@@ -5557,7 +5640,7 @@ impl<K: Serialize + Eq + Hash + 'static, S: ::std::hash::BuildHasher> Serialize 
 }
 
 #[cfg(feature = "indexmap")]
-impl<K: Deserialize + Eq + Hash + 'static> Deserialize for IndexSet<K> {
+impl<K: Deserialize + Eq + Hash> Deserialize for IndexSet<K> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = IndexSet::with_capacity(l);
@@ -5626,7 +5709,7 @@ impl<T: Default> ValueConstructor<T> for DefaultValueConstructor<T> {
 /// or any other factory trait, since we never need to serialize dummy
 /// values of Removed (we never serialize using a schema where a field i Removed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Removed<T> {
+pub struct Removed<T:?Sized> {
     phantom: std::marker::PhantomData<*const T>,
 }
 
@@ -5648,6 +5731,8 @@ impl<T> Removed<T> {
     }
 }
 impl<T: WithSchema> WithSchema for Removed<T> {
+    type StaticPrototype = Removed<T::StaticPrototype>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         <T>::schema(version, context)
     }
@@ -5714,7 +5799,12 @@ impl<T, D: ValueConstructor<T>> AbiRemoved<T, D> {
     }
 }
 
+#[doc(hidden)]
+pub struct AbiRemovedStaticPrototype<T:?Sized>(PhantomData<T>);
+
 impl<T: WithSchema, D: ValueConstructor<T>> WithSchema for AbiRemoved<T, D> {
+    type StaticPrototype = AbiRemovedStaticPrototype<T::StaticPrototype>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         <T>::schema(version, context)
     }
@@ -5760,6 +5850,8 @@ impl<T> Introspect for PhantomData<T> {
     }
 }
 impl<T> WithSchema for std::marker::PhantomData<T> {
+    type StaticPrototype = PhantomData<()>;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::ZeroSize
     }
@@ -5817,6 +5909,8 @@ impl<T: Introspect> Introspect for Option<T> {
 }
 
 impl<T: WithSchema> WithSchema for Option<T> {
+    type StaticPrototype = Option<PhantomData<T::StaticPrototype>>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::SchemaOption(Box::new(T::schema(version, context)))
     }
@@ -5867,6 +5961,8 @@ impl<T: Introspect, R: Introspect> Introspect for Result<T, R> {
 }
 
 impl<T: WithSchema, R: WithSchema> WithSchema for Result<T, R> {
+    type StaticPrototype = Result<PhantomData<T::StaticPrototype>, PhantomData<R::StaticPrototype>>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Enum(SchemaEnum {
             dbg_name: "Result".to_string(),
@@ -6120,6 +6216,8 @@ impl Packed for chrono::DateTime<chrono::Utc> {
 
 #[cfg(feature = "chrono")]
 impl WithSchema for chrono::DateTime<chrono::Utc> {
+    type StaticPrototype = Self;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::UtcTimestamp
     }
@@ -6150,6 +6248,7 @@ compile_error!("savefile bit-vec feature does not support big-endian machines");
 
 #[cfg(feature = "bit-vec")]
 impl WithSchema for bit_vec::BitVec {
+    type StaticPrototype = Self;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitVec".to_string(),
@@ -6245,6 +6344,7 @@ impl Deserialize for bit_vec::BitVec<u32> {
 
 #[cfg(feature = "bit-set")]
 impl WithSchema for bit_set::BitSet {
+    type StaticPrototype = Self;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitSet".to_string(),
@@ -6316,6 +6416,7 @@ impl Deserialize for bit_set::BitSet<u32> {
 
 #[cfg(feature = "bit-vec08")]
 impl WithSchema for bit_vec08::BitVec {
+    type StaticPrototype = Self;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitVec".to_string(),
@@ -6411,6 +6512,7 @@ impl Deserialize for bit_vec08::BitVec<u32> {
 
 #[cfg(feature = "bit-set")]
 impl WithSchema for bit_set08::BitSet {
+    type StaticPrototype = Self;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "BitSet".to_string(),
@@ -6498,7 +6600,8 @@ impl<T: Introspect> Introspect for BinaryHeap<T> {
 }
 
 impl<T> Packed for BinaryHeap<T> {}
-impl<T: WithSchema + 'static> WithSchema for BinaryHeap<T> {
+impl<T: WithSchema> WithSchema for BinaryHeap<T> {
+    type StaticPrototype = BinaryHeap<PhantomData<T::StaticPrototype>>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6506,7 +6609,7 @@ impl<T: WithSchema + 'static> WithSchema for BinaryHeap<T> {
         )
     }
 }
-impl<T: Serialize + Ord + 'static> Serialize for BinaryHeap<T> {
+impl<T: Serialize + Ord > Serialize for BinaryHeap<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         let l = self.len();
         serializer.write_usize(l)?;
@@ -6516,7 +6619,7 @@ impl<T: Serialize + Ord + 'static> Serialize for BinaryHeap<T> {
         Ok(())
     }
 }
-impl<T: Deserialize + Ord + 'static> Deserialize for BinaryHeap<T> {
+impl<T: Deserialize + Ord > Deserialize for BinaryHeap<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let l = deserializer.read_usize()?;
         let mut ret = BinaryHeap::with_capacity(l);
@@ -6550,13 +6653,14 @@ where
 }
 
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array + 'static> WithSchema for smallvec::SmallVec<T>
+impl<T: smallvec::Array > WithSchema for smallvec::SmallVec<T>
 where
     T::Item: WithSchema,
 {
+    type StaticPrototype = smallvec::SmallVec<[PhantomData<<T::Item as WithSchema>::StaticPrototype>;1]>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
-            Box::new(context.possible_recursion::<T>(|context| T::Item::schema(version, context))),
+            Box::new(context.possible_recursion::<T::Item>(|context| T::Item::schema(version, context))),
             VecOrStringLayout::Unknown,
         )
     }
@@ -6565,7 +6669,7 @@ where
 impl<T: smallvec::Array> Packed for smallvec::SmallVec<T> {}
 
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array + 'static> Serialize for smallvec::SmallVec<T>
+impl<T: smallvec::Array > Serialize for smallvec::SmallVec<T>
 where
     T::Item: Serialize,
 {
@@ -6579,7 +6683,7 @@ where
     }
 }
 #[cfg(feature = "smallvec")]
-impl<T: smallvec::Array + 'static> Deserialize for smallvec::SmallVec<T>
+impl<T: smallvec::Array > Deserialize for smallvec::SmallVec<T>
 where
     T::Item: Deserialize,
 {
@@ -6624,7 +6728,8 @@ fn regular_serialize_vec<T: Serialize>(
     }
 }
 
-impl<T: WithSchema + 'static> WithSchema for Box<[T]> {
+impl<T: WithSchema> WithSchema for Box<[T]> {
+    type StaticPrototype = Box<[T::StaticPrototype]>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6632,7 +6737,8 @@ impl<T: WithSchema + 'static> WithSchema for Box<[T]> {
         )
     }
 }
-impl<T: WithSchema + 'static> WithSchema for Arc<[T]> {
+impl<T: WithSchema> WithSchema for Arc<[T]> {
+    type StaticPrototype = Arc<[T::StaticPrototype]>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6673,6 +6779,8 @@ impl<T: Introspect> Introspect for Arc<[T]> {
 }
 
 impl WithSchema for Arc<str> {
+    type StaticPrototype = Self;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
@@ -6712,7 +6820,7 @@ impl Deserialize for Arc<str> {
     }
 }
 
-impl<T: Serialize + Packed + 'static> Serialize for Box<[T]> {
+impl<T: Serialize + Packed > Serialize for Box<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6730,7 +6838,7 @@ impl<T: Serialize + Packed + 'static> Serialize for Box<[T]> {
 }
 impl<T: Packed> Packed for Box<[T]> {}
 
-impl<T: Serialize + Packed + 'static> Serialize for Arc<[T]> {
+impl<T: Serialize + Packed > Serialize for Arc<[T]> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6748,17 +6856,18 @@ impl<T: Serialize + Packed + 'static> Serialize for Arc<[T]> {
 }
 impl<T: Packed> Packed for Arc<[T]> {}
 
-impl<T: Deserialize + Packed + 'static> Deserialize for Arc<[T]> {
+impl<T: Deserialize + Packed > Deserialize for Arc<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into())
     }
 }
-impl<T: Deserialize + Packed + 'static> Deserialize for Box<[T]> {
+impl<T: Deserialize + Packed > Deserialize for Box<[T]> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Vec::<T>::deserialize(deserializer)?.into_boxed_slice())
     }
 }
 impl WithSchema for &'_ str {
+    type StaticPrototype = &'static str;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(calculate_string_memory_layout()))
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
@@ -6772,7 +6881,9 @@ impl Serialize for &'_ str {
     }
 }
 
-impl<T: WithSchema + 'static> WithSchema for &'_ [T] {
+
+impl<T: WithSchema> WithSchema for &'_ [T] {
+    type StaticPrototype = &'static [T::StaticPrototype];
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6781,7 +6892,7 @@ impl<T: WithSchema + 'static> WithSchema for &'_ [T] {
         //TODO: This is _not_ the same memory layout as vec. Make a new Box type for slices?
     }
 }
-impl<T: Serialize + Packed + 'static> Serialize for &'_ [T] {
+impl<T: Serialize + Packed> Serialize for &'_ [T] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6801,7 +6912,7 @@ impl<T: Serialize + Packed + 'static> Serialize for &'_ [T] {
 
 /// Deserialize a slice into a Vec
 /// Unsized slices cannot be deserialized into unsized slices.
-pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + Packed + 'static>(
+pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + Packed>(
     deserializer: &mut Deserializer<R>,
 ) -> Result<Vec<T>, SavefileError> {
     Vec::deserialize(deserializer)
@@ -6899,7 +7010,11 @@ fn calculate_string_memory_layout() -> VecOrStringLayout {
     STRING_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
     return unsafe { std::mem::transmute::<u8, VecOrStringLayout>(is_std) };
 }
-impl<T: WithSchema + 'static> WithSchema for Vec<T> {
+#[doc(hidden)]
+pub struct VecStaticPrototype<T:?Sized>(PhantomData<T>);
+
+impl<T: WithSchema> WithSchema for Vec<T> {
+    type StaticPrototype = Vec<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -6924,7 +7039,7 @@ impl<T: Introspect> Introspect for Vec<T> {
     }
 }
 
-impl<T: Serialize + Packed + 'static> Serialize for Vec<T> {
+impl<T: Serialize + Packed> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         unsafe {
             if T::repr_c_optimization_safe(serializer.file_version).is_false() {
@@ -6961,7 +7076,7 @@ fn regular_deserialize_vec<T: Deserialize>(
     Ok(ret)
 }
 
-impl<T: Deserialize + Packed + 'static> Deserialize for Vec<T> {
+impl<T: Deserialize + Packed> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if unsafe { T::repr_c_optimization_safe(deserializer.file_version) }.is_false() {
             Ok(regular_deserialize_vec(deserializer)?)
@@ -7029,7 +7144,11 @@ impl<T: Introspect> Introspect for VecDeque<T> {
     }
 }
 
-impl<T: WithSchema + 'static> WithSchema for VecDeque<T> {
+#[doc(hidden)]
+pub struct VecDequeStaticPrototype<T:?Sized>(PhantomData<T>);
+
+impl<T: WithSchema> WithSchema for VecDeque<T> {
+    type StaticPrototype = VecDeque<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -7039,13 +7158,13 @@ impl<T: WithSchema + 'static> WithSchema for VecDeque<T> {
 }
 
 impl<T> Packed for VecDeque<T> {}
-impl<T: Serialize + 'static> Serialize for VecDeque<T> {
+impl<T: Serialize> Serialize for VecDeque<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         regular_serialize_vecdeque(self, serializer)
     }
 }
 
-impl<T: Deserialize + 'static> Deserialize for VecDeque<T> {
+impl<T: Deserialize> Deserialize for VecDeque<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(regular_deserialize_vecdeque(deserializer)?)
     }
@@ -7160,7 +7279,10 @@ impl Packed for () {
     }
 }
 
-impl<T: WithSchema + 'static, const N: usize> WithSchema for [T; N] {
+
+impl<T: WithSchema, const N: usize> WithSchema for [T; N] {
+    type StaticPrototype = [T::StaticPrototype; N];
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(context.possible_recursion::<T>(|context| T::schema(version, context))),
@@ -7188,7 +7310,7 @@ impl<T: Packed, const N: usize> Packed for [T; N] {
         T::repr_c_optimization_safe(version)
     }
 }
-impl<T: Serialize + Packed + 'static, const N: usize> Serialize for [T; N] {
+impl<T: Serialize + Packed, const N: usize> Serialize for [T; N] {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         if N == 0 {
             return Ok(());
@@ -7209,7 +7331,7 @@ impl<T: Serialize + Packed + 'static, const N: usize> Serialize for [T; N] {
     }
 }
 
-impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
+impl<T: Deserialize + Packed, const N: usize> Deserialize for [T; N] {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         if N == 0 {
             return Ok([(); N].map(|_| unreachable!()));
@@ -7248,6 +7370,8 @@ impl<T: Deserialize + Packed + 'static, const N: usize> Deserialize for [T; N] {
 
 impl<T1> Packed for Range<T1> {}
 impl<T1: WithSchema> WithSchema for Range<T1> {
+    type StaticPrototype = Range<T1::StaticPrototype>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::new_tuple2::<T1, T1>(version, context)
     }
@@ -7337,6 +7461,7 @@ impl<T1: Packed, T2: Packed, T3: Packed, T4: Packed> Packed for (T1, T2, T3, T4)
 }
 
 impl<T1: WithSchema, T2: WithSchema, T3: WithSchema> WithSchema for (T1, T2, T3) {
+    type StaticPrototype = (T1::StaticPrototype, T2::StaticPrototype, T3::StaticPrototype);
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::new_tuple3::<T1, T2, T3>(version, context)
     }
@@ -7359,6 +7484,7 @@ impl<T1: Deserialize, T2: Deserialize, T3: Deserialize> Deserialize for (T1, T2,
 }
 
 impl<T1: WithSchema, T2: WithSchema> WithSchema for (T1, T2) {
+    type StaticPrototype = (T1::StaticPrototype, T2::StaticPrototype);
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::new_tuple2::<T1, T2>(version, context)
     }
@@ -7376,6 +7502,7 @@ impl<T1: Deserialize, T2: Deserialize> Deserialize for (T1, T2) {
 }
 
 impl<T1: WithSchema> WithSchema for (T1,) {
+    type StaticPrototype = (T1::StaticPrototype,);
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::new_tuple1::<T1>(version, context)
     }
@@ -7390,6 +7517,17 @@ impl<T1: Deserialize> Deserialize for (T1,) {
         Ok((T1::deserialize(deserializer)?,))
     }
 }
+
+#[doc(hidden)]
+#[cfg(feature = "nalgebra")]
+pub struct Vector3StaticPrototype<T:?Sized>(PhantomData<T>);
+#[doc(hidden)]
+#[cfg(feature = "nalgebra")]
+pub struct Point3StaticPrototype<T:?Sized>(PhantomData<T>);
+#[doc(hidden)]
+#[cfg(feature = "nalgebra")]
+pub struct Isometry3StaticPrototype<T:?Sized>(PhantomData<T>);
+
 
 #[cfg(feature = "nalgebra")]
 impl<T: nalgebra::Scalar> Introspect for nalgebra::Point3<T> {
@@ -7439,8 +7577,11 @@ impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Point3<T> {
         }
     }
 }
+
 #[cfg(feature = "nalgebra")]
 impl<T: WithSchema + nalgebra::Scalar> WithSchema for nalgebra::Point3<T> {
+    type StaticPrototype = Point3StaticPrototype<T::StaticPrototype>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -7489,8 +7630,10 @@ impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Vector3<T> {
         }
     }
 }
+
 #[cfg(feature = "nalgebra")]
 impl<T: WithSchema + nalgebra::Scalar> WithSchema for nalgebra::Vector3<T> {
+    type StaticPrototype = Vector3StaticPrototype<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -7523,8 +7666,10 @@ impl<T: Deserialize + Packed + WithSchema + nalgebra::Scalar + nalgebra::SimdVal
 
 #[cfg(feature = "nalgebra")]
 impl<T: Packed> Packed for nalgebra::Isometry3<T> {}
+
 #[cfg(feature = "nalgebra")]
 impl<T: WithSchema> WithSchema for nalgebra::Isometry3<T> {
+    type StaticPrototype = Isometry3StaticPrototype<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Array(SchemaArray {
             item_type: Box::new(T::schema(version, context)),
@@ -7574,6 +7719,8 @@ impl<const C: usize> Packed for arrayvec::ArrayString<C> {}
 
 #[cfg(feature = "arrayvec")]
 impl<const C: usize> WithSchema for arrayvec::ArrayString<C> {
+    type StaticPrototype = Self;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_string(VecOrStringLayout::Unknown))
     }
@@ -7615,15 +7762,20 @@ impl<const C: usize> Introspect for arrayvec::ArrayString<C> {
     }
 }
 
+#[doc(hidden)]
+pub struct ArrayVecStaticPrototype<T:?Sized>(PhantomData<T>);
+
 #[cfg(feature = "arrayvec")]
 impl<V: WithSchema, const C: usize> WithSchema for arrayvec::ArrayVec<V, C> {
+    type StaticPrototype = ArrayVecStaticPrototype<V::StaticPrototype>;
+
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(Box::new(V::schema(version, context)), VecOrStringLayout::Unknown)
     }
 }
 
 #[cfg(feature = "arrayvec")]
-impl<V: Introspect + 'static, const C: usize> Introspect for arrayvec::ArrayVec<V, C> {
+impl<V: Introspect, const C: usize> Introspect for arrayvec::ArrayVec<V, C> {
     fn introspect_value(&self) -> String {
         return "arrayvec[]".to_string();
     }
@@ -7693,18 +7845,19 @@ impl<V: Deserialize + Packed, const C: usize> Deserialize for arrayvec::ArrayVec
 }
 
 use std::ops::{Deref, Range};
-impl<T: WithSchema + 'static> WithSchema for Box<T> {
+impl<T: WithSchema> WithSchema for Box<T> {
+    type StaticPrototype =Box<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         context.possible_recursion::<T>(|context| T::schema(version, context))
     }
 }
 impl<T> Packed for Box<T> {}
-impl<T: Serialize + 'static> Serialize for Box<T> {
+impl<T: Serialize> Serialize for Box<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize + 'static> Deserialize for Box<T> {
+impl<T: Deserialize> Deserialize for Box<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Box::new(T::deserialize(deserializer)?))
     }
@@ -7713,34 +7866,36 @@ impl<T: Deserialize + 'static> Deserialize for Box<T> {
 use std::rc::Rc;
 
 impl<T> Packed for Rc<T> {}
-impl<T: WithSchema + 'static> WithSchema for Rc<T> {
+impl<T: WithSchema> WithSchema for Rc<T> {
+    type StaticPrototype = Rc<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         context.possible_recursion::<T>(|context| T::schema(version, context))
     }
 }
-impl<T: Serialize + 'static> Serialize for Rc<T> {
+impl<T: Serialize> Serialize for Rc<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize + 'static> Deserialize for Rc<T> {
+impl<T: Deserialize> Deserialize for Rc<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Rc::new(T::deserialize(deserializer)?))
     }
 }
 
 impl<T> Packed for Arc<T> {}
-impl<T: WithSchema + 'static> WithSchema for Arc<T> {
+impl<T: WithSchema> WithSchema for Arc<T> {
+    type StaticPrototype = Arc<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         context.possible_recursion::<T>(|context| T::schema(version, context))
     }
 }
-impl<T: Serialize + 'static> Serialize for Arc<T> {
+impl<T: Serialize> Serialize for Arc<T> {
     fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
         self.deref().serialize(serializer)
     }
 }
-impl<T: Deserialize + 'static> Deserialize for Arc<T> {
+impl<T: Deserialize> Deserialize for Arc<T> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         Ok(Arc::new(T::deserialize(deserializer)?))
     }
@@ -7766,6 +7921,7 @@ use std::time::{Duration, SystemTime};
 
 impl<T> Packed for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {
+    type StaticPrototype = RefCell<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -7787,6 +7943,7 @@ impl<T: Packed> Packed for Cell<T> {
     }
 }
 impl<T: WithSchema> WithSchema for Cell<T> {
+    type StaticPrototype = Cell<T::StaticPrototype>;
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         T::schema(version, context)
     }
@@ -7804,6 +7961,7 @@ impl<T: Deserialize> Deserialize for Cell<T> {
 }
 
 impl WithSchema for () {
+    type StaticPrototype = ();
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::ZeroSize
     }
@@ -7986,51 +8144,61 @@ impl Introspect for AtomicIsize {
 }
 
 impl WithSchema for AtomicBool {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_bool)
     }
 }
 impl WithSchema for AtomicU8 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u8)
     }
 }
 impl WithSchema for AtomicI8 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i8)
     }
 }
 impl WithSchema for AtomicU16 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u16)
     }
 }
 impl WithSchema for AtomicI16 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i16)
     }
 }
 impl WithSchema for AtomicU32 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u32)
     }
 }
 impl WithSchema for AtomicI32 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i32)
     }
 }
 impl WithSchema for AtomicU64 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u64)
     }
 }
 impl WithSchema for AtomicI64 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i64)
     }
 }
 impl WithSchema for AtomicUsize {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
@@ -8040,6 +8208,7 @@ impl WithSchema for AtomicUsize {
     }
 }
 impl WithSchema for AtomicIsize {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
@@ -8050,66 +8219,79 @@ impl WithSchema for AtomicIsize {
 }
 
 impl WithSchema for bool {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_bool)
     }
 }
 impl WithSchema for u8 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u8)
     }
 }
 impl WithSchema for i8 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i8)
     }
 }
 impl WithSchema for u16 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u16)
     }
 }
 impl WithSchema for i16 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i16)
     }
 }
 impl WithSchema for u32 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u32)
     }
 }
 impl WithSchema for i32 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i32)
     }
 }
 impl WithSchema for u64 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u64)
     }
 }
 impl WithSchema for u128 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_u128)
     }
 }
 impl WithSchema for i128 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i128)
     }
 }
 impl WithSchema for i64 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_i64)
     }
 }
 impl WithSchema for char {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_char)
     }
 }
 impl WithSchema for usize {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<usize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_u32),
@@ -8119,6 +8301,7 @@ impl WithSchema for usize {
     }
 }
 impl WithSchema for isize {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         match std::mem::size_of::<isize>() {
             4 => Schema::Primitive(SchemaPrimitive::schema_i32),
@@ -8128,11 +8311,13 @@ impl WithSchema for isize {
     }
 }
 impl WithSchema for f32 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_f32)
     }
 }
 impl WithSchema for f64 {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_f64)
     }
@@ -8610,12 +8795,15 @@ impl Serialize for Canary1 {
 }
 impl Packed for Canary1 {}
 impl WithSchema for Canary1 {
+    type StaticPrototype = Canary1;
+
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Primitive(SchemaPrimitive::schema_canary1)
     }
 }
 
 impl WithSchema for Duration {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "Duration".to_string(),
@@ -8669,6 +8857,7 @@ impl Introspect for SystemTime {
     }
 }
 impl WithSchema for SystemTime {
+    type StaticPrototype = Self;
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
             dbg_name: "SystemTime".to_string(),

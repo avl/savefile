@@ -7,17 +7,17 @@ use crate::implement_fields_serialize;
 use syn::spanned::Spanned;
 
 pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
-    let name = input.ident;
+    let name = &input.ident;
     let name_str = name.to_string();
 
-    let generics = input.generics;
+    let generics = &input.generics;
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(
-        &generics,
+        &input,
         where_clause,
         quote! {_savefile::prelude::Serialize + _savefile::prelude::Packed},
     );

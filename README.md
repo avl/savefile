@@ -31,8 +31,8 @@ Docs: https://docs.rs/savefile-abi/latest/
 # Usage
 Cargo.toml:
 ```toml
-savefile = "0.18"
-savefile-derive = "0.18"
+savefile = "0.20"
+savefile-derive = "0.20"
 ```
 
 main.rs:
