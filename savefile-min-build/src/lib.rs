@@ -2,8 +2,10 @@ use savefile::prelude::Savefile;
 use std::marker::PhantomData;
 
 #[derive(Savefile, Debug, PartialEq)]
-pub struct ExampleGeneric<T> {
-    pub x: PhantomData<T>,
+#[repr(u32)]
+pub enum Example {
+    A(u32, u32),
+    B { a: u32, b: u32, c: u32 },
 }
 
 /*#[derive(Debug, Savefile, PartialEq)]

@@ -10,9 +10,9 @@ pub use {
 };
 
 pub use byteorder::{LittleEndian, ReadBytesExt};
-pub use memoffset::offset_of;
 pub use memoffset::offset_of_tuple;
 pub use memoffset::span_of;
+pub use std::mem::offset_of;
 pub use {
     super::AbiMethod, super::AbiMethodArgument, super::AbiMethodInfo, super::AbiTraitDefinition, super::ReceiverType,
 };

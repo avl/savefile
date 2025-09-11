@@ -6,8 +6,8 @@ This file contains information about changes in each version of savefile.
 ## 0.20.0
  
  * Removes the requirement that items in collections be `'static`.
- * Add associated type to `WithSchema` trait (breaking change)
- * Savefile-derive no longer adds trait-bounds on generic parameters that only occur inside PhantomData
+ * Savefile-derive no longer adds trait-bounds on generic parameters that only occur inside PhantomData.
+   I.e, if `T` only shows up as `PhantomData<T>` (or similar), T doesn't need to implement the Savefile-traits.   
  * Enable the `derive` feature by default, meaning clients no longer have to depend on `savefile_derive`.
  * Support for basic egui types.
 
