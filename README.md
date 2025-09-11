@@ -20,6 +20,7 @@ Docs: https://docs.rs/savefile/latest/savefile/
  * **Fast** - Savefile can serialize/deserialize many data types quickly by *safely* treating them as raw bytes.
  * **Safe** - Savefile can be used without requiring any unsafe code from the user.
 
+
 # Savefile-Abi
 
 Savefile-Abi is a related crate, which allows publishing forward- and backward compatible

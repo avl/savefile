@@ -16,6 +16,7 @@ struct RecursiveType {
 }
 
 #[test]
+#[cfg(not(miri))]
 fn get_recursive_schema() {
     let mut temp = WithSchemaContext::new();
     let schema = RecursiveType::schema(0, &mut temp);
