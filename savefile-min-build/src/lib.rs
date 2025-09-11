@@ -1,11 +1,10 @@
-use std::marker::PhantomData;
 use savefile::prelude::Savefile;
+use std::marker::PhantomData;
 
 #[derive(Savefile, Debug, PartialEq)]
 pub struct ExampleGeneric<T> {
     pub x: PhantomData<T>,
 }
-
 
 /*#[derive(Debug, Savefile, PartialEq)]
 pub enum TestStructEnum {
@@ -14,4 +13,3 @@ pub enum TestStructEnum {
 */
 #[test]
 fn test() {}
-

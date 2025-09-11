@@ -25,9 +25,6 @@ bytes = {version = "1.8", optional = true }
 
 [features]
 default = ["bytes"]
-# Rust version is > 1.78
-# Automatically set by build.rs
-rust1_78=[]
 
 [dev-dependencies]
 async-trait = "0.1"

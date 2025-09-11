@@ -34,11 +34,14 @@ use std::collections::{HashMap, HashSet};
 #[allow(unused_imports)]
 use std::iter::IntoIterator;
 use syn::__private::bool;
+use syn::parse::Parse;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate};
-use syn::parse::Parse;
+use syn::{
+    Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime,
+    Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate,
+};
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -523,7 +526,6 @@ pub fn savefile_abi_exportable(
                 };
                 match self_arg {
                     FnArg::Receiver(recv) => {
-
                         if recv.colon_token.is_some() {
                             parse_receiver_ty(&*recv.ty);
                         } else {
@@ -552,24 +554,21 @@ pub fn savefile_abi_exportable(
                             }
                         }
                     }
-                    FnArg::Typed(pat) => {
-
-                        match &*pat.pat {
-                            Pat::Ident(ident) if ident.ident == "self" => {
-                                if ident.by_ref.is_some() || ident.mutability.is_some() {
-                                    unsupported();
-                                }
-                                parse_receiver_ty(&*pat.ty);
+                    FnArg::Typed(pat) => match &*pat.pat {
+                        Pat::Ident(ident) if ident.ident == "self" => {
+                            if ident.by_ref.is_some() || ident.mutability.is_some() {
+                                unsupported();
                             }
-                            _ => {
-                                abort!(
+                            parse_receiver_ty(&*pat.ty);
+                        }
+                        _ => {
+                            abort!(
                                         pat.pat.span(),
                                         "Method '{}' must have 'self'-parameter (savefile-abi does not support methods without self)",
                                         method_name
                                     );
-                            }
                         }
-                    }
+                    },
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
                 for arg in method.sig.inputs.iter().skip(1) {
@@ -1154,13 +1153,13 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
 
         if path.is_ident("repr") {
             if let Err(err) = attr.parse_nested_meta(|meta| {
-
                 //for x in &metalist.nested {
                 if meta.path.segments.len() != 1 {
                     abort!(
                         meta.path.span(),
                         "Unsupported repr(X) attribute on enum: {}",
-                        meta.path.to_token_stream());
+                        meta.path.to_token_stream()
+                    );
                 }
                 match meta.path.segments[0].ident.to_string().as_str() {
                     "C" => repr_c_seen = true,
@@ -1202,10 +1201,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
                 };
                 Ok(())
             }) {
-                abort!(
-                        attr.span(),
-                        "Unsupported repr(X) attribute: {}",
-                        attr.to_token_stream());
+                abort!(attr.span(), "Unsupported repr(X) attribute: {}", attr.to_token_stream());
             };
         }
     }
@@ -1229,7 +1225,6 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     }
 }
 
-
 #[proc_macro_error]
 #[proc_macro_derive(
     Packed,
@@ -1250,8 +1245,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
-        if attr.path().is_ident("savefile_unsafe_and_fast") ||
-            attr.path().is_ident("savefile_require_fast") {
+        if attr.path().is_ident("savefile_unsafe_and_fast") || attr.path().is_ident("savefile_require_fast") {
             opt_in_fast = true;
         }
         /*match attr.parse_meta() {
@@ -1902,71 +1896,7 @@ enum FieldOffsetStrategy {
     EnumWithUnknownOffsets,
 }
 
-
-fn staticify(input: &DeriveInput) -> (Ident, TokenStream, TokenStream) {
-
-
-    let struct_name = &input.ident;
-    let generics = &input.generics;
-
-    let mut names_that_must_be_part_of_static_proto: HashSet<Ident> = HashSet::new();
-    get_phantomdata_types(&input.data, false, &mut names_that_must_be_part_of_static_proto);
-
-
-    let mut decl_exprs = Vec::new();
-    let mut def_exprs = Vec::new();
-    let mut phantom_exprs= Vec::new();
-    for tp in generics.type_params() {
-
-        let name = &tp.ident;
-        if !names_that_must_be_part_of_static_proto.contains(name) {
-            continue;
-        }
-        decl_exprs.push(quote!{
-            #name::StaticPrototype
-        });
-        def_exprs.push(quote!{
-            #name
-        });
-        phantom_exprs.push(quote!{
-            std::marker::PhantomData<#name>
-        });
-    }
-    let static_proto_type_name = Ident::new(&format!("{struct_name}__StaticPrototype__"), struct_name.span());
-
-    let static_proto_params = if decl_exprs.is_empty() {
-        quote!{}
-    } else {
-        quote!(< #(#decl_exprs,)* >)
-    };
-
-    let plain_generic_params = if def_exprs.is_empty() {
-        quote!{}
-    } else {
-        quote!(< #(#def_exprs,)* >)
-    };
-
-    let phantoms = if phantom_exprs.is_empty() {
-        quote!{}
-    } else {
-        quote!(#(#phantom_exprs,)* )
-    };
-
-    (
-        static_proto_type_name.clone(),
-        static_proto_params,
-        quote!(
-            #[allow(non_camel_case_types)]
-            #[doc(hidden)]
-            pub struct #static_proto_type_name #plain_generic_params(#phantoms);
-        )
-    )
-}
-
-
-fn get_phantomdata_types_from_type(ty: &Type, mut in_phantom: bool,
-                                   generic_params_to_constraint: &mut HashSet<Ident>,
-) {
+fn get_phantomdata_types_from_type(ty: &Type, mut in_phantom: bool, generic_params_to_constraint: &mut HashSet<Ident>) {
     match ty {
         Type::Array(a) => {
             get_phantomdata_types_from_type(&*a.elem, in_phantom, generic_params_to_constraint);
@@ -2032,8 +1962,7 @@ fn get_phantomdata_types_from_type(ty: &Type, mut in_phantom: bool,
         Type::Slice(s) => {
             get_phantomdata_types_from_type(&*s.elem, in_phantom, generic_params_to_constraint);
         }
-        Type::TraitObject(to) => {
-        }
+        Type::TraitObject(to) => {}
         Tuple(typ) => {
             for t in &typ.elems {
                 get_phantomdata_types_from_type(t, in_phantom, generic_params_to_constraint);
@@ -2043,8 +1972,6 @@ fn get_phantomdata_types_from_type(ty: &Type, mut in_phantom: bool,
     }
 }
 fn get_phantomdata_types(data: &syn::Data, in_phantom: bool, generic_params_to_constrain: &mut HashSet<Ident>) {
-
-
     match data {
         Data::Struct(s) => {
             for field in s.fields.iter() {
@@ -2073,8 +2000,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     let generics = &input.generics;
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let (static_prototype_name, static_ty_generics, static_prototype_type) = staticify(&input);
 
     let extra_where = get_extra_where_clauses(&input, where_clause, quote! {_savefile::prelude::WithSchema});
 
@@ -2281,7 +2206,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 #field_offset_impl
                 #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
-                    type StaticPrototype = #static_prototype_name #static_ty_generics;
                     #[allow(unused_mut)]
                     #[allow(unused_comparisons, unused_variables)]
                     fn schema(version:u32, context: &mut _savefile::prelude::WithSchemaContext) -> #Schema {
@@ -2363,7 +2287,6 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             quote! {
                 #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
-                    type StaticPrototype = #static_prototype_name #static_ty_generics;
 
                     #[allow(unused_comparisons)]
                     #[allow(unused_mut, unused_variables)]
@@ -2389,14 +2312,5 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     // For debugging, uncomment to write expanded procmacro to file
     //std::fs::write(format!("/home/anders/savefile/savefile-abi-min-lib/src/expanded.rs"),expanded.to_string()).unwrap();
 
-    let output = quote! {
-
-        #static_prototype_type
-
-        #expanded
-    };
-
-    //std::fs::write(format!("/home/anders/savefile/expanded.rs"),output.to_string()).unwrap();
-
-    output
+    expanded
 }

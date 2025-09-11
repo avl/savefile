@@ -1,6 +1,6 @@
 ![build](https://github.com/avl/savefile/actions/workflows/rust.yml/badge.svg)
 
-**Having trouble with new version 0.17? - See upgrade guide further down in this document!**
+**Having trouble with new version 0.20? - See upgrade guide further down in this document!**
 
 # Introduction to Savefile 
 
@@ -105,14 +105,19 @@ Features savefile does not have, and will not have:
  implementing the Serialize and Deserialize traits and somehow select concrete types in
  the deserializer manually.
 
-# Troubleshooting
+# Upgrade Guide
 
-Common errors:
+## Upgrading from pre 0.20.0:
 
-## "the trait bound `MyStuff: WithSchema` is not satisfied"
+asdf
+
+
+## Upgrading from pre 0.16.x:
+
+### "the trait bound `MyStuff: WithSchema` is not satisfied"
 This probably means you've forgotten to derive the Savefile-traits. Add a `#[derive(Savefile)]`.
 
-## the trait `ReprC` is not implemented
+### the trait `ReprC` is not implemented
 
 This one is easy. `ReprC` has been renamed to `Packed`. Just change to `Packed` and things should work. 
 

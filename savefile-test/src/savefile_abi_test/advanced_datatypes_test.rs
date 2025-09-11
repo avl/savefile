@@ -1,3 +1,4 @@
+use bytes::BufMut;
 use savefile_abi::AbiConnection;
 use savefile_abi::AbiExportable;
 use std::collections::HashMap;
@@ -5,7 +6,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use bytes::BufMut;
 
 #[savefile_abi_exportable(version = 0)]
 pub trait SimpleInterface {
@@ -235,5 +235,4 @@ fn test_buf_mut() {
     for i in 0..100u8 {
         assert_eq!(vec[i as usize], i);
     }
-
 }

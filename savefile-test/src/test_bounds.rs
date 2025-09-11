@@ -1,14 +1,13 @@
+use savefile::{load, save, Packed, Serialize};
 use std::borrow::Cow;
 use std::io::Cursor;
-use savefile::{load, save, Packed, Serialize};
-
 
 #[derive(Savefile, PartialEq, Eq, Clone)]
 struct MaybeSerializable<T> {
-    field: Vec<T>
+    field: Vec<T>,
 }
 
-impl<T:Serialize+Packed> MaybeSerializable<T> {
+impl<T: Serialize + Packed> MaybeSerializable<T> {
     fn save(&self, buf: &mut Vec<u8>) {
         save(buf, 0, self).unwrap();
     }
@@ -20,7 +19,7 @@ fn test_serialize_maybe_serializable() {
     {
         let temp_val = 42u32;
         let example = MaybeSerializable {
-            field: vec![Cow::Borrowed(&temp_val)]
+            field: vec![Cow::Borrowed(&temp_val)],
         };
 
         example.save(&mut temp)
@@ -70,10 +69,8 @@ fn test_serialize_non_static_with_lifetime<'a>(x: &'a u32) {
     assert_eq!(*roundtripped, 43u32);
 }
 
-
 #[test]
 fn test_with_specific_lifetime() {
     let x = 43u32;
     test_serialize_non_static_with_lifetime(&x);
 }
-
