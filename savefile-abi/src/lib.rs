@@ -357,9 +357,9 @@ impl SimpleAsyncInterface for SimpleImpl {
 
 */
 
+extern crate core;
 extern crate savefile;
 extern crate savefile_derive;
-extern crate core;
 
 use byteorder::ReadBytesExt;
 use libloading::{Library, Symbol};
@@ -402,13 +402,10 @@ use std::{ptr, slice};
 ///  * Has a correct 'get_definition' function, which must return a AbiTraitDefinition instance
 ///    that is truthful.
 ///  * Implement 'call' correctly
-#[cfg_attr(
-    feature = "rust1_78",
-    diagnostic::on_unimplemented(
-        message = "`{Self}` cannot be used across an ABI-boundary. Try adding a `#[savefile_abi_exportable(version=X)]` attribute to the declaration of the relevant trait.",
-        label = "`{Self}` cannot be called across an ABI-boundary",
-        note = "This error probably occurred because `{Self}` occurred as a return-value or argument to a method in a trait marked with `#[savefile_abi_exportable(version=X)]`, or because savefile_abi_export!-macro was used to export `{Self}`.",
-    )
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be used across an ABI-boundary. Try adding a `#[savefile_abi_exportable(version=X)]` attribute to the declaration of the relevant trait.",
+    label = "`{Self}` cannot be called across an ABI-boundary",
+    note = "This error probably occurred because `{Self}` occurred as a return-value or argument to a method in a trait marked with `#[savefile_abi_exportable(version=X)]`, or because savefile_abi_export!-macro was used to export `{Self}`."
 )]
 pub unsafe trait AbiExportable {
     /// A function which implements the savefile-abi contract.
@@ -456,13 +453,10 @@ pub unsafe trait AbiExportable {
 /// * ABI_ENTRY must be a valid function, implementing the AbiProtocol-protocol.
 /// * AbiInterface must be 'dyn SomeTrait', where 'SomeTrait' is an exported trait.
 ///
-#[cfg_attr(
-    feature = "rust1_78",
-    diagnostic::on_unimplemented(
-        message = "`{Self}` cannot be the concrete type of an AbiExportable dyn trait.",
-        label = "Does not implement `AbiExportableImplementation`",
-        note = "You should not be using this trait directly, and should never see this error.",
-    )
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be the concrete type of an AbiExportable dyn trait.",
+    label = "Does not implement `AbiExportableImplementation`",
+    note = "You should not be using this trait directly, and should never see this error."
 )]
 pub unsafe trait AbiExportableImplementation {
     /// An entry point which implements the AbiProtocol protocol
@@ -1853,5 +1847,5 @@ impl Wake for AbiWaker {
     }
 }
 
-#[cfg(feature="bytes")]
+#[cfg(feature = "bytes")]
 mod bytes;

@@ -40,12 +40,14 @@ extern crate savefile_abi;
 
 mod savefile_abi_test;
 mod test_arrayvec;
+mod test_bounds;
 mod test_enum_many_variants;
 mod test_generic;
 mod test_introspect;
 mod test_more_async;
 mod test_nested_non_repr_c;
 mod test_nested_repr_c;
+mod test_recursive_types;
 mod test_versioning;
 
 #[cfg(feature = "external_benchmarks")]
@@ -1767,41 +1769,33 @@ fn test_vector() {
 }
 
 #[test]
-fn test_ipv4_sockaddr(){
-
+fn test_ipv4_sockaddr() {
     assert_roundtrip::<SocketAddr>("0.0.0.0:0".parse().unwrap());
     assert_roundtrip::<SocketAddr>("127.0.0.1:32".parse().unwrap());
     assert_roundtrip::<SocketAddr>("255.255.255.255:65535".parse().unwrap());
-
 }
 #[test]
-fn test_ipv6_sockaddr(){
-
+fn test_ipv6_sockaddr() {
     assert_roundtrip::<SocketAddr>("[fe80::1ff:fe23:4567:890a]:32".parse().unwrap());
     assert_roundtrip::<SocketAddr>("[fe80::1ff:fe23:4567:890a%3]:32".parse().unwrap());
     assert_roundtrip::<SocketAddr>("[::]:1".parse().unwrap());
-
 }
 
 #[test]
-fn test_ipv4(){
-
+fn test_ipv4() {
     assert_roundtrip::<IpAddr>("0.0.0.0".parse().unwrap());
     assert_roundtrip::<IpAddr>("127.0.0.1".parse().unwrap());
     assert_roundtrip::<IpAddr>("255.255.255.255".parse().unwrap());
-
 }
 #[test]
-fn test_ipv6(){
-
+fn test_ipv6() {
     assert_roundtrip::<IpAddr>("fe80::1ff:fe23:4567:890a".parse().unwrap());
     assert_roundtrip::<IpAddr>("fe80::1ff:fe23:4567:890a".parse().unwrap());
     assert_roundtrip::<IpAddr>("::1".parse().unwrap());
-
 }
 #[test]
 #[cfg(not(miri))]
-fn chrono_datetime(){
+fn chrono_datetime() {
     let now = chrono::Utc::now();
     assert_roundtrip(now);
 }

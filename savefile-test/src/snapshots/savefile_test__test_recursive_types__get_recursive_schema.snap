@@ -1,0 +1,240 @@
+---
+source: savefile-test/src/lib.rs
+expression: schema
+---
+Struct(
+    SchemaStruct {
+        dbg_name: "RecursiveType",
+        size: Some(
+            40,
+        ),
+        alignment: Some(
+            8,
+        ),
+        fields: [
+            Field {
+                name: "left",
+                value: SchemaOption(
+                    Struct(
+                        SchemaStruct {
+                            dbg_name: "RecursiveType",
+                            size: Some(
+                                40,
+                            ),
+                            alignment: Some(
+                                8,
+                            ),
+                            fields: [
+                                Field {
+                                    name: "left",
+                                    value: SchemaOption(
+                                        Recursion(
+                                            1,
+                                        ),
+                                    ),
+                                    offset: Some(
+                                        24,
+                                    ),
+                                },
+                                Field {
+                                    name: "right",
+                                    value: SchemaOption(
+                                        Recursion(
+                                            1,
+                                        ),
+                                    ),
+                                    offset: Some(
+                                        32,
+                                    ),
+                                },
+                                Field {
+                                    name: "mid",
+                                    value: Vector(
+                                        Struct(
+                                            SchemaStruct {
+                                                dbg_name: "Relay",
+                                                size: Some(
+                                                    8,
+                                                ),
+                                                alignment: Some(
+                                                    8,
+                                                ),
+                                                fields: [
+                                                    Field {
+                                                        name: "relay",
+                                                        value: Recursion(
+                                                            2,
+                                                        ),
+                                                        offset: Some(
+                                                            0,
+                                                        ),
+                                                    },
+                                                ],
+                                            },
+                                        ),
+                                        CapacityDataLength,
+                                    ),
+                                    offset: Some(
+                                        0,
+                                    ),
+                                },
+                            ],
+                        },
+                    ),
+                ),
+                offset: Some(
+                    24,
+                ),
+            },
+            Field {
+                name: "right",
+                value: SchemaOption(
+                    Struct(
+                        SchemaStruct {
+                            dbg_name: "RecursiveType",
+                            size: Some(
+                                40,
+                            ),
+                            alignment: Some(
+                                8,
+                            ),
+                            fields: [
+                                Field {
+                                    name: "left",
+                                    value: SchemaOption(
+                                        Recursion(
+                                            1,
+                                        ),
+                                    ),
+                                    offset: Some(
+                                        24,
+                                    ),
+                                },
+                                Field {
+                                    name: "right",
+                                    value: SchemaOption(
+                                        Recursion(
+                                            1,
+                                        ),
+                                    ),
+                                    offset: Some(
+                                        32,
+                                    ),
+                                },
+                                Field {
+                                    name: "mid",
+                                    value: Vector(
+                                        Struct(
+                                            SchemaStruct {
+                                                dbg_name: "Relay",
+                                                size: Some(
+                                                    8,
+                                                ),
+                                                alignment: Some(
+                                                    8,
+                                                ),
+                                                fields: [
+                                                    Field {
+                                                        name: "relay",
+                                                        value: Recursion(
+                                                            2,
+                                                        ),
+                                                        offset: Some(
+                                                            0,
+                                                        ),
+                                                    },
+                                                ],
+                                            },
+                                        ),
+                                        CapacityDataLength,
+                                    ),
+                                    offset: Some(
+                                        0,
+                                    ),
+                                },
+                            ],
+                        },
+                    ),
+                ),
+                offset: Some(
+                    32,
+                ),
+            },
+            Field {
+                name: "mid",
+                value: Vector(
+                    Struct(
+                        SchemaStruct {
+                            dbg_name: "Relay",
+                            size: Some(
+                                8,
+                            ),
+                            alignment: Some(
+                                8,
+                            ),
+                            fields: [
+                                Field {
+                                    name: "relay",
+                                    value: Struct(
+                                        SchemaStruct {
+                                            dbg_name: "RecursiveType",
+                                            size: Some(
+                                                40,
+                                            ),
+                                            alignment: Some(
+                                                8,
+                                            ),
+                                            fields: [
+                                                Field {
+                                                    name: "left",
+                                                    value: SchemaOption(
+                                                        Recursion(
+                                                            1,
+                                                        ),
+                                                    ),
+                                                    offset: Some(
+                                                        24,
+                                                    ),
+                                                },
+                                                Field {
+                                                    name: "right",
+                                                    value: SchemaOption(
+                                                        Recursion(
+                                                            1,
+                                                        ),
+                                                    ),
+                                                    offset: Some(
+                                                        32,
+                                                    ),
+                                                },
+                                                Field {
+                                                    name: "mid",
+                                                    value: Vector(
+                                                        Recursion(
+                                                            2,
+                                                        ),
+                                                        CapacityDataLength,
+                                                    ),
+                                                    offset: Some(
+                                                        0,
+                                                    ),
+                                                },
+                                            ],
+                                        },
+                                    ),
+                                    offset: Some(
+                                        0,
+                                    ),
+                                },
+                            ],
+                        },
+                    ),
+                    CapacityDataLength,
+                ),
+                offset: Some(
+                    0,
+                ),
+            },
+        ],
+    },
+)

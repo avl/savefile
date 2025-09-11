@@ -1,8 +1,5 @@
 use savefile_abi_min_lib::{AdderCallback, AdderInterface, MyStuff};
-use savefile_derive::{savefile_abi_export};
-
-
-
+use savefile_derive::savefile_abi_export;
 
 pub struct AdderImplementation {
     _name: String,

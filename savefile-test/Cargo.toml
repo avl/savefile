@@ -1,6 +1,6 @@
 [package]
 name = "savefile-test"
-version = "0.0.1"
+version.workspace = true
 authors = ["Anders Musikka <anders@andersmusikka.se>"]
 resolver = "2"
 edition = "2021"
@@ -14,7 +14,7 @@ nightly=["savefile/nightly"]
 
 [dependencies]
 savefile = { path = "../savefile", features = ["size_sanity_checks", "encryption", "compression","bit-set","bit-vec","rustc-hash","serde_derive", "quickcheck", "nalgebra"]}
-savefile-derive = { path = "../savefile-derive", version = "=0.19.0" }
+savefile-derive = { path = "../savefile-derive", version = "=0.20.0" }
 savefile-abi = { path = "../savefile-abi" , features = ["bytes"]}
 bit-vec = "0.8"
 arrayvec="0.7"
@@ -27,12 +27,12 @@ serde="*"
 serde_derive="*"
 bincode="1.2.1"
 bit-set="0.8"
-rustc-hash="2.0"
+rustc-hash="2.1.0"
 quickcheck="1.0"
 quickcheck_macros ="1.0"
 insta = { version = "1.41.1", features = ["yaml"] }
 nalgebra="0.33"
-tokio= { version = "1.40", features = ["test-util", "rt-multi-thread", "full"] }
+tokio= { version = "1.43.0", features = ["test-util", "rt-multi-thread", "full"] }
 async-trait = "0.1"
 bytes="1.8"
 chrono="*"

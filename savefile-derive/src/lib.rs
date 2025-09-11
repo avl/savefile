@@ -34,12 +34,13 @@ use std::collections::{HashMap, HashSet};
 #[allow(unused_imports)]
 use std::iter::IntoIterator;
 use syn::__private::bool;
+use syn::parse::Parse;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
 use syn::{
-    DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Pat,
-    PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate,
+    Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime,
+    Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate,
 };
 
 fn implement_fields_serialize(
@@ -525,7 +526,6 @@ pub fn savefile_abi_exportable(
                 };
                 match self_arg {
                     FnArg::Receiver(recv) => {
-
                         if recv.colon_token.is_some() {
                             parse_receiver_ty(&*recv.ty);
                         } else {
@@ -554,24 +554,21 @@ pub fn savefile_abi_exportable(
                             }
                         }
                     }
-                    FnArg::Typed(pat) => {
-
-                        match &*pat.pat {
-                            Pat::Ident(ident) if ident.ident == "self" => {
-                                if ident.by_ref.is_some() || ident.mutability.is_some() {
-                                    unsupported();
-                                }
-                                parse_receiver_ty(&*pat.ty);
+                    FnArg::Typed(pat) => match &*pat.pat {
+                        Pat::Ident(ident) if ident.ident == "self" => {
+                            if ident.by_ref.is_some() || ident.mutability.is_some() {
+                                unsupported();
                             }
-                            _ => {
-                                abort!(
+                            parse_receiver_ty(&*pat.ty);
+                        }
+                        _ => {
+                            abort!(
                                         pat.pat.span(),
                                         "Method '{}' must have 'self'-parameter (savefile-abi does not support methods without self)",
                                         method_name
                                     );
-                            }
                         }
-                    }
+                    },
                 }
                 let mut args = Vec::with_capacity(method.sig.inputs.len());
                 for arg in method.sig.inputs.iter().skip(1) {
@@ -900,6 +897,7 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         #[allow(non_upper_case_globals)]
         #[allow(clippy::double_comparisons)]
+        #[allow(non_camel_case_types)]
         #[allow(clippy::manual_range_contains)]
         const #dummy_const: () = {
             extern crate savefile as _savefile;
@@ -988,11 +986,12 @@ pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::T
 }
 
 #[allow(non_snake_case)]
-fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) -> TokenStream {
+fn implement_reprc_hardcoded_false(name: syn::Ident, input: &DeriveInput) -> TokenStream {
     let defspan = proc_macro2::Span::call_site();
 
+    let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::WithSchema});
+    let extra_where = get_extra_where_clauses(input, where_clause, quote! {_savefile::prelude::WithSchema});
     let reprc = quote_spanned! {defspan=>
         _savefile::prelude::Packed
     };
@@ -1002,7 +1001,7 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
     quote! {
 
         #[automatically_derived]
-        impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
+        impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where{
             #[allow(unused_comparisons,unused_variables, unused_variables)]
             unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
                 #isreprc::no()
@@ -1015,12 +1014,13 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, generics: syn::Generics) ->
 #[allow(non_snake_case)]
 fn implement_reprc_struct(
     field_infos: Vec<FieldInfo>,
-    generics: syn::Generics,
+    input: &DeriveInput,
     name: syn::Ident,
     expect_fast: bool,
 ) -> TokenStream {
+    let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Packed});
+    let extra_where = get_extra_where_clauses(input, where_clause, quote! {_savefile::prelude::Packed});
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -1070,7 +1070,7 @@ fn implement_reprc_struct(
                     "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                 );
             } else {
-                return implement_reprc_hardcoded_false(name, generics);
+                return implement_reprc_hardcoded_false(name, input);
             }
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
@@ -1082,7 +1082,7 @@ fn implement_reprc_struct(
                 if expect_fast {
                     abort!(field.ty.span(), "The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
                 } else {
-                    return implement_reprc_hardcoded_false(name, generics);
+                    return implement_reprc_hardcoded_false(name, input);
                 }
             }
             reprc_outputs
@@ -1153,13 +1153,13 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
 
         if path.is_ident("repr") {
             if let Err(err) = attr.parse_nested_meta(|meta| {
-
                 //for x in &metalist.nested {
                 if meta.path.segments.len() != 1 {
                     abort!(
                         meta.path.span(),
                         "Unsupported repr(X) attribute on enum: {}",
-                        meta.path.to_token_stream());
+                        meta.path.to_token_stream()
+                    );
                 }
                 match meta.path.segments[0].ident.to_string().as_str() {
                     "C" => repr_c_seen = true,
@@ -1201,10 +1201,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
                 };
                 Ok(())
             }) {
-                abort!(
-                        attr.span(),
-                        "Unsupported repr(X) attribute: {}",
-                        attr.to_token_stream());
+                abort!(attr.span(), "Unsupported repr(X) attribute: {}", attr.to_token_stream());
             };
         }
     }
@@ -1228,7 +1225,6 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     }
 }
 
-
 #[proc_macro_error]
 #[proc_macro_derive(
     Packed,
@@ -1244,13 +1240,12 @@ pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     abort_call_site!("The #[derive(Packed)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
-    let name = input.ident;
+    let name = &input.ident;
     let (impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
 
     let mut opt_in_fast = false;
     for attr in input.attrs.iter() {
-        if attr.path().is_ident("savefile_unsafe_and_fast") ||
-            attr.path().is_ident("savefile_require_fast") {
+        if attr.path().is_ident("savefile_unsafe_and_fast") || attr.path().is_ident("savefile_require_fast") {
             opt_in_fast = true;
         }
         /*match attr.parse_meta() {
@@ -1283,7 +1278,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                         abort_call_site!("The #[savefile_require_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
                     }
                 }
-                return implement_reprc_hardcoded_false(name, input.generics);
+                return implement_reprc_hardcoded_false(name.clone(), &input);
             }
 
             let mut conditions = vec![];
@@ -1355,7 +1350,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                                 "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                             );
                         } else {
-                            return implement_reprc_hardcoded_false(name, input.generics);
+                            return implement_reprc_hardcoded_false(name.clone(), &input);
                         }
                     }
                     min_safe_version = min_safe_version.max(verinfo.min_safe_version());
@@ -1363,9 +1358,9 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             }
 
             let defspan = proc_macro2::Span::call_site();
-            let generics = input.generics;
+            let generics = &input.generics;
             let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-            let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Packed});
+            let extra_where = get_extra_where_clauses(&input, where_clause, quote! {_savefile::prelude::Packed});
             let reprc = quote_spanned! { defspan=>
                 _savefile::prelude::Packed
             };
@@ -1447,7 +1442,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc_struct(field_infos, input.generics, name, opt_in_fast)
+                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)
             }
             &syn::Fields::Unnamed(ref fields_unnamed) => {
                 let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -1463,15 +1458,15 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc_struct(field_infos, input.generics, name, opt_in_fast)
+                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)
             }
-            &syn::Fields::Unit => implement_reprc_struct(Vec::new(), input.generics, name, opt_in_fast),
+            &syn::Fields::Unit => implement_reprc_struct(Vec::new(), &input, name.clone(), opt_in_fast),
         },
         _ => {
             if opt_in_fast {
                 abort_call_site!("Unsupported data type");
             }
-            return implement_reprc_hardcoded_false(name, input.generics);
+            return implement_reprc_hardcoded_false(name.clone(), &input);
         }
     };
 
@@ -1557,11 +1552,11 @@ fn implement_introspect(
 
 #[allow(non_snake_case)]
 fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
-    let name = input.ident;
+    let name = &input.ident;
 
-    let generics = input.generics;
+    let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::Introspect});
+    let extra_where = get_extra_where_clauses(&input, where_clause, quote! {_savefile::prelude::Introspect});
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -1901,17 +1896,112 @@ enum FieldOffsetStrategy {
     EnumWithUnknownOffsets,
 }
 
+fn get_phantomdata_types_from_type(ty: &Type, mut in_phantom: bool, generic_params_to_constraint: &mut HashSet<Ident>) {
+    match ty {
+        Type::Array(a) => {
+            get_phantomdata_types_from_type(&*a.elem, in_phantom, generic_params_to_constraint);
+        }
+        Type::BareFn(f) => {
+            match &f.output {
+                ReturnType::Default => {}
+                ReturnType::Type(_, ty) => {
+                    get_phantomdata_types_from_type(&*ty, in_phantom, generic_params_to_constraint);
+                }
+            }
+            for arg in &f.inputs {
+                get_phantomdata_types_from_type(&arg.ty, in_phantom, generic_params_to_constraint);
+            }
+        }
+        Type::Paren(ty) => {
+            get_phantomdata_types_from_type(&*ty.elem, in_phantom, generic_params_to_constraint);
+        }
+        Type::Path(pd) => {
+            if pd.path.segments.len() == 1 {
+                let id = &pd.path.segments.last().unwrap().ident;
+                if id == "PhantomData" {
+                    in_phantom = true;
+                }
+                if !in_phantom {
+                    generic_params_to_constraint.insert(id.clone());
+                }
+            }
+            for param in &pd.path.segments {
+                match &param.arguments {
+                    PathArguments::None => {}
+                    PathArguments::AngleBracketed(a) => {
+                        for arg in &a.args {
+                            match arg {
+                                GenericArgument::Type(t) => {
+                                    get_phantomdata_types_from_type(&*t, in_phantom, generic_params_to_constraint);
+                                }
+                                GenericArgument::AssocType(a) => {
+                                    get_phantomdata_types_from_type(&a.ty, in_phantom, generic_params_to_constraint);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    PathArguments::Parenthesized(a) => {
+                        for arg in &a.inputs {
+                            get_phantomdata_types_from_type(arg, in_phantom, generic_params_to_constraint);
+                        }
+                        match &a.output {
+                            ReturnType::Default => {}
+                            ReturnType::Type(_, ty) => {
+                                get_phantomdata_types_from_type(&*ty, in_phantom, generic_params_to_constraint);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Type::Ptr(_) => {}
+        Type::Reference(r) => {
+            get_phantomdata_types_from_type(&*r.elem, in_phantom, generic_params_to_constraint);
+        }
+        Type::Slice(s) => {
+            get_phantomdata_types_from_type(&*s.elem, in_phantom, generic_params_to_constraint);
+        }
+        Type::TraitObject(to) => {}
+        Tuple(typ) => {
+            for t in &typ.elems {
+                get_phantomdata_types_from_type(t, in_phantom, generic_params_to_constraint);
+            }
+        }
+        _ => {}
+    }
+}
+fn get_phantomdata_types(data: &syn::Data, in_phantom: bool, generic_params_to_constrain: &mut HashSet<Ident>) {
+    match data {
+        Data::Struct(s) => {
+            for field in s.fields.iter() {
+                get_phantomdata_types_from_type(&field.ty, in_phantom, generic_params_to_constrain);
+            }
+        }
+        Data::Enum(v) => {
+            for variant in v.variants.iter() {
+                for field in variant.fields.iter() {
+                    get_phantomdata_types_from_type(&field.ty, in_phantom, generic_params_to_constrain);
+                }
+            }
+        }
+        Data::Union(_) => {}
+    }
+}
+
 #[allow(non_snake_case)]
 fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     //let mut have_u8 = false;
 
     //let discriminant_size = discriminant_size.expect("Enum discriminant must be u8, u16 or u32. Use for example #[repr(u8)].");
 
-    let name = input.ident;
+    let name = &input.ident;
 
-    let generics = input.generics;
+    let generics = &input.generics;
+
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let extra_where = get_extra_where_clauses(&generics, where_clause, quote! {_savefile::prelude::WithSchema});
+
+    let extra_where = get_extra_where_clauses(&input, where_clause, quote! {_savefile::prelude::WithSchema});
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -2114,10 +2204,8 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
 
             quote! {
                 #field_offset_impl
-
                 #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
-
                     #[allow(unused_mut)]
                     #[allow(unused_comparisons, unused_variables)]
                     fn schema(version:u32, context: &mut _savefile::prelude::WithSchemaContext) -> #Schema {
@@ -2199,6 +2287,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             quote! {
                 #[automatically_derived]
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
+
                     #[allow(unused_comparisons)]
                     #[allow(unused_mut, unused_variables)]
                     fn schema(version:u32, context: &mut _savefile::prelude::WithSchemaContext) -> #Schema {

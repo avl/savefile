@@ -648,11 +648,7 @@ fn parse_type(
                             }
                         }
                         x => {
-                            abort!(
-                                x.span(),
-                                "{}: Savefile does not support this syntax",
-                                location
-                            );
+                            abort!(x.span(), "{}: Savefile does not support this syntax", location);
                         }
                     })
                     .filter_map(|x| x)
@@ -922,7 +918,7 @@ fn parse_type(
                             GenericArgument::AssocType(_) => {
                                 abort!(arg.span(), "Savefile does not support the syntax expressed here.");
                             }
-                            x=> {
+                            x => {
                                 abort!(x.span(), "Savefile does not support the syntax expressed here.");
                             }
                         }

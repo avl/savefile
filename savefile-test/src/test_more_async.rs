@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use bytes::BufMut;
 use savefile_abi::{AbiConnection, AbiWaker};
 use std::future::Future;
 use std::hint::black_box;
@@ -8,7 +9,6 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 #[cfg(feature = "nightly")]
 use test::Bencher;
-use bytes::BufMut;
 use tokio::pin;
 
 #[async_trait]
@@ -53,7 +53,6 @@ impl SimpleAsyncInterface for SimpleImpl {
         self.internal += x;
         self.internal
     }
-
 }
 
 #[tokio::test]
