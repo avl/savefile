@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 savefile = { path = "../savefile", default-features = false, features = ["derive"] }
 savefile-abi = { path = "../savefile-abi" }
-async-trait = "0.1.83"
+async-trait = "0.1.89"
