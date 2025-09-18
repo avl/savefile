@@ -13,7 +13,7 @@ exclude = ["compile_tests", "savefile_abi_example"]
 resolver = "2"
 
 [workspace.package]
-version = "0.20.0"
+version = "0.20.1"
 
 [profile.dev.package]
 insta.opt-level = 3

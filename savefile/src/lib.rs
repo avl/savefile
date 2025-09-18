@@ -644,7 +644,6 @@ use savefile::prelude::*;
 pub struct Example {
     field: u32,
 }
-
 ```
 
 # Custom serialization
