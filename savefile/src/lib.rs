@@ -629,6 +629,23 @@ Using 'savefile_require_fast' is not unsafe, although it used to be in an old ve
 Since the speedups it produces are now produced regardless, it is mostly recommended to not use
 savefile_require_fast, unless compilation failure on bad alignment is desired.
 
+### The `doc_hidden` attribute
+
+When using the savefile derive macro, you can specify the `doc_hidden` attribute to make
+the generated implementations have the `#[doc(hidden)]` attribute. This hides the implementation
+of the savefile-traits from the docs. This can be useful if the fact that your public types
+implement the savefile traits is meant to be an internal implementation detial.
+
+Example:
+```rust
+use savefile::prelude::*;
+#[derive(Savefile)]
+#[savefile_doc_hidden]
+pub struct Example {
+    field: u32,
+}
+
+```
 
 # Custom serialization
 

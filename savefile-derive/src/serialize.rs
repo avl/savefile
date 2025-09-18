@@ -1,8 +1,8 @@
 use proc_macro2::{Span, TokenStream};
-use syn::DeriveInput;
+use syn::{Attribute, DeriveInput};
 
 use crate::common::{get_extra_where_clauses, parse_attr_tag, FieldInfo};
-use crate::get_enum_size;
+use crate::{doc_hidden, get_enum_size};
 use crate::implement_fields_serialize;
 use syn::spanned::Spanned;
 
@@ -11,6 +11,8 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
     let name_str = name.to_string();
 
     let generics = &input.generics;
+
+    let doc_hidden = doc_hidden(&input.attrs);
 
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
@@ -137,6 +139,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                     #uses
 
                     #[automatically_derived]
+                    #doc_hidden
                     impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_comparisons, unused_variables)]
@@ -203,6 +206,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                     #uses
 
                     #[automatically_derived]
+                    #doc_hidden
                     impl #impl_generics #serialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn serialize(&self, serializer: &mut #serializer)  -> #saveerr {

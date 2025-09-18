@@ -9,7 +9,7 @@ members = [
     "savefile-abi-min-lib", 
     "savefile-abi-min-lib-impl"
 ]
-exclude = ["compile_tests"]
+exclude = ["compile_tests", "savefile_abi_example"]
 resolver = "2"
 
 [workspace.package]
