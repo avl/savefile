@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-savefile-abi = "0.18"
-savefile = "0.18"
-savefile-derive = "0.18"
+savefile-abi.path = "../../savefile-abi"
+savefile.path = "../../savefile"
+savefile-derive.path= "../../savefile-derive"
 interface_crate = { path = "../interface_crate" }
 
 

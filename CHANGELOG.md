@@ -3,6 +3,11 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.20.1
+
+Add new `doc_hidden`-attribute, allowing generated impls to have `#[doc(hidden)]`. This hides
+the impls from your docs.
+
 ## 0.20.0
  
  * Removes the requirement that items in collections be `'static`.

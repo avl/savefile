@@ -328,7 +328,7 @@ impl BoxedAsyncInterface for SimpleImpl {
 
 ```
 
-It also supports the #[async_trait] proc macro crate. Use it like this:
+It also supports the `#[async_trait]` proc macro crate. Use it like this:
 
 ```rust
 use async_trait::async_trait;
