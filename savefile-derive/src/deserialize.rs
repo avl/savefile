@@ -1,5 +1,5 @@
 use crate::common::{check_is_remove, get_extra_where_clauses, parse_attr_tag, FieldInfo, RemovedType};
-use crate::get_enum_size;
+use crate::{doc_hidden, get_enum_size};
 use proc_macro2::{Literal, TokenStream};
 use syn::spanned::Spanned;
 use syn::DeriveInput;
@@ -122,6 +122,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
 
     let name = &input.ident;
 
+    let doc_hidden = doc_hidden(&input.attrs);
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(
@@ -216,6 +217,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                     #uses
                     #[automatically_derived]
+                    #doc_hidden
                     impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {
@@ -280,6 +282,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                 const #dummy_const: () = {
                         #uses
                         #[automatically_derived]
+                        #doc_hidden
                         impl #impl_generics #deserialize for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons, unused_variables)]
                         fn deserialize(deserializer: &mut #deserializer) -> Result<Self,#saveerr> {

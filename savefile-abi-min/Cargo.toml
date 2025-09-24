@@ -12,4 +12,4 @@ savefile-abi = { path = "../savefile-abi" }
 byteorder = "1.4"
 savefile-derive = {path = "../savefile-derive"}
 savefile-abi-min-lib = { path = "../savefile-abi-min-lib" }
-tokio="1.43"
+tokio="1.44"

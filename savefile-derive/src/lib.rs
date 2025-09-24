@@ -38,10 +38,16 @@ use syn::parse::Parse;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{
-    Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime,
-    Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate,
-};
+use syn::{Attribute, Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate};
+
+pub(crate) fn doc_hidden(x: &Vec<Attribute>) -> TokenStream {
+    for attr in x {
+        if attr.path().is_ident("savefile_doc_hidden") {
+            return quote!{#[doc(hidden)]}
+        }
+    }
+    quote!()
+}
 
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
@@ -724,6 +730,7 @@ pub fn savefile_abi_exportable(
         }
 
         #[automatically_derived]
+        #[doc(hidden)]
         unsafe impl AbiExportable for dyn #trait_name {
             const ABI_ENTRY : unsafe extern "C" fn (flag: AbiProtocol)  = #abi_entry_light;
             fn get_definition( version: u32) -> AbiTraitDefinition {
@@ -760,6 +767,7 @@ pub fn savefile_abi_exportable(
         }
 
         #[automatically_derived]
+        #[doc(hidden)]
         impl #trait_name for AbiConnection<dyn #trait_name> {
             #(#caller_method_trampoline)*
         }
@@ -840,6 +848,7 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         const _:() = {
             #uses
             #[automatically_derived]
+            #[doc(hidden)]
             unsafe impl AbiExportableImplementation for #implementing_type where #implementing_type: Default + #trait_type {
                 const ABI_ENTRY: unsafe extern "C" fn (AbiProtocol) = #abi_entry;
                 type AbiInterface = dyn #trait_type;
@@ -870,7 +879,8 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         savefile_introspect_key,
         savefile_ignore,
         savefile_default_val,
-        savefile_default_fn
+        savefile_default_fn,
+        savefile_doc_hidden
     )
 )]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -990,6 +1000,7 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, input: &DeriveInput) -> Tok
     let defspan = proc_macro2::Span::call_site();
 
     let generics = &input.generics;
+    let doc_hidden = doc_hidden(&input.attrs);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(input, where_clause, quote! {_savefile::prelude::WithSchema});
     let reprc = quote_spanned! {defspan=>
@@ -1001,6 +1012,7 @@ fn implement_reprc_hardcoded_false(name: syn::Ident, input: &DeriveInput) -> Tok
     quote! {
 
         #[automatically_derived]
+        #doc_hidden
         impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where{
             #[allow(unused_comparisons,unused_variables, unused_variables)]
             unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -1021,7 +1033,7 @@ fn implement_reprc_struct(
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(input, where_clause, quote! {_savefile::prelude::Packed});
-
+    let doc_hidden = doc_hidden(&input.attrs);
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let reprc = quote_spanned! {defspan=>
@@ -1119,6 +1131,7 @@ fn implement_reprc_struct(
     quote! {
 
         #[automatically_derived]
+        #doc_hidden
         impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
             #[allow(unused_comparisons,unused_variables, unused_variables)]
             unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -1241,6 +1254,7 @@ pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 fn derive_reprc_new(input: DeriveInput) -> TokenStream {
     let name = &input.ident;
+    let doc_hidden = doc_hidden(&input.attrs);
     let (impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
 
     let mut opt_in_fast = false;
@@ -1409,6 +1423,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
             return quote! {
 
                 #[automatically_derived]
+                #doc_hidden
                 impl #impl_generics #reprc for #name #ty_generics #where_clause #extra_where {
                     #[allow(unused_comparisons,unused_variables, unused_variables)]
                     unsafe fn repr_c_optimization_safe(file_version:u32) -> #isreprc {
@@ -1557,7 +1572,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(&input, where_clause, quote! {_savefile::prelude::Introspect});
-
+    let doc_hidden = doc_hidden(&input.attrs);
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let introspect = quote_spanned! {defspan=>
@@ -1680,6 +1695,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     #uses
 
                     #[automatically_derived]
+                    #doc_hidden
                     impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
 
                         #[allow(unused_mut)]
@@ -1765,6 +1781,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                     #uses
 
                     #[automatically_derived]
+                    #doc_hidden
                     impl #impl_generics #introspect for #name #ty_generics #where_clause #extra_where {
                         #[allow(unused_comparisons)]
                         #[allow(unused_mut, unused_variables)]
@@ -1996,6 +2013,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     //let discriminant_size = discriminant_size.expect("Enum discriminant must be u8, u16 or u32. Use for example #[repr(u8)].");
 
     let name = &input.ident;
+    let doc_hidden = doc_hidden(&input.attrs);
 
     let generics = &input.generics;
 
@@ -2205,6 +2223,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             quote! {
                 #field_offset_impl
                 #[automatically_derived]
+                #doc_hidden
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
                     #[allow(unused_mut)]
                     #[allow(unused_comparisons, unused_variables)]
@@ -2286,6 +2305,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
             }
             quote! {
                 #[automatically_derived]
+                #doc_hidden
                 impl #impl_generics #withschema for #name #ty_generics #where_clause #extra_where {
 
                     #[allow(unused_comparisons)]
