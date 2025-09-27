@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 #[derive(Savefile, Debug, PartialEq)]
 #[repr(u32)]
+#[savefile_doc_hidden]
 pub enum Example {
     A(u32, u32),
     B { a: u32, b: u32, c: u32 },
