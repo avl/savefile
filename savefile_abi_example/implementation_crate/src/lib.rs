@@ -2,7 +2,7 @@ use interface_crate::{AdderInterface};
 use savefile_derive::savefile_abi_export;
 
 #[derive(Default)]
-struct MyAdder { }
+pub struct MyAdder { }
 
 impl AdderInterface for MyAdder {
     fn add(&self, x: u32, y: u32) -> u32 {

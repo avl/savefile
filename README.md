@@ -108,11 +108,6 @@ Features savefile does not have, and will not have:
 
 # Upgrade Guide
 
-## Upgrading from pre 0.20.0:
-
-asdf
-
-
 ## Upgrading from pre 0.16.x:
 
 ### "the trait bound `MyStuff: WithSchema` is not satisfied"
