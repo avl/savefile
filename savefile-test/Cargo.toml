@@ -30,7 +30,7 @@ bit-set="0.8"
 rustc-hash="2.1.0"
 quickcheck="1.0"
 quickcheck_macros ="1.0"
-insta = { version = "1.41.1", features = ["yaml"] }
+insta = { version = "1.43.2", features = ["yaml"] }
 nalgebra="0.33"
 tokio= { version = "1.47.1", features = ["test-util", "rt-multi-thread", "full"] }
 async-trait = "0.1"
