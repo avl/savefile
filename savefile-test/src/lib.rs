@@ -1565,6 +1565,52 @@ pub fn test_struct_with_ignored_member() {
     });
 }
 
+#[derive(Default, PartialEq, Debug)]
+struct NonSerializableZeroSized;
+#[derive(Savefile, PartialEq, Debug)]
+struct TestIgnoreNonSerializableZeroSized {
+    a: f64,
+    b: f64,
+    #[savefile_ignore]
+    #[savefile_introspect_ignore]
+    cached_product: NonSerializableZeroSized,
+}
+
+#[test]
+pub fn test_struct_with_ignored_member2() {
+    unsafe {
+        assert!(TestIgnoreNonSerializableZeroSized::repr_c_optimization_safe(0).is_yes());
+    }
+    assert_roundtrip(TestIgnoreNonSerializableZeroSized {
+        a: 42.0,
+        b: 43.0,
+        cached_product: NonSerializableZeroSized,
+    });
+}
+
+#[derive(Default, PartialEq, Debug)]
+struct NonSerializableNonZeroSized(u8);
+#[derive(Savefile, PartialEq, Debug)]
+struct TestIgnoreNonSerializableNonZeroSized {
+    a: f64,
+    b: f64,
+    #[savefile_ignore]
+    #[savefile_introspect_ignore]
+    cached_product: NonSerializableNonZeroSized,
+}
+
+#[test]
+pub fn test_struct_with_ignored_member3() {
+    unsafe {
+        assert!(TestIgnoreNonSerializableNonZeroSized::repr_c_optimization_safe(0).is_false());
+    }
+    assert_roundtrip(TestIgnoreNonSerializableNonZeroSized {
+        a: 42.0,
+        b: 43.0,
+        cached_product: NonSerializableNonZeroSized(0),
+    });
+}
+
 #[test]
 pub fn test_indexmap() {
     let mut imap = IndexMap::new();

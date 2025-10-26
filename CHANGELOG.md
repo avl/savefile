@@ -3,6 +3,11 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.20.2
+
+Fix bug where `#[savefile_ignore]` didn't work if the ignored field was first or last,
+and its datatype did not implement the `Packed` trait.
+
 ## 0.20.1
 
 Add new `doc_hidden`-attribute, allowing generated impls to have `#[doc(hidden)]`. This hides

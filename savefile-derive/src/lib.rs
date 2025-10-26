@@ -132,6 +132,8 @@ fn implement_fields_serialize(
         objid
     };
 
+    let mut first_non_ignored_fieldinfo = None;
+    let mut last_non_ignored_fieldinfo = None;
     for field in &field_infos {
         {
             let verinfo = parse_attr_tag(field.attrs);
@@ -139,6 +141,11 @@ fn implement_fields_serialize(
             if verinfo.ignore {
                 continue;
             }
+            if first_non_ignored_fieldinfo.is_none() {
+                first_non_ignored_fieldinfo = Some(field);
+            }
+            last_non_ignored_fieldinfo = Some(field);
+
             let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
             let removed = check_is_remove(field.ty);
@@ -173,6 +180,7 @@ fn implement_fields_serialize(
                 output.push(quote!(
                 <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
                 ));
+
             } else {
                 realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
 
@@ -188,9 +196,9 @@ fn implement_fields_serialize(
     //let contents = format!("//{:?}",output);
 
     let total_reprc_opt: TokenStream;
-    if field_infos.is_empty() == false {
-        let first_field = get_obj_id(field_infos.first().expect("field_infos.first"));
-        let last_field = get_obj_id(field_infos.last().expect("field_infos.last"));
+    if let (Some(first), Some(last)) = (first_non_ignored_fieldinfo, last_non_ignored_fieldinfo) {
+        let first_field = get_obj_id(first);
+        let last_field = get_obj_id(last);
         total_reprc_opt = quote!( unsafe { #local_serializer.raw_write_region(self,&#first_field, &#last_field, local_serializer.file_version)?; } );
     } else {
         total_reprc_opt = quote!();
@@ -1076,14 +1084,9 @@ fn implement_reprc_struct(
     for field in &field_infos {
         let verinfo = parse_attr_tag(field.attrs);
         if verinfo.ignore {
-            if expect_fast {
-                abort!(
-                    field.field_span,
-                    "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
-                );
-            } else {
-                return implement_reprc_hardcoded_false(name, input);
-            }
+            // If it isn't zero-sized, the checks above will fail anyway.
+            // If it's zero-sized, we can allow it.
+            continue;
         }
         let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
