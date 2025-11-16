@@ -2526,7 +2526,9 @@ pub fn save_file_compressed<T: WithSchema + Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(path)?);
-    Serializer::save::<T>(&mut f, version, data, true)
+    Serializer::save::<T>(&mut f, version, data, true)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Serialize the given data and return as a `Vec<u8>`
@@ -2572,7 +2574,9 @@ pub fn save_file<T: WithSchema + Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(filepath)?);
-    Serializer::save::<T>(&mut f, version, data, false)
+    Serializer::save::<T>(&mut f, version, data, false)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
@@ -2592,7 +2596,9 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(filepath)?);
-    Serializer::save_noschema::<T>(&mut f, version, data)
+    Serializer::save_noschema::<T>(&mut f, version, data)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Context object used to keep track of recursion.
