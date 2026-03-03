@@ -6402,7 +6402,7 @@ impl Deserialize for bit_vec08::BitVec<u32> {
     }
 }
 
-#[cfg(feature = "bit-set")]
+#[cfg(feature = "bit-set08")]
 impl WithSchema for bit_set08::BitSet {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
