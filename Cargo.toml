@@ -17,7 +17,7 @@ version = "0.20.3"
 
 [workspace.dependencies]
 # Internal crates
-savefile = { path = "savefile", version = "=0.20.3", default-features = false }
+savefile = { path = "savefile", version = "=0.20.3" }
 savefile-derive = { path = "savefile-derive", version = "=0.20.3" }
 savefile-abi = { path = "savefile-abi", version = "=0.20.3" }
 savefile-abi-min-lib = { path = "savefile-abi-min-lib" }
