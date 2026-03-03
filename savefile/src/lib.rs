@@ -2526,7 +2526,9 @@ pub fn save_file_compressed<T: WithSchema + Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(path)?);
-    Serializer::save::<T>(&mut f, version, data, true)
+    Serializer::save::<T>(&mut f, version, data, true)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Serialize the given data and return as a `Vec<u8>`
@@ -2572,7 +2574,9 @@ pub fn save_file<T: WithSchema + Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(filepath)?);
-    Serializer::save::<T>(&mut f, version, data, false)
+    Serializer::save::<T>(&mut f, version, data, false)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Like [crate::load_noschema] , except it deserializes from the given file in the filesystem.
@@ -2592,7 +2596,9 @@ pub fn save_file_noschema<T: Serialize, P: AsRef<Path>>(
     data: &T,
 ) -> Result<(), SavefileError> {
     let mut f = BufWriter::new(File::create(filepath)?);
-    Serializer::save_noschema::<T>(&mut f, version, data)
+    Serializer::save_noschema::<T>(&mut f, version, data)?;
+    f.flush()?;
+    Ok(())
 }
 
 /// Context object used to keep track of recursion.
@@ -6396,7 +6402,7 @@ impl Deserialize for bit_vec08::BitVec<u32> {
     }
 }
 
-#[cfg(feature = "bit-set")]
+#[cfg(feature = "bit-set08")]
 impl WithSchema for bit_set08::BitSet {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
         Schema::Struct(SchemaStruct {
@@ -6459,7 +6465,7 @@ impl Serialize for bit_set08::BitSet<u32> {
     }
 }
 
-#[cfg(feature = "bit-set")]
+#[cfg(feature = "bit-set08")]
 impl Deserialize for bit_set08::BitSet<u32> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let bit_vec: bit_vec08::BitVec = bit_vec08::BitVec::deserialize(deserializer)?;

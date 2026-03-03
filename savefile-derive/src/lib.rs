@@ -38,12 +38,16 @@ use syn::parse::Parse;
 use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::Type::Tuple;
-use syn::{Attribute, Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index, ItemTrait, Lifetime, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple, WherePredicate};
+use syn::{
+    Attribute, Data, DeriveInput, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplGenerics, Index,
+    ItemTrait, Lifetime, Pat, PathArguments, ReturnType, TraitItem, Type, TypeGenerics, TypeParamBound, TypeTuple,
+    WherePredicate,
+};
 
 pub(crate) fn doc_hidden(x: &Vec<Attribute>) -> TokenStream {
     for attr in x {
         if attr.path().is_ident("savefile_doc_hidden") {
-            return quote!{#[doc(hidden)]}
+            return quote! {#[doc(hidden)]};
         }
     }
     quote!()
@@ -180,7 +184,6 @@ fn implement_fields_serialize(
                 output.push(quote!(
                 <_ as _savefile::prelude::Serialize>::serialize(&#obj_id, #local_serializer)?;
                 ));
-
             } else {
                 realize_any_deferred(&local_serializer, &mut deferred_reprc, &mut output);
 

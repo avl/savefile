@@ -1,5 +1,4 @@
 use savefile::prelude::Savefile;
-use std::marker::PhantomData;
 
 #[derive(Savefile, Debug, PartialEq)]
 #[repr(u32)]

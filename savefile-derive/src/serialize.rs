@@ -2,8 +2,8 @@ use proc_macro2::{Span, TokenStream};
 use syn::{Attribute, DeriveInput};
 
 use crate::common::{get_extra_where_clauses, parse_attr_tag, FieldInfo};
-use crate::{doc_hidden, get_enum_size};
 use crate::implement_fields_serialize;
+use crate::{doc_hidden, get_enum_size};
 use syn::spanned::Spanned;
 
 pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
