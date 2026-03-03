@@ -3,10 +3,10 @@ members = [
     "savefile",
     "savefile-derive",
     "savefile-test",
-    "savefile-min-build", 
-    "savefile-abi-min", 
-    "savefile-abi", 
-    "savefile-abi-min-lib", 
+    "savefile-min-build",
+    "savefile-abi-min",
+    "savefile-abi",
+    "savefile-abi-min-lib",
     "savefile-abi-min-lib-impl"
 ]
 exclude = ["compile_tests", "savefile_abi_example"]
@@ -14,6 +14,45 @@ resolver = "2"
 
 [workspace.package]
 version = "0.20.3"
+
+[workspace.dependencies]
+# Internal crates
+savefile = { path = "savefile", version = "=0.20.3", default-features = false }
+savefile-derive = { path = "savefile-derive", version = "=0.20.3" }
+savefile-abi = { path = "savefile-abi", version = "=0.20.3" }
+savefile-abi-min-lib = { path = "savefile-abi-min-lib" }
+
+# External dependencies
+arrayvec = "0.7"
+async-trait = "0.1"
+bincode = "1.2.1"
+bzip2 = "0.4.4"
+byteorder = "1.4"
+bytes = "1.8"
+chrono = "0.4.39"
+ecolor = "0.30"
+emath = "0.30"
+indexmap = "2.11.0"
+insta = { version = "1.41.1", features = ["yaml"] }
+libloading = "0.8"
+memoffset = "0.9"
+nalgebra = "0.33"
+parking_lot = "0.12"
+proc-macro2 = "1.0"
+proc-macro-error2 = "2.0.1"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+quote = "1.0"
+rand = "0.8"
+ring = "0.17.8"
+rustc-hash = "2.1.0"
+rustc_version = "0.4"
+serde = "1.0"
+serde_derive = "1.0"
+smallvec = "1.11"
+syn = { version = "2.0.106", features = ["full", "extra-traits"] }
+tokio = "1.47.1"
+tokio-util = "0.7"
 
 [profile.dev.package]
 insta.opt-level = 3

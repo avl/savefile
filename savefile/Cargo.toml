@@ -46,34 +46,34 @@ encryption = ["ring", "rand"]
 derive = ["dep:savefile-derive"]
 
 [dependencies]
-bit-vec = { version = "0.6", optional = true}
-nalgebra = { version = "0.33", optional = true}
-bit-vec08 = { package="bit-vec", version = "0.8", optional = true}
-arrayvec = { version = "0.7", optional = true}
-smallvec = { version = "1.11", optional = true}
-indexmap = { version = "2.11.0", optional = true}
-chrono = { version = "0.4.39", optional = true}
-parking_lot = { version = "0.12", optional = true }
-ring = {version = "0.17.8", optional = true}
-rand = { version = "0.8", optional = true}
-bzip2 = {version = "0.4.4", optional = true}
-bit-set = {version = "0.5", optional = true}
-bit-set08 = {package="bit-set", version = "0.8", optional = true}
-rustc-hash = {version = "2.1.0", optional = true}
-memoffset = "0.9"
-byteorder = "1.4"
-savefile-derive = {path="../savefile-derive", version = "=0.20.3", optional = true }
-serde_derive = {version= "1.0", optional = true}
-serde = {version= "1.0", optional = true}
-quickcheck = {version= "1.0", optional = true}
-emath = {version = "0.30", optional = true}
-ecolor = {version = "0.30", optional = true}
+bit-vec = { version = "0.6", optional = true }
+nalgebra = { workspace = true, optional = true }
+bit-vec08 = { package = "bit-vec", version = "0.8", optional = true }
+arrayvec = { workspace = true, optional = true }
+smallvec = { workspace = true, optional = true }
+indexmap = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+ring = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+bzip2 = { workspace = true, optional = true }
+bit-set = { version = "0.5", optional = true }
+bit-set08 = { package = "bit-set", version = "0.8", optional = true }
+rustc-hash = { workspace = true, optional = true }
+memoffset.workspace = true
+byteorder.workspace = true
+savefile-derive = { workspace = true, optional = true }
+serde_derive = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+quickcheck = { workspace = true, optional = true }
+emath = { workspace = true, optional = true }
+ecolor = { workspace = true, optional = true }
 
 [dev-dependencies]
-savefile-derive = { path="../savefile-derive", version = "=0.20.3" }
+savefile-derive.workspace = true
 
 [build-dependencies]
-rustc_version="0.4"
+rustc_version.workspace = true
 
 
 

@@ -7,9 +7,9 @@ rust-version = "1.74"
 
 
 [dependencies]
-savefile = { path = "../savefile", features = ["derive"], default-features = false }
-savefile-abi = { path = "../savefile-abi" }
-byteorder = "1.4"
-savefile-derive = {path = "../savefile-derive"}
-savefile-abi-min-lib = { path = "../savefile-abi-min-lib" }
-tokio="1.47"
+savefile = { workspace = true, features = ["derive"] }
+savefile-abi.workspace = true
+byteorder.workspace = true
+savefile-derive.workspace = true
+savefile-abi-min-lib.workspace = true
+tokio.workspace = true
