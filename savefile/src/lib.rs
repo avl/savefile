@@ -6465,7 +6465,7 @@ impl Serialize for bit_set08::BitSet<u32> {
     }
 }
 
-#[cfg(feature = "bit-set")]
+#[cfg(feature = "bit-set08")]
 impl Deserialize for bit_set08::BitSet<u32> {
     fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
         let bit_vec: bit_vec08::BitVec = bit_vec08::BitVec::deserialize(deserializer)?;
