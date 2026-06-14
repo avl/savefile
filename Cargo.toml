@@ -13,13 +13,13 @@ exclude = ["compile_tests", "savefile_abi_example"]
 resolver = "2"
 
 [workspace.package]
-version = "0.20.3"
+version = "0.20.4"
 
 [workspace.dependencies]
 # Internal crates
-savefile = { path = "savefile", version = "=0.20.3" }
-savefile-derive = { path = "savefile-derive", version = "=0.20.3" }
-savefile-abi = { path = "savefile-abi", version = "=0.20.3" }
+savefile = { path = "savefile", version = "=0.20.4" }
+savefile-derive = { path = "savefile-derive", version = "=0.20.4" }
+savefile-abi = { path = "savefile-abi", version = "=0.20.4" }
 savefile-abi-min-lib = { path = "savefile-abi-min-lib" }
 
 # External dependencies
