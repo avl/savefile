@@ -1,4 +1,7 @@
 target
 .idea
+savefile_abi_example/app/Cargo.lock
+savefile_abi_example/implementation_crate/Cargo.lock
+savefile_abi_example/interface_crate/Cargo.lock
 
 
