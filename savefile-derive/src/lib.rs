@@ -590,7 +590,7 @@ fn savefile_abi_exportable_impl(
                     FnArg::Typed(pat) => match &*pat.pat {
                         Pat::Ident(ident) if ident.ident == "self" => {
                             if ident.by_ref.is_some() || ident.mutability.is_some() {
-                                unsupported();
+                                unsupported()?;
                             }
                             parse_receiver_ty(&*pat.ty)?;
                         }
