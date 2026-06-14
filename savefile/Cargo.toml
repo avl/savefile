@@ -22,7 +22,7 @@ license = "MIT/Apache-2.0"
 
 edition = "2021"
 
-rust-version = "1.80"
+rust-version = "1.82"
 
 [features]
 default = ["indexmap", "arrayvec", "smallvec", "bit-vec", "parking_lot","bit-set", "bit-set08", "bit-vec08", "chrono", "derive"]
