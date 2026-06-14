@@ -35,6 +35,6 @@ jobs:
       run: cargo +stable build -p savefile-min-build
     - name: compile_tests (stable)
       run: cd compile_tests && cargo +stable test
-    - name: Build (1.80)
-      run: cargo +1.80 build --workspace
+    - name: Build (1.82)
+      run: cargo +1.82 build --workspace
 
