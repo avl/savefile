@@ -20,7 +20,6 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 #[macro_use]
-extern crate proc_macro_error2;
 
 use crate::savefile_abi::is_well_known;
 use common::{
@@ -52,12 +51,21 @@ pub(crate) fn doc_hidden(x: &Vec<Attribute>) -> TokenStream {
     }
     quote!()
 }
-
+macro_rules! abort {
+    ($span:expr, $($x:tt)*) => {
+        return Err(syn::Error::new($span, std::format!($($x)*)))
+    }
+}
+macro_rules! abort_call_site {
+    ($($x:tt)*) => {
+        return Err(syn::Error::new($crate::proc_macro2::Span::call_site(), std::format!($($x)*)))
+    }
+}
 fn implement_fields_serialize(
     field_infos: Vec<FieldInfo>,
     implicit_self: bool,
     index: bool,
-) -> (TokenStream, Vec<TokenStream>) {
+) -> syn::Result<(TokenStream, Vec<TokenStream>)> {
     let mut output = Vec::new();
 
     let defspan = proc_macro2::Span::call_site();
@@ -140,7 +148,7 @@ fn implement_fields_serialize(
     let mut last_non_ignored_fieldinfo = None;
     for field in &field_infos {
         {
-            let verinfo = parse_attr_tag(field.attrs);
+            let verinfo = parse_attr_tag(field.attrs)?;
 
             if verinfo.ignore {
                 continue;
@@ -224,7 +232,7 @@ fn implement_fields_serialize(
             quote! { #fieldname }
         })
         .collect();
-    (serialize2, fields_names)
+    Ok((serialize2, fields_names))
 }
 
 pub(crate) mod common;
@@ -235,16 +243,26 @@ mod deserialize;
 
 mod savefile_abi;
 
-#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn savefile_abi_exportable(
     attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
+    match savefile_abi_exportable_impl(attr, input) {
+        Ok(output) => output,
+        Err(err) => err.to_compile_error().into()
+    }
+}
+
+fn savefile_abi_exportable_impl(
+    attr: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> syn::Result<proc_macro::TokenStream> {
     let parsed: ItemTrait = syn::parse(input.clone()).expect("Expected valid rust-code");
 
-    let mut version = None;
-    for item in attr.to_string().split(',') {
+    let mut version: Option<u32> = None;
+    let atstr : String = attr.to_string();
+    for item in atstr.split(',') {
         let keyvals: Vec<_> = item.split('=').collect();
         if keyvals.len() != 2 {
             abort!(
@@ -260,10 +278,10 @@ pub fn savefile_abi_exportable(
                 if version.is_some() {
                     abort!(item.span(), "version specified more than once");
                 }
-                version = Some(
-                    val.parse()
-                        .unwrap_or_else(|_| abort!(item.span(), "Version must be numeric, but was: {}", val)),
-                );
+                version = Some(match val.parse() {
+                    Ok(v) => v,
+                    Err(_) => abort!(item.span(), "Version must be numeric, but was: {}", val),
+                });
             }
             _ => abort!(item.span(), "Unknown savefile_abi_exportable key: '{}'", key),
         }
@@ -484,13 +502,13 @@ pub fn savefile_abi_exportable(
                     }
                 }
 
-                let self_arg = method.sig.inputs.iter().next().unwrap_or_else(|| {
+                let Some(self_arg) = method.sig.inputs.iter().next() else {
                     abort!(
                         method.span(),
                         "Method '{}' has no arguments. This is not supported by savefile-abi - it must at least have a self-argument.",
                         method_name
-                    )
-                });
+                    );
+                };
                 let unsupported = || {
                     abort!(
                                         method.sig.span(),
@@ -499,23 +517,22 @@ pub fn savefile_abi_exportable(
                                     );
                 };
 
-                let mut parse_receiver_ty = |typ: &Type| {
+                let mut parse_receiver_ty = |typ: &Type| -> syn::Result<()> {
                     if let Type::Path(path) = typ {
                         if !is_well_known(&path.path.segments, ["std", "pin", "Pin"]) {
-                            unsupported();
+                            return unsupported();
                         }
                         let seg = &path.path.segments.last().unwrap();
                         let PathArguments::AngleBracketed(args) = &seg.arguments else {
-                            unsupported();
+                            return unsupported();
                             unreachable!();
                         };
                         if args.args.len() != 1 {
-                            unsupported();
+                            return unsupported();
                         }
                         let arg = &args.args[0];
                         let GenericArgument::Type(Type::Reference(typref)) = arg else {
-                            unsupported();
-                            unreachable!();
+                            return unsupported();
                         };
                         if typref.mutability.is_none() {
                             abort!(
@@ -525,26 +542,25 @@ pub fn savefile_abi_exportable(
                                         );
                         }
                         let Type::Path(typepath) = &*typref.elem else {
-                            unsupported();
-                            unreachable!();
+                            return unsupported();
                         };
                         if typepath.path.segments.len() != 1 {
-                            unsupported();
-                            unreachable!()
+                            return unsupported();
                         };
                         if typepath.path.segments[0].ident != "Self" {
-                            unsupported();
+                            return unsupported();
                         }
                         receiver_is_mut = true;
                         receiver_is_pin = true;
                     } else {
-                        unsupported();
+                        return unsupported();
                     }
+                    Ok(())
                 };
                 match self_arg {
                     FnArg::Receiver(recv) => {
                         if recv.colon_token.is_some() {
-                            parse_receiver_ty(&*recv.ty);
+                            parse_receiver_ty(&*recv.ty)?;
                         } else {
                             if let Some(reference) = &recv.reference {
                                 if let Some(reference) = &reference.1 {
@@ -576,7 +592,7 @@ pub fn savefile_abi_exportable(
                             if ident.by_ref.is_some() || ident.mutability.is_some() {
                                 unsupported();
                             }
-                            parse_receiver_ty(&*pat.ty);
+                            parse_receiver_ty(&*pat.ty)?;
                         }
                         _ => {
                             abort!(
@@ -698,7 +714,7 @@ pub fn savefile_abi_exportable(
                     &mut temp_name_generator,
                     &mut extra_definitions,
                     async_trait_macro_detected,
-                );
+                )?;
                 method_metadata.push(method_defs.method_metadata);
                 callee_method_trampoline.push(method_defs.callee_method_trampoline);
                 caller_method_trampoline.push(method_defs.caller_method_trampoline);
@@ -811,11 +827,17 @@ pub fn savefile_abi_exportable(
     // For debugging, uncomment to write expanded procmacro to file
     // std::fs::write(format!("/home/anders/savefile/savefile-min-build/src/{}.rs",trait_name_str),expanded.to_string()).unwrap();
 
-    expanded.into()
+    Ok(expanded.into())
 }
-#[proc_macro_error]
+
 #[proc_macro]
 pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match savefile_abi_export_impl(item) {
+        Ok(x) => x,
+        Err(err) => err.to_compile_error().into()
+    }
+}
+fn savefile_abi_export_impl(item: proc_macro::TokenStream) -> syn::Result<proc_macro::TokenStream> {
     let tokens = proc_macro2::TokenStream::from(item);
 
     let mut tokens_iter = tokens.into_iter();
@@ -875,10 +897,9 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
         };
     };
 
-    expanded.into()
+    Ok(expanded.into())
 }
 
-#[proc_macro_error]
 #[proc_macro_derive(
     Savefile,
     attributes(
@@ -895,21 +916,27 @@ pub fn savefile_abi_export(item: proc_macro::TokenStream) -> proc_macro::TokenSt
     )
 )]
 pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match savefile_impl(input) {
+        Ok(x) => x,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+fn savefile_impl(input: proc_macro::TokenStream) -> syn::Result<proc_macro::TokenStream> {
     let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [Savefile]");
 
-    let s = serialize::savefile_derive_crate_serialize(input.clone());
+    let s = serialize::savefile_derive_crate_serialize(input.clone())?;
 
-    let d = deserialize::savefile_derive_crate_deserialize(input.clone());
+    let d = deserialize::savefile_derive_crate_deserialize(input.clone())?;
 
-    let w = savefile_derive_crate_withschema(input.clone());
+    let w = savefile_derive_crate_withschema(input.clone())?;
 
-    let i = savefile_derive_crate_introspect(input.clone());
+    let i = savefile_derive_crate_introspect(input.clone())?;
 
-    let r = derive_reprc_new(input);
+    let r = derive_reprc_new(input)?;
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
-    let expanded = quote! {
+    let expanded: TokenStream = quote! {
         #s
 
         #d
@@ -928,13 +955,11 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             #w
             #r
         };
-
     };
     //std::fs::write("/home/anders/savefile/savefile-min-build/src/expanded.rs", expanded.to_string()).unwrap();
 
-    expanded.into()
+    Ok(expanded.into())
 }
-#[proc_macro_error]
 #[proc_macro_derive(
     SavefileNoIntrospect,
     attributes(
@@ -949,15 +974,22 @@ pub fn savefile(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     )
 )]
 pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match savefile_no_introspect_impl(input) {
+        Ok(x) => x,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+fn savefile_no_introspect_impl(input: proc_macro::TokenStream) -> syn::Result<proc_macro::TokenStream> {
     let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileNoIntrospect]");
 
-    let s = serialize::savefile_derive_crate_serialize(input.clone());
+    let s = serialize::savefile_derive_crate_serialize(input.clone())?;
 
-    let d = deserialize::savefile_derive_crate_deserialize(input.clone());
+    let d = deserialize::savefile_derive_crate_deserialize(input.clone())?;
 
-    let w = savefile_derive_crate_withschema(input.clone());
+    let w = savefile_derive_crate_withschema(input.clone())?;
 
-    let r = derive_reprc_new(input);
+    let r = derive_reprc_new(input)?;
 
     let dummy_const = syn::Ident::new("_", proc_macro2::Span::call_site());
 
@@ -979,10 +1011,9 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
         };
     };
 
-    expanded.into()
+    Ok(expanded.into())
 }
 
-#[proc_macro_error]
 #[proc_macro_derive(
     SavefileIntrospectOnly,
     attributes(
@@ -995,15 +1026,21 @@ pub fn savefile_no_introspect(input: proc_macro::TokenStream) -> proc_macro::Tok
     )
 )]
 pub fn savefile_introspect_only(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match savefile_introspect_only_impl(input) {
+        Ok(x) => x,
+        Err(err) => err.to_compile_error().into()
+    }
+}
+fn savefile_introspect_only_impl(input: proc_macro::TokenStream) -> syn::Result<proc_macro::TokenStream> {
     let input: DeriveInput = syn::parse(input).expect("Expected valid rust code [SavefileIntrospectOnly]");
 
-    let i = savefile_derive_crate_introspect(input);
+    let i = savefile_derive_crate_introspect(input)?;
 
     let expanded = quote! {
         #i
     };
 
-    expanded.into()
+    Ok(expanded.into())
 }
 
 #[allow(non_snake_case)]
@@ -1040,7 +1077,7 @@ fn implement_reprc_struct(
     input: &DeriveInput,
     name: syn::Ident,
     expect_fast: bool,
-) -> TokenStream {
+) -> syn::Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let extra_where = get_extra_where_clauses(input, where_clause, quote! {_savefile::prelude::Packed});
@@ -1085,7 +1122,7 @@ fn implement_reprc_struct(
     }
 
     for field in &field_infos {
-        let verinfo = parse_attr_tag(field.attrs);
+        let verinfo = parse_attr_tag(field.attrs)?;
         if verinfo.ignore {
             // If it isn't zero-sized, the checks above will fail anyway.
             // If it's zero-sized, we can allow it.
@@ -1100,7 +1137,7 @@ fn implement_reprc_struct(
                 if expect_fast {
                     abort!(field.ty.span(), "The Removed type can only be used for removed fields. Use the savefile_version attribute to mark a field as only existing in previous versions.");
                 } else {
-                    return implement_reprc_hardcoded_false(name, input);
+                    return Ok(implement_reprc_hardcoded_false(name, input));
                 }
             }
             reprc_outputs
@@ -1134,7 +1171,7 @@ fn implement_reprc_struct(
         quote!(const)
     };
 
-    quote! {
+    Ok(quote! {
 
         #[automatically_derived]
         #doc_hidden
@@ -1151,7 +1188,7 @@ fn implement_reprc_struct(
                 }
             }
         }
-    }
+    })
 }
 
 #[derive(Debug)]
@@ -1162,7 +1199,7 @@ struct EnumSize {
     explicit_size: bool,
 }
 
-fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
+fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> syn::Result<EnumSize> {
     let mut size_u8: Option<u8> = None;
     let mut repr_c_seen = false;
     let mut have_seen_explicit_size = false;
@@ -1225,26 +1262,25 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
         }
     }
 
+    if actual_variants >= u32::MAX as usize {
+        abort_call_site!("The enum had an unreasonable number of variants");
+    }
     let discriminant_size = size_u8.unwrap_or_else(|| {
         if actual_variants <= 256 {
             1
         } else if actual_variants <= 65536 {
             2
         } else {
-            if actual_variants >= u32::MAX as usize {
-                abort_call_site!("The enum had an unreasonable number of variants");
-            }
             4
         }
     });
-    EnumSize {
+    Ok(EnumSize {
         discriminant_size,
         repr_c: repr_c_seen,
         explicit_size: have_seen_explicit_size,
-    }
+    })
 }
 
-#[proc_macro_error]
 #[proc_macro_derive(
     Packed,
     attributes(
@@ -1256,9 +1292,9 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> EnumSize {
     )
 )]
 pub fn reprc(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    abort_call_site!("The #[derive(Packed)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.")
+    syn::Error::new(Span::call_site(), "The #[derive(Packed)] style of unsafe performance opt-in has been removed. The performance gains are now available automatically for any packed struct.").to_compile_error().into()
 }
-fn derive_reprc_new(input: DeriveInput) -> TokenStream {
+fn derive_reprc_new(input: DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let doc_hidden = doc_hidden(&input.attrs);
     let (impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
@@ -1288,7 +1324,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
 
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
-            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len())?;
             let any_fields = enum1.variants.iter().any(|v| v.fields.len() > 0);
             if !enum_size.explicit_size {
                 if opt_in_fast {
@@ -1298,7 +1334,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                         abort_call_site!("The #[savefile_require_fast] requires an explicit #[repr(u8)],#[repr(u16)] or #[repr(u32)], attribute.");
                     }
                 }
-                return implement_reprc_hardcoded_false(name.clone(), &input);
+                return Ok(implement_reprc_hardcoded_false(name.clone(), &input));
             }
 
             let mut conditions = vec![];
@@ -1335,7 +1371,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     &syn::Fields::Unit => {}
                 }
                 for i in 0usize..num_fields {
-                    let verinfo = parse_attr_tag(&attrs[i]);
+                    let verinfo = parse_attr_tag(&attrs[i])?;
                     if check_is_remove(&field_types[i]).is_removed() {
                         if verinfo.version_to == u32::MAX {
                             abort!(field_types[i].span(), "Removed fields must have a max version, provide one using #[savefile_versions=\"..N\"]")
@@ -1363,14 +1399,14 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 }
 
                 for attr in attrs {
-                    let verinfo = parse_attr_tag(attr);
+                    let verinfo = parse_attr_tag(attr)?;
                     if verinfo.ignore {
                         if opt_in_fast {
                             abort_call_site!(
                                 "The #[savefile_require_fast] attribute cannot be used for structures containing ignored fields"
                             );
                         } else {
-                            return implement_reprc_hardcoded_false(name.clone(), &input);
+                            return Ok(implement_reprc_hardcoded_false(name.clone(), &input));
                         }
                     }
                     min_safe_version = min_safe_version.max(verinfo.min_safe_version());
@@ -1426,7 +1462,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                 quote!()
             };
 
-            return quote! {
+            return Ok(quote! {
 
                 #[automatically_derived]
                 #doc_hidden
@@ -1444,7 +1480,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                         }
                     }
                 }
-            };
+            });
 
             //implement_reprc_struct(vec![], input.generics, name, opt_in_fast) //Hacky, consider enum without any fields as a field-less struct
         }
@@ -1463,7 +1499,7 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)
+                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)?
             }
             &syn::Fields::Unnamed(ref fields_unnamed) => {
                 let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -1479,26 +1515,26 @@ fn derive_reprc_new(input: DeriveInput) -> TokenStream {
                     })
                     .collect();
 
-                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)
+                implement_reprc_struct(field_infos, &input, name.clone(), opt_in_fast)?
             }
-            &syn::Fields::Unit => implement_reprc_struct(Vec::new(), &input, name.clone(), opt_in_fast),
+            &syn::Fields::Unit => implement_reprc_struct(Vec::new(), &input, name.clone(), opt_in_fast)?,
         },
         _ => {
             if opt_in_fast {
                 abort_call_site!("Unsupported data type");
             }
-            return implement_reprc_hardcoded_false(name.clone(), &input);
+            return Ok(implement_reprc_hardcoded_false(name.clone(), &input));
         }
     };
 
-    expanded
+    Ok(expanded)
 }
 
 #[allow(non_snake_case)]
 fn implement_introspect(
     field_infos: Vec<FieldInfo>,
     need_self: bool,
-) -> (Vec<TokenStream>, Vec<TokenStream>, Option<TokenStream>) {
+) -> syn::Result<(Vec<TokenStream>, Vec<TokenStream>, Option<TokenStream>)> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
@@ -1515,7 +1551,7 @@ fn implement_introspect(
     let mut introspect_key = None;
     let mut index_number = 0usize;
     for (idx, field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(field.attrs);
+        let verinfo = parse_attr_tag(field.attrs)?;
         if verinfo.introspect_key && introspect_key.is_some() {
             abort!(
                 field.field_span,
@@ -1568,11 +1604,11 @@ fn implement_introspect(
         index_number += 1;
     }
 
-    (fields_names, fields, introspect_key)
+    Ok((fields_names, fields, introspect_key))
 }
 
 #[allow(non_snake_case)]
-fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_introspect(input: DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
 
     let generics = &input.generics;
@@ -1628,7 +1664,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                                 attrs: &f.attrs,
                             });
                         }
-                        let (fields_names, fields, introspect_key) = implement_introspect(field_infos, false);
+                        let (fields_names, fields, introspect_key) = implement_introspect(field_infos, false)?;
                         let fields_names1 = fields_names.clone();
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
@@ -1660,7 +1696,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                                 attrs: &f.attrs,
                             });
                         }
-                        let (fields_names, fields, introspect_key) = implement_introspect(field_infos, false);
+                        let (fields_names, fields, introspect_key) = implement_introspect(field_infos, false)?;
                         let fields_names1 = fields_names.clone();
                         let fields_names2 = fields_names.clone();
                         let fields_names3 = fields_names.clone();
@@ -1748,7 +1784,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         })
                         .collect();
 
-                    fields = implement_introspect(field_infos, true);
+                    fields = implement_introspect(field_infos, true)?;
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -1764,7 +1800,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
                         })
                         .collect();
 
-                    fields = implement_introspect(field_infos, true);
+                    fields = implement_introspect(field_infos, true)?;
                 }
                 &syn::Fields::Unit => {
                     fields = (Vec::new(), Vec::new(), None);
@@ -1812,7 +1848,7 @@ fn savefile_derive_crate_introspect(input: DeriveInput) -> TokenStream {
         }
     };
 
-    expanded
+    Ok(expanded)
 }
 
 #[allow(non_snake_case)]
@@ -1823,7 +1859,7 @@ fn implement_withschema(
     generics: &Generics,
     ty_generics: &TypeGenerics,
     impl_generics: &ImplGenerics,
-) -> Vec<TokenStream> {
+) -> syn::Result<Vec<TokenStream>> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let local_version = quote_spanned! { defspan => local_version};
@@ -1843,7 +1879,7 @@ fn implement_withschema(
     };
     let mut fields = Vec::new();
     for (idx, field) in field_infos.iter().enumerate() {
-        let verinfo = parse_attr_tag(field.attrs);
+        let verinfo = parse_attr_tag(field.attrs)?;
         if verinfo.ignore {
             continue;
         }
@@ -1910,7 +1946,7 @@ fn implement_withschema(
                 ));
         }
     }
-    fields
+    Ok(fields)
 }
 
 enum FieldOffsetStrategy {
@@ -2013,7 +2049,7 @@ fn get_phantomdata_types(data: &syn::Data, in_phantom: bool, generic_params_to_c
 }
 
 #[allow(non_snake_case)]
-fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
+fn savefile_derive_crate_withschema(input: DeriveInput) -> syn::Result<TokenStream> {
     //let mut have_u8 = false;
 
     //let discriminant_size = discriminant_size.expect("Enum discriminant must be u8, u16 or u32. Use for example #[repr(u8)].");
@@ -2045,7 +2081,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
         &syn::Data::Enum(ref enum1) => {
             let max_variant_fields = enum1.variants.iter().map(|x| x.fields.len()).max().unwrap_or(0);
 
-            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len())?;
             let need_determine_offsets = enum_size.explicit_size;
 
             let mut variants = Vec::new();
@@ -2059,7 +2095,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                 let variant_name = quote! { #var_ident };
                 let variant_name_spanned = quote_spanned! { span => stringify!(#variant_name).to_string()};
 
-                let verinfo = parse_attr_tag(&variant.attrs);
+                let verinfo = parse_attr_tag(&variant.attrs)?;
                 let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
                 if field_to_version != std::u32::MAX {
@@ -2139,7 +2175,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                     &generics,
                     &ty_generics,
                     &impl_generics,
-                );
+                )?;
 
                 variants.push(quote! {
                 (#field_from_version,
@@ -2281,7 +2317,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         &generics,
                         &ty_generics,
                         &impl_generics,
-                    );
+                    )?;
                 }
                 &syn::Fields::Unnamed(ref fields_unnamed) => {
                     let field_infos: Vec<FieldInfo> = fields_unnamed
@@ -2303,7 +2339,7 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
                         &generics,
                         &ty_generics,
                         &impl_generics,
-                    );
+                    )?;
                 }
                 &syn::Fields::Unit => {
                     fields = Vec::new();
@@ -2338,5 +2374,5 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> TokenStream {
     // For debugging, uncomment to write expanded procmacro to file
     //std::fs::write(format!("/home/anders/savefile/savefile-abi-min-lib/src/expanded.rs"),expanded.to_string()).unwrap();
 
-    expanded
+    Ok(expanded)
 }

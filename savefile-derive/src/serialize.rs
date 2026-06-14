@@ -6,7 +6,7 @@ use crate::implement_fields_serialize;
 use crate::{doc_hidden, get_enum_size};
 use syn::spanned::Spanned;
 
-pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream {
+pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> syn::Result<TokenStream> {
     let name = &input.ident;
     let name_str = name.to_string();
 
@@ -43,14 +43,14 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
     let expanded = match &input.data {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
-            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len())?;
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
                 let var_idx_u8: u8 = var_idx_usize as u8;
                 let var_idx_u16: u16 = var_idx_usize as u16;
                 let var_idx_u32: u32 = var_idx_usize as u32;
 
-                let verinfo = parse_attr_tag(&variant.attrs);
+                let verinfo = parse_attr_tag(&variant.attrs)?;
                 let (field_from_version, field_to_version) = (verinfo.version_from, verinfo.version_to);
 
                 let variant_serializer = match enum_size.discriminant_size {
@@ -80,7 +80,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             .collect();
 
                         let (fields_serialized, fields_names) =
-                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
+                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/)?;
                         output.push(quote!( #variant_name_spanned{#(#fields_names,)*} => {
                             if serializer.file_version < #field_from_version || serializer.file_version > #field_to_version {
                                 panic!("Enum {}, variant {} is not present in version {}", #name_str, #variant_name_str, serializer.file_version);
@@ -108,7 +108,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                             .collect();
 
                         let (fields_serialized, fields_names) =
-                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/);
+                            implement_fields_serialize(field_infos, false, false /*we've invented real names*/)?;
 
                         output.push(
                             quote!(
@@ -171,7 +171,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                         })
                         .collect();
 
-                    let t = implement_fields_serialize(field_infos, true, false);
+                    let t = implement_fields_serialize(field_infos, true, false)?;
                     fields_serialize = t.0;
                     _field_names = t.1;
                 }
@@ -189,7 +189,7 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
                         })
                         .collect();
 
-                    let t = implement_fields_serialize(field_infos, true, true);
+                    let t = implement_fields_serialize(field_infos, true, true)?;
                     fields_serialize = t.0;
                     _field_names = t.1;
                 }
@@ -222,5 +222,5 @@ pub(super) fn savefile_derive_crate_serialize(input: DeriveInput) -> TokenStream
         }
     };
 
-    expanded
+    Ok(expanded)
 }

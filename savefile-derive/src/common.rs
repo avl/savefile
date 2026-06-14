@@ -124,7 +124,7 @@ pub(crate) fn path_to_string(path: &syn::Path) -> String {
         .to_string()
 }
 
-pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
+pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> syn::Result<AttrsResult> {
     let mut field_from_version = None;
     let mut field_to_version = None;
     let mut default_fn = None;
@@ -298,10 +298,10 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
                         let mut range_start: Option<u32> = None;
                         let mut range_end: Option<u32> = None;
                         if let Some(start) = &val.start {
-                            range_start = Some(parse_integer(&*start));
+                            range_start = Some(parse_integer(&*start)?);
                         }
                         if let Some(end) = &val.end {
-                            range_end = Some(parse_integer(&*end));
+                            range_end = Some(parse_integer(&*end)?);
                         }
                         match val.limits {
                             RangeLimits::HalfOpen(_) => {}
@@ -408,7 +408,7 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
         }
     }
 
-    AttrsResult {
+    Ok(AttrsResult {
         version_from: field_from_version.unwrap_or(0),
         version_to: field_to_version.unwrap_or(std::u32::MAX),
         default_fn,
@@ -417,14 +417,14 @@ pub(crate) fn parse_attr_tag(attrs: &[syn::Attribute]) -> AttrsResult {
         deserialize_types: deser_types,
         introspect_key,
         introspect_ignore,
-    }
+    })
 }
 
-fn parse_integer(p0: &Expr) -> u32 {
+fn parse_integer(p0: &Expr) -> syn::Result<u32> {
     match p0 {
         Expr::Lit(lit) => match &lit.lit {
             Lit::Int(i) => match i.base10_parse() {
-                Ok(val) => val,
+                Ok(val) => Ok(val),
                 Err(_) => {
                     abort!(p0.span(), "Expected an integer")
                 }

@@ -407,7 +407,7 @@ pub(crate) fn parse_box_type(
     is_reference: bool,
     is_mut_ref: bool,
     is_box: bool,
-) -> ArgType {
+) -> syn::Result<ArgType> {
     let location;
     if is_return_value {
         location = format!("In return value of method '{}'", method_name);
@@ -448,9 +448,9 @@ pub(crate) fn parse_box_type(
                         false,
                         is_mut_ref,
                         true,
-                    ) {
+                    )? {
                         ArgType::Future(pin, output, send, sync, unpin) => {
-                            ArgType::Future(pin, output, send, sync, unpin)
+                            Ok(ArgType::Future(pin, output, send, sync, unpin))
                         }
                         ArgType::Result(_, _) => {
                             abort!(
@@ -469,11 +469,11 @@ pub(crate) fn parse_box_type(
                             )
                         }
                         ArgType::PlainData(_) | ArgType::Str(_) => {
-                            return ArgType::PlainData(typ.clone()); //Box<plaintype> is itself a plaintype. So handle it as such. It can matter, if Box<T> implements Serializable, when T does not. (example: str)
+                            return Ok(ArgType::PlainData(typ.clone())); //Box<plaintype> is itself a plaintype. So handle it as such. It can matter, if Box<T> implements Serializable, when T does not. (example: str)
                         }
                         ArgType::Slice(slicetype) => match &*slicetype {
                             ArgType::PlainData(_) => {
-                                return ArgType::Slice(slicetype);
+                                return Ok(ArgType::Slice(slicetype));
                             }
                             _x => abort!(
                                 angargs.span(),
@@ -485,7 +485,7 @@ pub(crate) fn parse_box_type(
                         ArgType::Reference(_, _, _) => {
                             abort!(first_gen_arg.span(), "{}. Savefile does not support a Box containing a reference, like: {} (boxing a reference is generally a useless thing to do))", location, typ.to_token_stream());
                         }
-                        x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _, _, _) => ArgType::Boxed(Box::new(x)),
+                        x @ ArgType::Trait(_, _) | x @ ArgType::Fn(_, _, _, _, _, _) => Ok(ArgType::Boxed(Box::new(x))),
                     }
                 }
                 _ => {
@@ -521,7 +521,7 @@ fn parse_type(
     is_reference: bool,
     is_mut_ref: bool,
     is_boxed: bool,
-) -> ArgType {
+) -> syn::Result<ArgType> {
     let location;
     if is_return_value {
         location = format!("In return value of method '{}'", method_name);
@@ -566,11 +566,11 @@ fn parse_type(
                 true,
                 typref.mutability.is_some(),
                 is_boxed,
-            );
+            )?;
             if let ArgType::Str(_) = inner {
-                return ArgType::Str(is_static_lifetime); //Str is a special case, it is always a reference
+                return Ok(ArgType::Str(is_static_lifetime)); //Str is a special case, it is always a reference
             }
-            return ArgType::Reference(Box::new(inner), typref.mutability.is_some(), lifetime);
+            return Ok(ArgType::Reference(Box::new(inner), typref.mutability.is_some(), lifetime));
         }
         Type::Tuple(tuple) => {
             if tuple.elems.len() > 3 {
@@ -606,8 +606,8 @@ fn parse_type(
                 is_reference,
                 is_mut_ref,
                 is_boxed,
-            );
-            return ArgType::Slice(Box::new(argtype));
+            )?;
+            return Ok(ArgType::Slice(Box::new(argtype)));
         }
         Type::TraitObject(trait_obj) => {
             if !is_reference && !is_boxed {
@@ -623,21 +623,21 @@ fn parse_type(
                 let mut send = false;
                 let mut unpin = false;
                 let mut async_trait_lifetime = false;
-                let type_bounds: Vec<_> = trait_obj
+                let temp = trait_obj
                     .bounds
                     .iter()
                     .map(|x| match x {
-                        TypeParamBound::Trait(t) => Some(
+                        TypeParamBound::Trait(t) => Ok(Some(
                             t.path
                                 .segments
                                 .iter()
                                 .last()
-                                .expect("Missing bounds of Box trait object"),
-                        ),
+                                .expect("Missing bounds of Box trait object")
+                        )),
                         TypeParamBound::Lifetime(lt) => {
                             if lt.ident == "async_trait" {
                                 async_trait_lifetime = true;
-                                None
+                                Ok(None)
                             } else {
                                 abort!(
                                     lt.span(),
@@ -650,9 +650,12 @@ fn parse_type(
                         x => {
                             abort!(x.span(), "{}: Savefile does not support this syntax", location);
                         }
-                    })
-                    .filter_map(|x| x)
-                    .filter(|seg| {
+                    }).collect::<syn::Result<Vec<Option<&PathSegment>>>>()?;
+
+                let type_bounds: Vec<&PathSegment> = temp
+                    .into_iter()
+                    .filter_map(|x: Option<_>| x)
+                    .filter(|seg: &&PathSegment| {
                         if seg.ident == "Sync" {
                             sync = true;
                             return false;
@@ -667,7 +670,7 @@ fn parse_type(
                         }
                         true
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
                 if type_bounds.len() == 0 {
                     abort!(trait_obj.bounds.span(), "{}, unsupported trait object reference. Only &dyn Trait is supported. Encountered zero traits.", location);
                 }
@@ -715,14 +718,14 @@ fn parse_type(
                         PathArguments::Parenthesized(pararg) => {
                             /*let temp_name =
                             Ident::new(&format!("{}_{}", &name_generator(), arg_name), Span::call_site());*/
-                            return ArgType::Fn(
+                            return Ok(ArgType::Fn(
                                 fn_decl,
                                 pararg.inputs.iter().cloned().collect(),
                                 pararg.output.clone(),
                                 bound.ident == "FnMut",
                                 sync,
                                 send,
-                            );
+                            ));
                         }
                         _ => {
                             abort!(
@@ -776,7 +779,7 @@ fn parse_type(
                                             if t.ident != "Output" {
                                                 abort!(seg.ident.span(), "{}: Futures must have a a associated type, named Output (Future<Output=?>).", location);
                                             }
-                                            return ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin);
+                                            return Ok(ArgType::Future(false, t.ty.to_token_stream(), send, sync, unpin));
                                         }
                                         GenericArgument::Lifetime(_)
                                         | GenericArgument::Const(_)
@@ -840,7 +843,7 @@ fn parse_type(
                         abort!(trait_obj.span(), "{}: Savefile does not support Send- or Sync-bounds on individual references to traits. Please make {} inherit Send instead of adding the bound here, like so: trait {} : Send.",
                             location, bound.ident, bound.ident);
                     }
-                    return ArgType::Trait(bound.to_token_stream(), is_mut_ref);
+                    return Ok(ArgType::Trait(bound.to_token_stream(), is_mut_ref));
                 }
             } else {
                 abort!(
@@ -862,7 +865,7 @@ fn parse_type(
                         "Savefile does not support the type 'str' (but it does support '&str')."
                     );
                 }
-                return ArgType::Str(false); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
+                return Ok(ArgType::Str(false)); // This is a hack. ArgType::Str means '&str' everywhere but here, where it means 'str'
             } else if last_seg.ident == "Pin" {
                 if !is_well_known(&path.path.segments, ["std", "pin", "Pin"]) {
                     abort!(path.path.segments.span(), "Savefile does not support types named 'Pin', unless it is the standard type Pin, and it must be specified as 'Pin', without any namespace");
@@ -896,12 +899,12 @@ fn parse_type(
                                     is_reference,
                                     is_mut_ref,
                                     is_boxed,
-                                );
+                                )?;
                                 if let ArgType::Future(pin, typ, send, sync, unpin) = ty {
                                     if pin {
                                         abort!(arg.span(), "Savefile only supports Pin<Box<Future>>, not Pin<Pin<..>> or any other usage of Pin");
                                     }
-                                    return ArgType::Future(true, typ, send, sync, unpin);
+                                    return Ok(ArgType::Future(true, typ, send, sync, unpin));
                                 } else {
                                     abort!(
                                         arg.span(),
@@ -980,7 +983,7 @@ fn parse_type(
                                         is_reference,
                                         is_mut_ref,
                                         is_boxed,
-                                    )));
+                                    )?));
                                 }
                                 GenericArgument::Lifetime(_) => {
                                     abort!(arg.span(), "Savefile does not support lifetime specifications.");
@@ -1006,7 +1009,7 @@ fn parse_type(
                         let oktype = i.next().unwrap();
 
                         let errtype = i.next().unwrap();
-                        return ArgType::Result(oktype, errtype);
+                        return Ok(ArgType::Result(oktype, errtype));
                     }
                 }
             } else {
@@ -1053,7 +1056,7 @@ fn parse_type(
             location,
         );
     }
-    ArgType::PlainData(rawtype.clone())
+    Ok(ArgType::PlainData(rawtype.clone()))
 }
 
 pub fn is_well_known<'a, I>(path: I, items: [&str; 3]) -> bool
@@ -1654,7 +1657,7 @@ pub(super) fn generate_method_definitions(
     name_generator: &mut impl FnMut() -> String,
     extra_definitions: &mut HashMap<WrapperKey, (ClosureFutureWrapperNames, TokenStream)>,
     async_trait_detected: bool,
-) -> MethodDefinitionComponents {
+) -> syn::Result<MethodDefinitionComponents> {
     let method_name_str = method_name.to_string();
 
     let mut callee_trampoline_real_method_invocation_arguments: Vec<TokenStream> = vec![];
@@ -1682,7 +1685,7 @@ pub(super) fn generate_method_definitions(
             false,
             false,
             false,
-        );
+        )?;
         if let ArgType::Reference(..) = &argtype {
             first_ref_arg = Some(typ.span());
         }
@@ -1793,7 +1796,7 @@ pub(super) fn generate_method_definitions(
             false,
             false,
             false,
-        );
+        )?;
         if let ArgType::Reference(..) = &parsed_ret_type {
             abort!(
                 ret_type.span(),
@@ -2025,9 +2028,9 @@ pub(super) fn generate_method_definitions(
         }
 
     };
-    MethodDefinitionComponents {
+    Ok(MethodDefinitionComponents {
         method_metadata,
         callee_method_trampoline,
         caller_method_trampoline,
-    }
+    })
 }

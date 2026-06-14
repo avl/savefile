@@ -4,7 +4,7 @@ use proc_macro2::{Literal, TokenStream};
 use syn::spanned::Spanned;
 use syn::DeriveInput;
 
-fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
+fn implement_deserialize(field_infos: Vec<FieldInfo>) -> syn::Result<Vec<TokenStream>> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
     let removeddef = quote_spanned! { defspan => _savefile::prelude::Removed };
@@ -18,7 +18,7 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
 
         let is_removed = check_is_remove(field_type);
 
-        let verinfo = parse_attr_tag(field.attrs);
+        let verinfo = parse_attr_tag(field.attrs)?;
         let (field_from_version, field_to_version, default_fn, default_val) = (
             verinfo.version_from,
             verinfo.version_to,
@@ -113,10 +113,10 @@ fn implement_deserialize(field_infos: Vec<FieldInfo>) -> Vec<TokenStream> {
             output.push(quote!( #src ));
         }
     }
-    output
+    Ok(output)
 }
 
-pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
+pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> syn::Result<TokenStream> {
     let span = proc_macro2::Span::call_site();
     let defspan = proc_macro2::Span::call_site();
 
@@ -153,7 +153,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
         &syn::Data::Enum(ref enum1) => {
             let mut output = Vec::new();
             //let variant_count = enum1.variants.len();
-            let enum_size = get_enum_size(&input.attrs, enum1.variants.len());
+            let enum_size = get_enum_size(&input.attrs, enum1.variants.len())?;
 
             for (var_idx_usize, variant) in enum1.variants.iter().enumerate() {
                 let var_idx = Literal::u32_unsuffixed(var_idx_usize as u32);
@@ -176,7 +176,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             })
                             .collect();
 
-                        let fields_deserialized = implement_deserialize(field_infos);
+                        let fields_deserialized = implement_deserialize(field_infos)?;
 
                         output.push(quote!( #var_idx => #variant_name_spanned{ #(#fields_deserialized,)* } ));
                     }
@@ -193,7 +193,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                                 attrs: &field.attrs,
                             })
                             .collect();
-                        let fields_deserialized = implement_deserialize(field_infos);
+                        let fields_deserialized = implement_deserialize(field_infos)?;
 
                         output.push(quote!( #var_idx => #variant_name_spanned( #(#fields_deserialized,)*) ));
                     }
@@ -247,7 +247,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                         })
                         .collect();
 
-                    let output1 = implement_deserialize(field_infos);
+                    let output1 = implement_deserialize(field_infos)?;
                     quote! {Ok(#name {
                         #(#output1,)*
                     })}
@@ -265,7 +265,7 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
                             attrs: &field.attrs,
                         })
                         .collect();
-                    let output1 = implement_deserialize(field_infos);
+                    let output1 = implement_deserialize(field_infos)?;
 
                     quote! {Ok(#name (
                         #(#output1,)*
@@ -297,5 +297,5 @@ pub fn savefile_derive_crate_deserialize(input: DeriveInput) -> TokenStream {
         }
     };
 
-    expanded
+    Ok(expanded)
 }
