@@ -1257,7 +1257,7 @@ fn get_enum_size(attrs: &[syn::Attribute], actual_variants: usize) -> syn::Resul
                 };
                 Ok(())
             }) {
-                abort!(attr.span(), "Unsupported repr(X) attribute: {}", attr.to_token_stream());
+                return Err(err);
             };
         }
     }
