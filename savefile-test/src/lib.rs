@@ -134,6 +134,19 @@ pub fn roundtrip_version<E: Serialize + Deserialize>(sample: E, version: u32) ->
     assert_eq!(f.position() as usize, f_internal_size);
     roundtrip_result
 }
+#[cfg(has_new_range)]
+#[test]
+pub fn test_new_range() {
+    assert_roundtrip(std::range::Range { start: 3u32, end: 7u32 });
+
+    // std::ops::Range and std::range::Range must be wire-compatible
+    let mut f = Cursor::new(Vec::new());
+    Serializer::save(&mut f, 0, &(3u32..7u32), false).unwrap();
+    f.set_position(0);
+    let new_range = Deserializer::load::<std::range::Range<u32>>(&mut f, 0).unwrap();
+    assert_eq!(new_range, std::range::Range { start: 3, end: 7 });
+}
+
 #[derive(Debug, Savefile, PartialEq)]
 pub enum TestStructEnum {
     Variant1 { a: u8, b: u8 },
