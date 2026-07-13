@@ -1,7 +1,10 @@
 # Changelog
 
-
 This file contains information about changes in each version of savefile.
+
+## 0.20.5
+
+Support the new std::range::Range type. 
 
 ## 0.20.4
 
