@@ -7274,6 +7274,49 @@ impl<T1: Introspect> Introspect for Range<T1> {
     }
 }
 
+
+// std::range::Range requires rust 1.96 or later. Serialized format is
+// identical to that of std::ops::Range, so the two are wire-compatible.
+#[cfg(has_new_range)]
+impl<T1> Packed for std::range::Range<T1> {}
+#[cfg(has_new_range)]
+impl<T1: WithSchema> WithSchema for std::range::Range<T1> {
+    fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
+        Schema::new_tuple2::<T1, T1>(version, context)
+    }
+}
+#[cfg(has_new_range)]
+impl<T1: Serialize> Serialize for std::range::Range<T1> {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        self.start.serialize(serializer)?;
+        self.end.serialize(serializer)?;
+        Ok(())
+    }
+}
+#[cfg(has_new_range)]
+impl<T1: Deserialize> Deserialize for std::range::Range<T1> {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        Ok((T1::deserialize(deserializer)?..T1::deserialize(deserializer)?).into())
+    }
+}
+#[cfg(has_new_range)]
+impl<T1: Introspect> Introspect for std::range::Range<T1> {
+    fn introspect_value(&self) -> String {
+        return "Range".to_string();
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
+        if index == 0 {
+            return Some(introspect_item("start".to_string(), &self.start));
+        }
+        if index == 1 {
+            return Some(introspect_item("end".to_string(), &self.end));
+        }
+        return None;
+    }
+}
+
+
 impl<T1: Packed> Packed for (T1,) {
     unsafe fn repr_c_optimization_safe(version: u32) -> IsPacked {
         if offset_of_tuple!((T1,), 0) == 0 && std::mem::size_of::<T1>() == std::mem::size_of::<(T1,)>() {
