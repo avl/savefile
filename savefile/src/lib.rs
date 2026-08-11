@@ -4373,6 +4373,7 @@ impl Serialize for SchemaPrimitive {
         serializer.write_u8(discr)
     }
 }
+
 impl WithSchema for VecOrStringLayout {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Undefined
@@ -6800,7 +6801,6 @@ pub fn deserialize_slice_as_vec<R: Read, T: Deserialize + Packed>(
     Vec::deserialize(deserializer)
 }
 
-impl<T> Packed for Vec<T> {}
 
 /// 0 = Uninitialized
 static STRING_IS_STANDARD_LAYOUT: AtomicU8 = AtomicU8::new(255);
@@ -6892,6 +6892,57 @@ fn calculate_string_memory_layout() -> VecOrStringLayout {
     STRING_IS_STANDARD_LAYOUT.store(is_std, Ordering::Relaxed);
     return unsafe { std::mem::transmute::<u8, VecOrStringLayout>(is_std) };
 }
+
+
+#[cfg(feature = "bytes")]
+impl Packed for Bytes {}
+
+#[cfg(feature = "bytes")]
+impl WithSchema for Bytes {
+    fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
+        Schema::Vector(
+            Box::new(Schema::Primitive(SchemaPrimitive::schema_u8)),
+            calculate_vec_memory_layout::<u8>(),
+        )
+    }
+}
+
+#[cfg(feature="bytes")]
+impl Introspect for Bytes {
+    fn introspect_value(&self) -> String {
+        return "Bytes".to_string();
+    }
+
+    fn introspect_child(&self, index: usize) -> Option<Box<dyn IntrospectItem<'_> + '_>> {
+        if index >= self.len() {
+            return None;
+        }
+        return Some(introspect_item(index.to_string(), &self[index]));
+    }
+    fn introspect_len(&self) -> usize {
+        self.len()
+    }
+}
+#[cfg(feature="bytes")]
+impl Serialize for Bytes {
+    fn serialize(&self, serializer: &mut Serializer<impl Write>) -> Result<(), SavefileError> {
+        let l = self.len();
+        serializer.write_usize(l)?;
+        serializer.write_buf(self)
+    }
+}
+#[cfg(feature="bytes")]
+impl Deserialize for Bytes {
+    fn deserialize(deserializer: &mut Deserializer<impl Read>) -> Result<Self, SavefileError> {
+        let vec: Vec<u8> = Vec::deserialize(deserializer)?;
+        Ok(Bytes::from(vec))
+    }
+}
+
+
+
+
+impl<T> Packed for Vec<T> {}
 
 impl<T: WithSchema> WithSchema for Vec<T> {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
@@ -7004,6 +7055,12 @@ impl<T: Deserialize + Packed> Deserialize for Vec<T> {
         }
     }
 }
+
+
+
+
+
+
 
 impl<T: Introspect> Introspect for VecDeque<T> {
     fn introspect_value(&self) -> String {
@@ -7273,6 +7330,8 @@ impl<T1: Introspect> Introspect for Range<T1> {
         return None;
     }
 }
+
+
 
 
 // std::range::Range requires rust 1.96 or later. Serialized format is
@@ -7803,6 +7862,8 @@ use std::ptr::NonNull;
 use std::slice;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+#[cfg(feature="bytes")]
+use bytes::Bytes;
 
 impl<T> Packed for RefCell<T> {}
 impl<T: WithSchema> WithSchema for RefCell<T> {

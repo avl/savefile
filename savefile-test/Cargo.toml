@@ -12,7 +12,7 @@ external_benchmarks = []
 nightly = ["savefile/nightly"]
 
 [dependencies]
-savefile = { workspace = true, features = ["size_sanity_checks", "encryption", "compression", "bit-set", "bit-vec", "rustc-hash", "serde_derive", "quickcheck", "nalgebra"] }
+savefile = { workspace = true, features = ["size_sanity_checks", "encryption", "compression", "bit-set", "bit-vec", "rustc-hash", "serde_derive", "quickcheck", "nalgebra", "bytes"] }
 savefile-derive.workspace = true
 savefile-abi = { workspace = true, features = ["bytes"] }
 bit-vec = "0.8"

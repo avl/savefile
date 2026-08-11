@@ -2,6 +2,10 @@
 
 This file contains information about changes in each version of savefile.
 
+## 0.21.0
+
+Bump bytes crate to 0.12.1.
+
 ## 0.20.5
 
 Support the new std::range::Range type. 

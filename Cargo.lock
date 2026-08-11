@@ -117,9 +117,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
+checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "bzip2"
@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "savefile"
-version = "0.20.5"
+version = "0.21.0"
 dependencies = [
  "arrayvec",
  "bit-set 0.5.3",
@@ -682,6 +682,7 @@ dependencies = [
  "bit-vec 0.6.3",
  "bit-vec 0.8.0",
  "byteorder",
+ "bytes",
  "bzip2",
  "chrono",
  "ecolor",
@@ -703,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-abi"
-version = "0.20.5"
+version = "0.21.0"
 dependencies = [
  "async-trait",
  "byteorder",
@@ -751,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-derive"
-version = "0.20.5"
+version = "0.21.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -769,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "savefile-test"
-version = "0.20.5"
+version = "0.21.0"
 dependencies = [
  "arrayvec",
  "async-trait",

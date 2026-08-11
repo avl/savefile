@@ -68,6 +68,7 @@ serde = { workspace = true, optional = true }
 quickcheck = { workspace = true, optional = true }
 emath = { workspace = true, optional = true }
 ecolor = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 
 [dev-dependencies]
 savefile-derive.workspace = true

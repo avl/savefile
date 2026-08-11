@@ -874,6 +874,7 @@ use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, 
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
+use bytes::Bytes;
 
 #[test]
 pub fn test_atomic() {
@@ -1337,6 +1338,16 @@ pub fn test_roundtrip_char() {
 #[test]
 pub fn test_pathbuf() {
     let x: PathBuf = "/c/hello.txt".into();
+    assert_roundtrip(x);
+}
+
+#[test]
+pub fn test_bytes() {
+    let x: Bytes = "/c/hello.txt".into();
+    assert_roundtrip(x);
+    let x: Bytes = vec![].into();
+    assert_roundtrip(x);
+    let x: Bytes = vec![42;5000].into();
     assert_roundtrip(x);
 }
 
