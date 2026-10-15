@@ -2195,18 +2195,18 @@ fn savefile_derive_crate_withschema(input: DeriveInput) -> syn::Result<TokenStre
                 if enum_size.discriminant_size == 1 {
                     varbuf_assign = quote!( varbuf[0] = variant as u8; );
                 } else if enum_size.discriminant_size == 2 {
-                    // We only support little endian
                     varbuf_assign = quote!(
-                        varbuf[0] = variant as u8;
-                        varbuf[1] = (variant>>8) as u8;
+                        let discr = (variant as u16).to_ne_bytes();
+                        varbuf[0] = discr[0];
+                        varbuf[1] = discr[1];
                     );
                 } else if enum_size.discriminant_size == 4 {
-                    // We only support little endian
                     varbuf_assign = quote!(
-                        varbuf[0] = variant as u8;
-                        varbuf[1] = (variant>>8) as u8;
-                        varbuf[2] = (variant>>16) as u8;
-                        varbuf[3] = (variant>>24) as u8;
+                        let discr = (variant as u32).to_ne_bytes();
+                        varbuf[0] = discr[0];
+                        varbuf[1] = discr[1];
+                        varbuf[2] = discr[2];
+                        varbuf[3] = discr[3];
                     );
                 } else {
                     abort_call_site!("Unsupported enum size: {}", enum_size.discriminant_size);
