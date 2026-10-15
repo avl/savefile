@@ -115,7 +115,7 @@ fn implement_fields_serialize(
             output.push(
                 quote!(
                     unsafe {
-                        if #(#conditions)* {
+                        if cfg!(target_endian = "little") && #(#conditions)* {
                          #local_serializer.raw_write_region(self,&#deferred_from,&#deferred_to, local_serializer.file_version)?;
                         } else {
                             #(#fallbacks)*

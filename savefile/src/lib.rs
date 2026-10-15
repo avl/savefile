@@ -1199,8 +1199,12 @@ impl IsPacked {
     /// a repr_c_optimization_safe-implementation is forbidden.
     ///
     /// Also, see description of Packed trait and repr_c_optimization_safe.
+    ///
+    /// The savefile disk format is little endian, so on big-endian hosts
+    /// the in-memory representation of multi-byte types never matches it
+    /// and the optimization is never allowed: there this returns `no()`.
     pub unsafe fn yes() -> IsPacked {
-        IsPacked(true)
+        IsPacked(cfg!(target_endian = "little"))
     }
     /// No, the type is not compatible with the "Packed"-optimization.
     /// It cannot be just blitted.
