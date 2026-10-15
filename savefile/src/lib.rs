@@ -6137,10 +6137,6 @@ impl Deserialize for chrono::DateTime<chrono::Utc> {
     }
 }
 
-#[cfg(any(feature = "bit-vec", feature = "bit-vec08"))]
-#[cfg(target_endian = "big")]
-compile_error!("savefile bit-vec feature does not support big-endian machines");
-
 #[cfg(feature = "bit-vec")]
 impl WithSchema for bit_vec::BitVec {
     fn schema(version: u32, context: &mut WithSchemaContext) -> Schema {
@@ -6197,10 +6193,16 @@ impl Serialize for bit_vec::BitVec<u32> {
         let l = self.len();
         serializer.write_usize(l)?;
         let storage = self.storage();
-        let rawbytes_ptr = storage.as_ptr() as *const u8;
-        let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
-        serializer.write_usize(rawbytes.len() | (1 << 63))?;
-        serializer.write_bytes(rawbytes)?;
+        serializer.write_usize((4 * storage.len()) | (1 << 63))?;
+        if cfg!(target_endian = "little") {
+            let rawbytes_ptr = storage.as_ptr() as *const u8;
+            let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
+            serializer.write_bytes(rawbytes)?;
+        } else {
+            for word in storage {
+                serializer.write_u32(*word)?;
+            }
+        }
         Ok(())
     }
 }
@@ -6224,6 +6226,11 @@ impl Deserialize for bit_vec::BitVec<u32> {
                 let storage_ptr = storage.as_ptr() as *mut u8;
                 let storage_bytes: &mut [u8] = std::slice::from_raw_parts_mut(storage_ptr, 4 * num_words);
                 deserializer.read_bytes_to_buf(storage_bytes)?;
+                if cfg!(target_endian = "big") {
+                    for word in storage.iter_mut() {
+                        *word = u32::from_le(*word);
+                    }
+                }
                 ret.set_len(numbits);
             }
             Ok(ret)
@@ -6363,10 +6370,16 @@ impl Serialize for bit_vec08::BitVec<u32> {
         let l = self.len();
         serializer.write_usize(l)?;
         let storage = self.storage();
-        let rawbytes_ptr = storage.as_ptr() as *const u8;
-        let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
-        serializer.write_usize(rawbytes.len() | (1 << 63))?;
-        serializer.write_bytes(rawbytes)?;
+        serializer.write_usize((4 * storage.len()) | (1 << 63))?;
+        if cfg!(target_endian = "little") {
+            let rawbytes_ptr = storage.as_ptr() as *const u8;
+            let rawbytes: &[u8] = unsafe { std::slice::from_raw_parts(rawbytes_ptr, 4 * storage.len()) };
+            serializer.write_bytes(rawbytes)?;
+        } else {
+            for word in storage {
+                serializer.write_u32(*word)?;
+            }
+        }
         Ok(())
     }
 }
@@ -6390,6 +6403,11 @@ impl Deserialize for bit_vec08::BitVec<u32> {
                 let storage_ptr = storage.as_ptr() as *mut u8;
                 let storage_bytes: &mut [u8] = std::slice::from_raw_parts_mut(storage_ptr, 4 * num_words);
                 deserializer.read_bytes_to_buf(storage_bytes)?;
+                if cfg!(target_endian = "big") {
+                    for word in storage.iter_mut() {
+                        *word = u32::from_le(*word);
+                    }
+                }
                 ret.set_len(numbits);
             }
             Ok(ret)
