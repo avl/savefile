@@ -76,28 +76,30 @@ fn implement_fields_serialize(
         _savefile::prelude::Packed
     };
 
-    let mut deferred_reprc: Option<(usize /*align*/, Vec<TokenStream>)> = None;
+    let mut deferred_reprc: Option<(usize /*align*/, Vec<(TokenStream /*obj id*/, TokenStream /*type*/)>)> = None;
     fn realize_any_deferred(
         local_serializer: &TokenStream,
-        deferred_reprc: &mut Option<(usize, Vec<TokenStream>)>,
+        deferred_reprc: &mut Option<(usize, Vec<(TokenStream, TokenStream)>)>,
         output: &mut Vec<TokenStream>,
     ) {
         let local_serializer: TokenStream = local_serializer.clone();
         if let Some((_align, deferred)) = deferred_reprc.take() {
             assert_eq!(deferred.is_empty(), false);
+            let (deferred, deferred_types): (Vec<_>, Vec<_>) = deferred.into_iter().unzip();
             let mut conditions = vec![];
+            // Every field must itself be packed. This is false for multi-byte
+            // primitives on big-endian hosts.
+            for ty in deferred_types.iter() {
+                conditions.push(quote!(
+                    <#ty as _savefile::prelude::Packed>::repr_c_optimization_safe(#local_serializer.file_version).is_yes()
+                ));
+            }
             for item in deferred.windows(2) {
                 let a = item[0].clone();
                 let b = item[1].clone();
-                if conditions.is_empty() == false {
-                    conditions.push(quote!(&&));
-                }
                 conditions.push(quote!(
                     std::ptr::addr_of!(#a).add(1) as *const u8 == std::ptr::addr_of!(#b) as *const u8
                 ));
-            }
-            if conditions.is_empty() {
-                conditions.push(quote!(true));
             }
             let mut fallbacks = vec![];
             for item in deferred.iter() {
@@ -115,7 +117,7 @@ fn implement_fields_serialize(
             output.push(
                 quote!(
                     unsafe {
-                        if cfg!(target_endian = "little") && #(#conditions)* {
+                        if #(#conditions)&&* {
                          #local_serializer.raw_write_region(self,&#deferred_from,&#deferred_to, local_serializer.file_version)?;
                         } else {
                             #(#fallbacks)*
@@ -179,11 +181,11 @@ fn implement_fields_serialize(
                     let (_cursize, curalign) = type_size_align.expect("type_size_align");
                     if let Some((deferred_align, deferred_items)) = &mut deferred_reprc {
                         if *deferred_align == curalign {
-                            deferred_items.push(obj_id);
+                            deferred_items.push((obj_id, field.ty.to_token_stream()));
                             continue;
                         }
                     } else {
-                        deferred_reprc = Some((curalign, vec![obj_id]));
+                        deferred_reprc = Some((curalign, vec![(obj_id, field.ty.to_token_stream())]));
                         continue;
                     }
                 }
@@ -1438,7 +1440,16 @@ fn derive_reprc_new(input: DeriveInput) -> syn::Result<TokenStream> {
             } else {
                 quote!()
             };
-            let mut reprc_condition = vec![];
+            let discriminant_type = match enum_size.discriminant_size {
+                1 => quote!(u8),
+                2 => quote!(u16),
+                4 => quote!(u32),
+                _ => unreachable!(),
+            };
+            // The discriminant is a primitive too, and may not be packed on big-endian hosts
+            let mut reprc_condition = vec![quote!(
+                <#discriminant_type as Packed>::repr_c_optimization_safe(file_version).is_yes()
+            )];
             for typ in unique_field_types {
                 reprc_condition.push(quote!(
                     <#typ as Packed>::repr_c_optimization_safe(file_version).is_yes()

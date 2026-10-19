@@ -19,6 +19,7 @@ Docs: https://docs.rs/savefile/latest/savefile/
  * **Backward compatible** - Savefile supports schema-versioning, with built-in verification and detailed error messages on schema mismatch.
  * **Fast** - Savefile can serialize/deserialize many data types quickly by *safely* treating them as raw bytes.
  * **Safe** - Savefile can be used without requiring any unsafe code from the user.
+ * **Portable** - The disk format is little endian, and files can be moved between machines. Big-endian hosts are supported, but performance is worse there since multi-byte data must be byte-swapped and the raw-memory-copy optimizations cannot be used for it (byte-only types are still fast).
 
 
 # Savefile-Abi

@@ -68,11 +68,13 @@ pub fn test_generic_example_enum() {
 
 #[repr(u8)]
 #[derive(Savefile, Debug, PartialEq)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 pub enum ExampleGenericEnum2<T1> {
     Value1(T1),
     Value2(T1),
 }
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 pub fn test_generic_example_enum2() {
     let a = ExampleGenericEnum::Value2(42u8);
     assert_roundtrip(a);

@@ -214,6 +214,7 @@ fn bench_ext_triangle(b: &mut Bencher) {
     })
 }
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 fn test_triangle() {
     use savefile::Packed;
     assert!(unsafe { Triangle::repr_c_optimization_safe(0).is_yes() });

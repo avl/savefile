@@ -92,6 +92,7 @@ fn test_change_add_enum_variants3() {
 
 #[derive(Savefile, Debug, PartialEq)]
 #[repr(u32)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 pub enum EnumCVer2 {
     Var1,
     Var2 {
@@ -101,6 +102,7 @@ pub enum EnumCVer2 {
     },
 }
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 fn test_change_remove_enum_field() {
     assert!(unsafe { EnumCVer2::repr_c_optimization_safe(0) }.is_false());
     assert!(unsafe { EnumCVer2::repr_c_optimization_safe(1) }.is_yes());

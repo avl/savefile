@@ -102,6 +102,15 @@ types may be contained in each node. In a tree, it will determine that children 
 may be another node, which may itself have children of the same type, which may have children
 of the same type, and so on.
 
+4: The savefile disk format is always little endian. Big-endian hosts are supported, and files
+are fully portable between little- and big-endian machines, but on big-endian hosts every
+multi-byte value must be byte-swapped when saved or loaded. The [crate::Packed] optimization,
+which serializes data by copying raw memory, is therefore automatically disabled on big-endian
+hosts for any type containing multi-byte primitives. Types made up only of single-byte values
+(u8, i8, bool, arrays of these, and structs or `#[repr(u8)]` enums containing only such
+fields) keep the optimization. Expect noticeably worse performance on big-endian hosts for
+other types, especially for large arrays of multi-byte primitives.
+
 # Handling old versions
 
 Let's expand the above example, by creating a 2nd version of the Player struct. Let's say
@@ -500,7 +509,10 @@ trait take full responsibility that all the following rules are upheld:
 
 * The type T is Copy
 * The in-memory representation of T is identical to the savefile disk format.
-* The host platform is little endian. The savefile disk format uses little endian.
+* The savefile disk format uses little endian. On big-endian hosts, the in-memory representation
+  of multi-byte primitives does not match it, and their `Packed` impls return
+  [crate::IsPacked::no]. A composite type must therefore not return [crate::IsPacked::yes]
+  unless `repr_c_optimization_safe` of every contained type also does.
 * The type is represented in memory in an ordered, packed representation. Savefile is not
 
 clever enough to inspect the actual memory layout and adapt to this, so the memory representation
@@ -1199,12 +1211,8 @@ impl IsPacked {
     /// a repr_c_optimization_safe-implementation is forbidden.
     ///
     /// Also, see description of Packed trait and repr_c_optimization_safe.
-    ///
-    /// The savefile disk format is little endian, so on big-endian hosts
-    /// the in-memory representation of multi-byte types never matches it
-    /// and the optimization is never allowed: there this returns `no()`.
     pub unsafe fn yes() -> IsPacked {
-        IsPacked(cfg!(target_endian = "little"))
+        IsPacked(true)
     }
     /// No, the type is not compatible with the "Packed"-optimization.
     /// It cannot be just blitted.
@@ -5988,7 +5996,7 @@ impl Packed for emath::Pos2 {
                 panic!("Unexpected change in layout of emath::Pos2 type");
             }
         }
-        IsPacked::yes()
+        f32::repr_c_optimization_safe(_version)
     }
 }
 #[cfg(feature = "emath")]
@@ -6051,7 +6059,7 @@ impl Packed for emath::Vec2 {
                 panic!("Unexpected change in layout of emath::Vec2 type");
             }
         }
-        IsPacked::yes()
+        f32::repr_c_optimization_safe(_version)
     }
 }
 #[cfg(feature = "emath")]
@@ -7090,6 +7098,16 @@ fn regular_deserialize_vecdeque<T: Deserialize>(
     Ok(ret)
 }
 
+/// Multi-byte primitives are stored in native byte order in memory, which only
+/// matches the little endian savefile disk format on little endian hosts.
+unsafe fn yes_if_little_endian() -> IsPacked {
+    if cfg!(target_endian = "little") {
+        IsPacked::yes()
+    } else {
+        IsPacked::no()
+    }
+}
+
 impl Packed for bool {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
         IsPacked::yes()
@@ -7107,57 +7125,57 @@ impl Packed for i8 {
 }
 impl Packed for u16 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for i16 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for u32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for i32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for u64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for u128 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for i128 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for i64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for char {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for f32 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for f64 {
     unsafe fn repr_c_optimization_safe(_version: u32) -> IsPacked {
-        IsPacked::yes()
+        yes_if_little_endian()
     }
 }
 impl Packed for usize {
@@ -7492,7 +7510,7 @@ impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Point3<T> {
             && p1.offset(1) == p2
             && p1.offset(2) == p3
         {
-            IsPacked::yes()
+            T::repr_c_optimization_safe(_version)
         } else {
             IsPacked::no()
         }
@@ -7543,7 +7561,7 @@ impl<T: Packed + nalgebra::Scalar + Default> Packed for nalgebra::Vector3<T> {
             && p1.offset(1) == p2
             && p1.offset(2) == p3
         {
-            IsPacked::yes()
+            T::repr_c_optimization_safe(_version)
         } else {
             IsPacked::no()
         }
