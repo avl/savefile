@@ -54,6 +54,7 @@ fn test_not_raw_memcpy2() {
 #[derive(Savefile, Clone, Copy)]
 #[savefile_unsafe_and_fast]
 #[repr(C)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 struct MyUnitStruct {}
 
 #[derive(Savefile, Clone, Copy)]
@@ -62,6 +63,7 @@ struct MyUnitStruct {}
 struct UnnamedFieldsStruct(usize);
 
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 fn test_various_types_for_reprc() {
     assert_eq!(unsafe { <() as Packed>::repr_c_optimization_safe(0).is_yes() }, true);
     assert_eq!(unsafe { <u8>::repr_c_optimization_safe(0) }.is_yes(), true);

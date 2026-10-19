@@ -21,6 +21,8 @@ jobs:
       run: rustup toolchain install nightly && rustup toolchain install stable && rustup toolchain install 1.80
     - name: Miri (nightly)
       run: rustup component add --toolchain nightly miri && cargo +nightly miri test
+    - name: Miri big-endian expected-bytes tests (nightly, s390x)
+      run: rustup component add --toolchain nightly rust-src && cargo +nightly miri test -p savefile --test endian_expected --target s390x-unknown-linux-gnu
     - name: Build (nightly)
       run: cargo +nightly build --workspace 
     - name: Run tests (nightly)

@@ -1579,8 +1579,10 @@ pub fn test_struct_with_ignored_member() {
 }
 
 #[derive(Default, PartialEq, Debug)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 struct NonSerializableZeroSized;
 #[derive(Savefile, PartialEq, Debug)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 struct TestIgnoreNonSerializableZeroSized {
     a: f64,
     b: f64,
@@ -1590,6 +1592,7 @@ struct TestIgnoreNonSerializableZeroSized {
 }
 
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 pub fn test_struct_with_ignored_member2() {
     unsafe {
         assert!(TestIgnoreNonSerializableZeroSized::repr_c_optimization_safe(0).is_yes());
@@ -1678,12 +1681,14 @@ fn test_duration() {
 }
 
 #[cfg(test)]
+#[cfg_attr(target_endian = "big", allow(dead_code))] //Only used by tests disabled on big-endian
 struct RawStruct {
     a: u64,
     b: u32,
     c: u32,
 }
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 pub fn test_raw_write_region() {
     let mut data = vec![];
     let mut ser = Serializer {
@@ -1737,6 +1742,7 @@ pub enum FastEnum {
 }
 
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 fn test_enum_optimizations() {
     assert_eq!(unsafe { FastEnum::repr_c_optimization_safe(0).is_yes() }, true);
 }
@@ -1776,6 +1782,7 @@ pub enum GoodEnum {
     Variant2(u8),
 }
 #[test]
+#[cfg(target_endian = "little")] //Packed-optimization is disabled on big-endian
 fn test_good_enum() {
     assert!(unsafe { GoodEnum::repr_c_optimization_safe(0) }.is_yes())
 }
