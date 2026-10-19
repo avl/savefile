@@ -178,3 +178,92 @@ fn expected_bitvec08() {
     bv.set(33, true);
     assert_eq!(roundtrip(&bv), expected_bitvec_bytes());
 }
+
+#[derive(Savefile, Debug, PartialEq, Clone, Copy)]
+#[repr(C)]
+struct ByteStruct {
+    a: u8,
+    b: [u8; 3],
+    c: i8,
+    d: bool,
+    e: [i8; 2],
+}
+
+#[derive(Savefile, Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+enum Enum8 {
+    A(u8, [u8; 2]),
+    B([u8; 3]),
+    C,
+}
+
+#[derive(Savefile, Debug, PartialEq, Clone, Copy)]
+#[repr(u16)]
+enum Fieldless16 {
+    A,
+    B,
+}
+
+#[derive(Savefile, Debug, PartialEq, Clone)]
+struct MixedByteRun {
+    a: u8,
+    b: u8,
+    c: [u8; 2],
+    s: String,
+    d: u32,
+}
+
+#[test]
+fn byte_only_types_are_packed_on_any_host() {
+    unsafe {
+        assert!(<u8 as Packed>::repr_c_optimization_safe(0).is_yes());
+        assert!(<[u8; 7] as Packed>::repr_c_optimization_safe(0).is_yes());
+        assert!(<(u8, i8, bool) as Packed>::repr_c_optimization_safe(0).is_yes());
+        assert!(<ByteStruct as Packed>::repr_c_optimization_safe(0).is_yes());
+        assert!(<Enum8 as Packed>::repr_c_optimization_safe(0).is_yes());
+
+        let little = cfg!(target_endian = "little");
+        assert_eq!(<u16 as Packed>::repr_c_optimization_safe(0).is_yes(), little);
+        assert_eq!(<PackedStruct as Packed>::repr_c_optimization_safe(0).is_yes(), little);
+        assert_eq!(<Fieldless16 as Packed>::repr_c_optimization_safe(0).is_yes(), little);
+    }
+}
+
+#[test]
+fn expected_byte_struct() {
+    let v = ByteStruct {
+        a: 1,
+        b: [2, 3, 4],
+        c: -1,
+        d: true,
+        e: [5, -2],
+    };
+    assert_eq!(roundtrip(&v), vec![1, 2, 3, 4, 0xff, 1, 5, 0xfe]);
+    let mut expected = vec![2, 0, 0, 0, 0, 0, 0, 0];
+    expected.extend([1, 2, 3, 4, 0xff, 1, 5, 0xfe]);
+    expected.extend([1, 2, 3, 4, 0xff, 1, 5, 0xfe]);
+    assert_eq!(roundtrip(&vec![v, v]), expected);
+}
+
+#[test]
+fn expected_enum8() {
+    assert_eq!(roundtrip(&Enum8::A(1, [2, 3])), vec![0, 1, 2, 3]);
+    assert_eq!(roundtrip(&Enum8::B([4, 5, 6])), vec![1, 4, 5, 6]);
+    assert_eq!(roundtrip(&Enum8::C), vec![2]);
+    assert_eq!(roundtrip(&vec![Fieldless16::B]), vec![1, 0, 0, 0, 0, 0, 0, 0, 1, 0]);
+}
+
+#[test]
+fn expected_mixed_byte_run() {
+    let v = MixedByteRun {
+        a: 1,
+        b: 2,
+        c: [3, 4],
+        s: "x".to_string(),
+        d: 0x05060708,
+    };
+    assert_eq!(
+        roundtrip(&v),
+        vec![1, 2, 3, 4, 1, 0, 0, 0, 0, 0, 0, 0, b'x', 8, 7, 6, 5]
+    );
+}

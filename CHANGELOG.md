@@ -2,6 +2,15 @@
 
 This file contains information about changes in each version of savefile.
 
+## Unreleased
+
+Big-endian hosts are now supported. The savefile disk format
+remains little endian, so files are portable between little- and big-endian machines.
+Note, because of the need for endian-conversion, savefile does not perform as well
+on big endian machines. Manual `Packed` impls for composite types must only return 
+`IsPacked::yes()` if all contained types are packed, since multi-byte primitives 
+are not packed on big-endian hosts.
+
 ## 0.20.5
 
 Support the new std::range::Range type. 
@@ -468,6 +477,8 @@ format. On a big-endian machine conversion would be needed, and this would be ex
 without access to a big-endian machine.
 
 PRs for big-endian support would be accepted.
+
+(Note: Big-endian support, including for bit-vec, was added in a later version.)
 
 Also, adds support for bit-set crate and rustc-hash.
 
