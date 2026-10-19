@@ -4,7 +4,9 @@ This file contains information about changes in each version of savefile.
 
 ## 0.21.0
 
-Bump bytes crate to 0.12.1.
+Add support for serializing the 'bytes::Bytes' type (behind new optional 'bytes' feature).
+
+Bump bytes crate to 1.12.1.
 
 ## 0.20.5
 

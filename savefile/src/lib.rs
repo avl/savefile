@@ -6902,7 +6902,7 @@ impl WithSchema for Bytes {
     fn schema(_version: u32, _context: &mut WithSchemaContext) -> Schema {
         Schema::Vector(
             Box::new(Schema::Primitive(SchemaPrimitive::schema_u8)),
-            calculate_vec_memory_layout::<u8>(),
+            VecOrStringLayout::Unknown,
         )
     }
 }
