@@ -9,9 +9,9 @@ It supports async methods, through use of the #[async_trait] attribute macro.
 
 
 ```toml
-savefile-abi = "0.18"
-savefile = "0.18"
-savefile-derive = "0.18"
+savefile-abi = "0.20"
+savefile = "0.20"
+savefile-derive = "0.20"
 ```
 
 # Example
