@@ -2,7 +2,7 @@
 
 This file contains information about changes in each version of savefile.
 
-## Unreleased
+## 0.20.6
 
 Big-endian hosts are now supported. The savefile disk format
 remains little endian, so files are portable between little- and big-endian machines.
@@ -10,6 +10,10 @@ Note, because of the need for endian-conversion, savefile does not perform as we
 on big endian machines. Manual `Packed` impls for composite types must only return 
 `IsPacked::yes()` if all contained types are packed, since multi-byte primitives 
 are not packed on big-endian hosts.
+
+Earlier versions could write multi-byte values in big-endian order when run on
+big-endian hosts, which does not match the savefile disk format. Such files may not
+load correctly with this version.
 
 ## 0.20.5
 
